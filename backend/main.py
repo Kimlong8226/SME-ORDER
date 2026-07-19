@@ -48,23 +48,36 @@ def seed_data():
                 db.add(MealSection(name=name, sort_order=sort_order))
         db.commit()
 
-        if not db.query(StaffUser).filter(StaffUser.username == "admin").first():
+        import os
+        app_env = os.getenv("APP_ENV", "production")
+
+        if not db.query(StaffUser).filter(StaffUser.username == "acc.kimlonggroup@gmail.com").first():
             db.add(StaffUser(
-                username="admin",
-                password_hash=get_password_hash("admin123"),
+                username="acc.kimlonggroup@gmail.com",
+                password_hash=get_password_hash("password123"),
                 full_name="超级管理员",
                 role="superadmin",
                 is_active=True
             ))
 
-        if not db.query(StaffUser).filter(StaffUser.username == "staff").first():
-            db.add(StaffUser(
-                username="staff",
-                password_hash=get_password_hash("staff123"),
-                full_name="运营小李",
-                role="staff",
-                is_active=True
-            ))
+        if app_env != "production":
+            if not db.query(StaffUser).filter(StaffUser.username == "admin").first():
+                db.add(StaffUser(
+                    username="admin",
+                    password_hash=get_password_hash("admin123"),
+                    full_name="演示管理员",
+                    role="superadmin",
+                    is_active=True
+                ))
+
+            if not db.query(StaffUser).filter(StaffUser.username == "staff").first():
+                db.add(StaffUser(
+                    username="staff",
+                    password_hash=get_password_hash("staff123"),
+                    full_name="运营小李",
+                    role="staff",
+                    is_active=True
+                ))
         db.commit()
 
         packages = [
@@ -85,6 +98,9 @@ def seed_data():
                 db.commit()
                 db.refresh(pkg)
             pkg_obj_map[name] = pkg
+
+        if app_env == "production":
+            return
 
         customers_seed = [
             {
