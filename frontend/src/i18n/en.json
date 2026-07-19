@@ -1,0 +1,60 @@
+{
+  "common": {
+    "appName": "KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM",
+    "login": "Login",
+    "logout": "Logout",
+    "username": "Username",
+    "password": "Password",
+    "submit": "Submit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "actions": "Actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "status": "Status",
+    "success": "Success",
+    "error": "Error",
+    "print": "Print",
+    "search": "Search",
+    "date": "Date",
+    "remark": "Remark",
+    "quantity": "Quantity",
+    "language": "Language",
+    "blockedMessage": "Your account has been restricted from ordering. Please contact finance to verify payment."
+  },
+  "nav": {
+    "calendar": "Order Calendar",
+    "customers": "Customer Profiles",
+    "staff": "Staff Management",
+    "packages": "Base Package Templates",
+    "clientMenuLibrary": "Client Menu Library",
+    "matrixOrder": "Order Page",
+    "weeklyOrder": "Weekly Order",
+    "orderHistory": "Order Status & Edit",
+    "deliveryOrders": "DO & Billing Status",
+    "dashboard": "Dashboard Overview",
+    "orderStatus": "Daily Orders Status",
+    "invoices": "Billing & Invoice"
+  },
+  "customer": {
+    "companyName": "Company Name",
+    "regNo": "Registration No.",
+    "taxNo": "Tax No.",
+    "phone": "Phone Number",
+    "address": "Billing Address",
+    "contact": "Contact Person",
+    "bankName": "Bank Name",
+    "bankAccount": "Bank Account",
+    "email": "Email",
+    "billingCycle": "Billing Cycle",
+    "blockOrdering": "Block Ordering",
+    "addSite": "Add Delivery Site",
+    "sites": "Delivery Sites"
+  },
+  "package": {
+    "name": "Package Name",
+    "category": "Category",
+    "agreementPrice": "Agreement Price",
+    "assign": "Assign to Customer"
+  }
+}
