@@ -144,7 +144,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
       dataIndex: 'delivery_date',
       key: 'delivery_date',
       width: 130,
-      render: (text: string) => <Text bold style={{ fontSize: 14 }}>{text}</Text>
+      render: (text: string) => <Text strong style={{ fontSize: 14 }}>{text}</Text>
     },
     {
       title: labels.colSite,
@@ -162,7 +162,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
           {(details || []).map((d: any) => (
             <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 13 }}>🍽️</span>
-              <Text bold style={{ fontSize: 13, minWidth: 80 }}>{translateMealSection(d.meal_section)}:</Text>
+              <Text strong style={{ fontSize: 13, minWidth: 80 }}>{translateMealSection(d.meal_section)}:</Text>
               <Text style={{ fontSize: 13, color: '#475569' }}>
                 {translatePackageTemplateName(d.package_name || d.template_name)} <strong style={{ color: '#2563eb' }}>x {d.quantity}</strong> {labels.pax}
               </Text>
@@ -241,7 +241,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
       style={{ width: '100%', borderRadius: 16, boxShadow: '0 4px 16px rgba(0,0,0,0.03)' }}
     >
       <Alert
-        message={labels.policyTitle}
+        title={labels.policyTitle}
         description={labels.policyDesc}
         type="info"
         showIcon

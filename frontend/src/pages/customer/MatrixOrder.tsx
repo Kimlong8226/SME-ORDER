@@ -434,7 +434,7 @@ export const MatrixOrder: React.FC = () => {
       {/* 警告拦截 Banner */}
       {isBlocked && (
         <Alert
-          message={labels.blockedTitle}
+          title={labels.blockedTitle}
           description={labels.blockedDesc}
           type="error"
           showIcon
@@ -444,7 +444,7 @@ export const MatrixOrder: React.FC = () => {
 
       {isPro3c && isWeekend && (
         <Alert
-          message={labels.weekendReminderTitle}
+          title={labels.weekendReminderTitle}
           description={labels.weekendReminderDesc}
           type="info"
           showIcon
@@ -454,7 +454,7 @@ export const MatrixOrder: React.FC = () => {
 
       {isYilian && isSunday && (
         <Alert
-          message={labels.sundayReminderTitle}
+          title={labels.sundayReminderTitle}
           description={labels.sundayReminderDesc}
           type="warning"
           showIcon
@@ -476,7 +476,7 @@ export const MatrixOrder: React.FC = () => {
         <Row gutter={[24, 24]}>
           <Col xs={24} sm={12}>
             <Space direction="vertical" style={{ width: '100%' }} size={6}>
-              <Text bold style={{ fontSize: 14, color: '#334155' }}>{labels.deliveryDate}</Text>
+              <Text strong style={{ fontSize: 14, color: '#334155' }}>{labels.deliveryDate}</Text>
               <DatePicker
                 size="large"
                 style={{ width: '100%', borderRadius: 10 }}
@@ -489,7 +489,7 @@ export const MatrixOrder: React.FC = () => {
           
           <Col xs={24} sm={12}>
             <Space direction="vertical" style={{ width: '100%' }} size={6}>
-              <Text bold style={{ fontSize: 14, color: '#334155' }}>{labels.deliverySite}</Text>
+              <Text strong style={{ fontSize: 14, color: '#334155' }}>{labels.deliverySite}</Text>
               <Select
                 size="large"
                 style={{ width: '100%', borderRadius: 10 }}
@@ -511,7 +511,7 @@ export const MatrixOrder: React.FC = () => {
         <Col xs={24} lg={16}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
             <div>
-              <Text bold style={{ fontSize: 18, color: '#0f172a' }}>{labels.orderPageTitle}</Text>
+              <Text strong style={{ fontSize: 18, color: '#0f172a' }}>{labels.orderPageTitle}</Text>
               <div style={{ color: '#64748b', fontSize: 13, marginTop: 2 }}>{labels.orderPageDesc}</div>
             </div>
           </div>
@@ -553,12 +553,12 @@ export const MatrixOrder: React.FC = () => {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                         <div>
-                          <Text bold style={{ fontSize: 16, color: '#0f172a', display: 'block' }}>{translateMealSection(sectionName)}</Text>
+                          <Text strong style={{ fontSize: 16, color: '#0f172a', display: 'block' }}>{translateMealSection(sectionName)}</Text>
                           <Text type="secondary" style={{ fontSize: 12 }}>{qty > 0 ? `${labels.orderedCount} ${qty} ${labels.portions}` : labels.noOrder}</Text>
                         </div>
                         
                         {isSelected && (
-                          <Badge status="success" text={<Text bold style={{ color: '#10b981', fontSize: 12 }}>{labels.selected}</Text>} />
+                          <Badge status="success" text={<Text strong style={{ color: '#10b981', fontSize: 12 }}>{labels.selected}</Text>} />
                         )}
                       </div>
 
@@ -680,7 +680,7 @@ export const MatrixOrder: React.FC = () => {
           >
             <div style={{ display: 'flex', alignItems: 'center', justifySelf: 'stretch', justifyContent: 'space-between', marginBottom: 20 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Text bold style={{ fontSize: 16, color: '#0f172a' }}>{labels.orderSummary}</Text>
+                <Text strong style={{ fontSize: 16, color: '#0f172a' }}>{labels.orderSummary}</Text>
               </div>
               {activeItemsCount > 0 && (
                 <Button type="link" danger size="small" onClick={handleClearOrder} style={{ padding: 0 }}>
@@ -724,7 +724,7 @@ export const MatrixOrder: React.FC = () => {
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                              <Text bold style={{ fontSize: 14, color: '#1e293b' }}>{translateMealSection(sectionName)}</Text>
+                              <Text strong style={{ fontSize: 14, color: '#1e293b' }}>{translateMealSection(sectionName)}</Text>
                             </div>
                             <Text type="secondary" style={{ fontSize: 11, display: 'block', color: '#64748b', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {pkg ? translatePackageTemplateName(pkg.template_name) : labels.defaultPkg}
@@ -738,7 +738,7 @@ export const MatrixOrder: React.FC = () => {
                         {extraRiceQty > 0 && (
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>
                             <Text style={{ fontSize: 12, color: '#b45309' }}>{labels.extraRiceShort}</Text>
-                            <Text bold style={{ fontSize: 12, color: '#b45309' }}>+{extraRiceQty} {labels.portions}</Text>
+                            <Text strong style={{ fontSize: 12, color: '#b45309' }}>+{extraRiceQty} {labels.portions}</Text>
                           </div>
                         )}
                       </div>
@@ -748,7 +748,7 @@ export const MatrixOrder: React.FC = () => {
             )}
 
             <div style={{ marginBottom: 20 }}>
-              <Text bold style={{ fontSize: 13, display: 'block', marginBottom: 8, color: '#334155' }}>
+              <Text strong style={{ fontSize: 13, display: 'block', marginBottom: 8, color: '#334155' }}>
                 {labels.remarkTitle}
               </Text>
               <Input.TextArea
@@ -763,20 +763,20 @@ export const MatrixOrder: React.FC = () => {
             <div style={{ background: '#f8fafc', border: '1px solid #f1f5f9', padding: '16px', borderRadius: 16, marginBottom: 20 }}>
               <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', marginBottom: 10 }}>
                 <Text type="secondary" style={{ fontSize: 13 }}>{labels.factory}</Text>
-                <Text bold style={{ color: '#0f172a', fontSize: 13 }} ellipsis={{ tooltip: true }}>
+                <Text strong style={{ color: '#0f172a', fontSize: 13 }} ellipsis={{ tooltip: true }}>
                   {sites.find(s => s.id === selectedSiteId)?.site_name || labels.notSpecified}
                 </Text>
               </div>
               <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', marginBottom: 10 }}>
                 <Text type="secondary" style={{ fontSize: 13 }}>{labels.deliveryDate}</Text>
-                <Text bold style={{ color: '#0f172a', fontSize: 13 }}>{selectedDate}</Text>
+                <Text strong style={{ color: '#0f172a', fontSize: 13 }}>{selectedDate}</Text>
               </div>
               
               <Divider style={{ margin: '12px 0', borderStyle: 'dashed' }} />
               
               <div style={{ display: 'flex', justifySelf: 'stretch', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text bold style={{ fontSize: 15, color: '#0f172a' }}>{labels.totalPax}</Text>
-                <Text bold style={{ fontSize: 24, color: '#10b981' }}>{totalPortions} {labels.pax}</Text>
+                <Text strong style={{ fontSize: 15, color: '#0f172a' }}>{labels.totalPax}</Text>
+                <Text strong style={{ fontSize: 24, color: '#10b981' }}>{totalPortions} {labels.pax}</Text>
               </div>
             </div>
 
@@ -824,40 +824,40 @@ export const MatrixOrder: React.FC = () => {
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspDayBreakfast}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspDayBreakfast}</Text>
             <InputNumber value={gspDayBreakfastVal} onChange={(v) => setGspDayBreakfastVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspNightBreakfast}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspNightBreakfast}</Text>
             <InputNumber value={gspNightBreakfastVal} onChange={(v) => setGspNightBreakfastVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
         </Row>
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspDayLunch}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspDayLunch}</Text>
             <InputNumber value={gspDayLunchVal} onChange={(v) => setGspDayLunchVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspExtraBento}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspExtraBento}</Text>
             <InputNumber value={gspExtraBentoVal} onChange={(v) => setGspExtraBentoVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
         </Row>
 
         <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspRbaBento}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspRbaBento}</Text>
             <InputNumber value={gspRbaBentoVal} onChange={(v) => setGspRbaBentoVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspBuffet10pm}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspBuffet10pm}</Text>
             <InputNumber value={gspBuffet10pmVal} onChange={(v) => setGspBuffet10pmVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
         </Row>
 
         <Row gutter={[16, 16]}>
           <Col span={12}>
-            <Text bold style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspSupper3am}</Text>
+            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspSupper3am}</Text>
             <InputNumber value={gspSupper3amVal} onChange={(v) => setGspSupper3amVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
           </Col>
         </Row>

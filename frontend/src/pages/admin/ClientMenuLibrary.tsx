@@ -407,7 +407,7 @@ export const ClientMenuLibrary: React.FC = () => {
       title: labels.colAction,
       key: 'actions',
       width: 160,
-      render: (record: any) => (
+      render: (_: any, record: any) => (
         <Space size="small">
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => handleOpenEditPrice(record)}>
             {labels.btnEditPrice}
@@ -473,7 +473,7 @@ export const ClientMenuLibrary: React.FC = () => {
       title: labels.colAddonAction,
       key: 'actions',
       width: 160,
-      render: (record: any) => (
+      render: (_: any, record: any) => (
         <Space size="small">
           <Button
             size="small"
@@ -599,7 +599,7 @@ export const ClientMenuLibrary: React.FC = () => {
         {/* 冻结提示横幅 */}
         {currentCustomerObj?.is_blocked && (
           <Alert
-            message={labels.blockedWarning}
+            title={labels.blockedWarning}
             type="error"
             showIcon
             icon={<StopOutlined />}

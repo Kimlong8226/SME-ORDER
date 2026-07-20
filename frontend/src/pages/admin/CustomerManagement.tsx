@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Table, Button, Modal, Form, Input, Select, Card, Tag, Space, message, Row, Col, Typography, Divider, Popconfirm } from 'antd';
 import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -153,7 +153,7 @@ export const CustomerManagement: React.FC = () => {
       key: 'company_name',
       render: (text: string, record: any) => (
         <div>
-          <Text bold style={{ fontSize: 15 }}>{text}</Text>
+          <Text strong style={{ fontSize: 15 }}>{text}</Text>
           {record.company_reg_no && <div><Text type="secondary" style={{ fontSize: 12 }}>Reg: {record.company_reg_no}</Text></div>}
         </div>
       ),

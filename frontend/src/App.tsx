@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip } from 'antd';
+import { App as AntdApp, ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip } from 'antd';
 import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
   FormOutlined, GlobalOutlined, LogoutOutlined, DashboardOutlined,
@@ -56,10 +56,12 @@ export const App: React.FC = () => {
   if (!currentUser) {
     return (
       <ConfigProvider theme={brightTheme}>
-        <Login onLoginSuccess={(u) => {
-          setCurrentUser(u);
-          setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
-        }} />
+        <AntdApp>
+          <Login onLoginSuccess={(u) => {
+            setCurrentUser(u);
+            setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
+          }} />
+        </AntdApp>
       </ConfigProvider>
     );
   }
@@ -93,6 +95,7 @@ export const App: React.FC = () => {
 
   return (
     <ConfigProvider theme={brightTheme}>
+      <AntdApp>
       <Layout style={{ minHeight: '100vh', width: '100vw', background: '#f8fafc' }}>
         {/* 全宽 Header：品牌名称红色加粗，去掉龙 icon */}
         <Header style={{
@@ -163,6 +166,7 @@ export const App: React.FC = () => {
           </Content>
         </Layout>
       </Layout>
+      </AntdApp>
     </ConfigProvider>
   );
 };

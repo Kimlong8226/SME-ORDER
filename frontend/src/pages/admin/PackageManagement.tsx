@@ -505,7 +505,7 @@ export const PackageManagement: React.FC = () => {
               size="large"
               showSearch
               optionFilterProp="children"
-              dropdownRender={(menu) => (
+              popupRender={(menu) => (
                 <>
                   {menu}
                   <Divider style={{ margin: '6px 0' }} />

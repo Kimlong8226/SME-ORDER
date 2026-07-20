@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Card, Table, Button, Modal, Form, Input, Select, message, Tag, Typography } from 'antd';
 import { PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -81,7 +81,7 @@ export const StaffManagement: React.FC = () => {
   };
 
   const columns = [
-    { title: labels.colUsername, dataIndex: 'username', key: 'username', render: (text: string) => <Text bold>{text}</Text> },
+    { title: labels.colUsername, dataIndex: 'username', key: 'username', render: (text: string) => <Text strong>{text}</Text> },
     { title: labels.colName, dataIndex: 'full_name', key: 'full_name', render: (text: string) => translateFullName(text) },
     {
       title: labels.colRole,

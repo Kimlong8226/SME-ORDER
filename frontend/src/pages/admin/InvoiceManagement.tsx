@@ -227,17 +227,17 @@ export const InvoiceManagement: React.FC = () => {
   };
 
   const columns = [
-    { title: labels.colInvNo, dataIndex: 'invoice_number', key: 'invoice_number', render: (t: string) => <Text bold style={{ color: '#1e40af' }}>{t}</Text> },
-    { title: labels.colCompany, dataIndex: 'company_name', key: 'company_name', render: (t: string, r: any) => <div><Text bold>{t}</Text><div><Text type="secondary" style={{ fontSize: 12 }}>Reg: {r.company_reg_no || '-'}</Text></div></div> },
-    { title: labels.colBillingPeriod, key: 'billing_period', render: (r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
+    { title: labels.colInvNo, dataIndex: 'invoice_number', key: 'invoice_number', render: (t: string) => <Text strong style={{ color: '#1e40af' }}>{t}</Text> },
+    { title: labels.colCompany, dataIndex: 'company_name', key: 'company_name', render: (t: string, r: any) => <div><Text strong>{t}</Text><div><Text type="secondary" style={{ fontSize: 12 }}>Reg: {r.company_reg_no || '-'}</Text></div></div> },
+    { title: labels.colBillingPeriod, key: 'billing_period', render: (_: any, r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
     { title: labels.colBillingCycle, dataIndex: 'billing_cycle', key: 'billing_cycle', render: (t: string) => <Tag color="orange">{isEn ? t.replace('天一结', ' Days Cycle') : t}</Tag> },
     { title: labels.colTotalOrders, dataIndex: 'total_orders', key: 'total_orders', render: (val: number) => `${val} ${labels.ordersCount}` },
-    { title: labels.colTotalAmount, dataIndex: 'total_amount', key: 'total_amount', render: (val: number) => <Text bold style={{ color: '#dc2626', fontSize: 16 }}>RM {val.toFixed(2)}</Text> },
+    { title: labels.colTotalAmount, dataIndex: 'total_amount', key: 'total_amount', render: (val: number) => <Text strong style={{ color: '#dc2626', fontSize: 16 }}>RM {val.toFixed(2)}</Text> },
     { title: labels.colPaymentStatus, dataIndex: 'status', key: 'status', render: (st: string) => st === 'PAID' ? <Tag color="green">{labels.statusPaid}</Tag> : <Tag color="volcano">{labels.statusUnpaid}</Tag> },
     {
       title: labels.colAction,
       key: 'actions',
-      render: (r: any) => (
+      render: (_: any, r: any) => (
         <Space size="middle">
           <Button size="small" type="primary" ghost icon={<FileTextOutlined />} onClick={() => handleOpenInvoiceModal(r)}>
             {labels.btnPreview}
@@ -301,11 +301,11 @@ export const InvoiceManagement: React.FC = () => {
           <Card style={{ background: '#f8fafc', border: '1px solid #e2e8f0', marginTop: 10 }}>
             <Row justify="space-between" style={{ marginBottom: 8 }}>
               <Col><Text type="secondary">{labels.infoMatchingOrders}</Text></Col>
-              <Col><Text bold style={{ fontSize: 16 }}>{unbilledStats.count} 笔订单</Text></Col>
+              <Col><Text strong style={{ fontSize: 16 }}>{unbilledStats.count} 笔订单</Text></Col>
             </Row>
             <Row justify="space-between">
               <Col><Text type="secondary">{labels.infoTotalAmount}</Text></Col>
-              <Col><Text bold style={{ fontSize: 18, color: '#dc2626' }}>RM {unbilledStats.amount.toFixed(2)}</Text></Col>
+              <Col><Text strong style={{ fontSize: 18, color: '#dc2626' }}>RM {unbilledStats.amount.toFixed(2)}</Text></Col>
             </Row>
           </Card>
         )}
@@ -329,7 +329,7 @@ export const InvoiceManagement: React.FC = () => {
               <Row justify="space-between" align="middle">
                 <Col>
                   <Title level={3} style={{ margin: 0, color: '#dc2626', fontWeight: 900 }}>{labels.brandName}</Title>
-                  <Text bold style={{ fontSize: 12 }}>KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM</Text>
+                  <Text strong style={{ fontSize: 12 }}>KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM</Text>
                 </Col>
                 <Col style={{ textAlign: 'right' }}>
                   <Title level={3} style={{ margin: 0, color: '#0f172a' }}>INVOICE / STATEMENT</Title>
@@ -341,7 +341,7 @@ export const InvoiceManagement: React.FC = () => {
             <Row gutter={24} style={{ marginBottom: 20 }}>
               <Col span={12}>
                 <Card title={labels.billTo} size="small" style={{ background: '#f8fafc' }}>
-                  <div><Text bold style={{ fontSize: 16 }}>{selectedInvoice.company_name}</Text></div>
+                  <div><Text strong style={{ fontSize: 16 }}>{selectedInvoice.company_name}</Text></div>
                   <div><Text type="secondary">{labels.regNo}{selectedInvoice.company_reg_no || '-'}</Text></div>
                   <div><Text type="secondary">{labels.taxNo}{selectedInvoice.tax_number || '-'}</Text></div>
                   <div><Text type="secondary">{labels.billingTerms}{isEn ? selectedInvoice.billing_cycle.replace('天一结', ' Days Cycle') : selectedInvoice.billing_cycle}</Text></div>
@@ -349,8 +349,8 @@ export const InvoiceManagement: React.FC = () => {
               </Col>
               <Col span={12}>
                 <Card title={labels.remittanceInfo} size="small" style={{ background: '#f0fdf4', borderColor: '#bbf7d0' }}>
-                  <div><Text bold style={{ color: '#15803d' }}>{labels.bankName}{selectedInvoice.bank_name || 'Maybank'}</Text></div>
-                  <div><Text bold style={{ color: '#15803d', fontSize: 16 }}>{labels.bankAccount}{selectedInvoice.bank_account_no || '8009182736'}</Text></div>
+                  <div><Text strong style={{ color: '#15803d' }}>{labels.bankName}{selectedInvoice.bank_name || 'Maybank'}</Text></div>
+                  <div><Text strong style={{ color: '#15803d', fontSize: 16 }}>{labels.bankAccount}{selectedInvoice.bank_account_no || '8009182736'}</Text></div>
                   <div><Text type="secondary">{labels.accountName}</Text></div>
                 </Card>
               </Col>
@@ -384,7 +384,7 @@ export const InvoiceManagement: React.FC = () => {
                   title: labels.colDoNo,
                   dataIndex: 'do_number',
                   width: 160,
-                  render: (text: string) => text ? <Text bold style={{ fontSize: 12, color: '#1e40af' }}>{text}</Text> : null,
+                  render: (text: string) => text ? <Text strong style={{ fontSize: 12, color: '#1e40af' }}>{text}</Text> : null,
                 },
                 {
                   title: labels.colDate,
@@ -412,7 +412,7 @@ export const InvoiceManagement: React.FC = () => {
                   title: labels.colQty,
                   dataIndex: 'quantity',
                   width: 60,
-                  render: (v: number) => <Text bold style={{ color: '#dc2626', fontSize: 12 }}>{v}</Text>,
+                  render: (v: number) => <Text strong style={{ color: '#dc2626', fontSize: 12 }}>{v}</Text>,
                 },
                 {
                   title: labels.colPrice,
@@ -424,16 +424,16 @@ export const InvoiceManagement: React.FC = () => {
                   title: labels.colSubtotal,
                   dataIndex: 'subtotal',
                   width: 100,
-                  render: (v: number) => <Text bold style={{ fontSize: 12 }}>RM {v?.toFixed(2)}</Text>,
+                  render: (v: number) => <Text strong style={{ fontSize: 12 }}>RM {v?.toFixed(2)}</Text>,
                 },
               ]}
               summary={() => (
                 <Table.Summary.Row>
                   <Table.Summary.Cell index={0} colSpan={6} align="right">
-                    <Text bold style={{ fontSize: 14 }}>{labels.totalPayable}</Text>
+                    <Text strong style={{ fontSize: 14 }}>{labels.totalPayable}</Text>
                   </Table.Summary.Cell>
                   <Table.Summary.Cell index={1}>
-                    <Text bold style={{ color: '#dc2626', fontSize: 14 }}>RM {selectedInvoice?.total_amount?.toFixed(2)}</Text>
+                    <Text strong style={{ color: '#dc2626', fontSize: 14 }}>RM {selectedInvoice?.total_amount?.toFixed(2)}</Text>
                   </Table.Summary.Cell>
                 </Table.Summary.Row>
               )}

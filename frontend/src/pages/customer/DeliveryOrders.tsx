@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Card, Table, Tag, Button, Typography, Space, Modal, Divider, message, Row, Col } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -171,7 +171,7 @@ export const DeliveryOrders: React.FC = () => {
       dataIndex: 'id',
       key: 'id',
       width: 140,
-      render: (id: number) => <Text bold style={{ color: '#0f172a' }}>DO-KL-{1000 + id}</Text>
+      render: (id: number) => <Text strong style={{ color: '#0f172a' }}>DO-KL-{1000 + id}</Text>
     },
     {
       title: labels.colDate,
@@ -331,7 +331,7 @@ export const DeliveryOrders: React.FC = () => {
             {/* DO Header */}
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <Title level={3} style={{ margin: 0, letterSpacing: '2px', fontWeight: 'bold' }}>DELIVERY ORDER</Title>
-              <Text bold style={{ color: '#4b5563' }}>{labels.doSlipTitle}</Text>
+              <Text strong style={{ color: '#4b5563' }}>{labels.doSlipTitle}</Text>
             </div>
 
             <Divider style={{ margin: '12px 0' }} />
@@ -339,17 +339,17 @@ export const DeliveryOrders: React.FC = () => {
             <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={12}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Text><Text bold>{labels.supplier}:</Text> {labels.supplierVal}</Text>
-                  <Text><Text bold>{labels.address}:</Text> Johor Bahru Industrial Zone</Text>
-                  <Text><Text bold>{labels.phone}:</Text> +60 7-555 8899</Text>
+                  <Text><Text strong>{labels.supplier}:</Text> {labels.supplierVal}</Text>
+                  <Text><Text strong>{labels.address}:</Text> Johor Bahru Industrial Zone</Text>
+                  <Text><Text strong>{labels.phone}:</Text> +60 7-555 8899</Text>
                 </div>
               </Col>
               <Col span={12} style={{ borderLeft: '1px dashed #cbd5e1', paddingLeft: 20 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Text><Text bold>{labels.colDoNo}:</Text> DO-KL-{1000 + selectedDo.id}</Text>
-                  <Text><Text bold>{labels.colDate}:</Text> {selectedDo.delivery_date || labels.unknown}</Text>
+                  <Text><Text strong>{labels.colDoNo}:</Text> DO-KL-{1000 + selectedDo.id}</Text>
+                  <Text><Text strong>{labels.colDate}:</Text> {selectedDo.delivery_date || labels.unknown}</Text>
                   <Text>
-                    <Text bold>{labels.colPaymentStatus}:</Text>{' '}
+                    <Text strong>{labels.colPaymentStatus}:</Text>{' '}
                     <span 
                       style={{ 
                         color: calculatePaymentStatus(selectedDo.delivery_date).statusText === labels.statusPaid ? '#10b981' : (calculatePaymentStatus(selectedDo.delivery_date).isOverdue ? '#ef4444' : '#e67e22'), 
@@ -369,10 +369,10 @@ export const DeliveryOrders: React.FC = () => {
             <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 20, border: '1px solid #f1f5f9' }}>
               <Row gutter={16}>
                 <Col span={12}>
-                  <Text><Text bold>{labels.receiverCompany}:</Text> {customerProfile?.company_name || labels.unknown}</Text>
+                  <Text><Text strong>{labels.receiverCompany}:</Text> {customerProfile?.company_name || labels.unknown}</Text>
                 </Col>
                 <Col span={12}>
-                  <Text><Text bold>{labels.colSite}:</Text> {selectedDo.site_name || labels.unknown}</Text>
+                  <Text><Text strong>{labels.colSite}:</Text> {selectedDo.site_name || labels.unknown}</Text>
                 </Col>
               </Row>
             </div>
@@ -389,7 +389,7 @@ export const DeliveryOrders: React.FC = () => {
               <tbody>
                 {(selectedDo.details || []).map((d: any) => (
                   <tr key={d.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
-                    <td style={{ padding: '10px 4px' }}><Text bold>{translateMealSection(d.meal_section)}</Text></td>
+                    <td style={{ padding: '10px 4px' }}><Text strong>{translateMealSection(d.meal_section)}</Text></td>
                     <td style={{ padding: '10px 4px' }}>{translatePackageTemplateName(d.package_name)}</td>
                     <td style={{ padding: '10px 4px', textAlign: 'right', fontWeight: 'bold' }}>{d.quantity}</td>
                   </tr>
@@ -400,7 +400,7 @@ export const DeliveryOrders: React.FC = () => {
             {/* 订单备注 */}
             {selectedDo.remark && (
               <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: 12, borderRadius: 8, marginBottom: 30 }}>
-                <Text bold style={{ color: '#b45309', display: 'block', marginBottom: 4 }}>{labels.remarkTitle}:</Text>
+                <Text strong style={{ color: '#b45309', display: 'block', marginBottom: 4 }}>{labels.remarkTitle}:</Text>
                 <Text style={{ color: '#78350f', fontSize: 13 }}>{selectedDo.remark}</Text>
               </div>
             )}

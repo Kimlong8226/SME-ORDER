@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+﻿import React, { useEffect, useState } from 'react';
 import { Card, Calendar, Badge, Modal, Button, Table, Tag, Typography, message, Row, Col, Select, Space } from 'antd';
 import { PrinterOutlined, FilterOutlined, EnvironmentOutlined, UserOutlined, PhoneOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
@@ -201,7 +201,7 @@ export const OrderCalendar: React.FC = () => {
       title: labels.colCustomer,
       dataIndex: 'company_name',
       width: 150,
-      render: (text: any) => <Text bold style={{ whiteSpace: 'nowrap', fontSize: 14 }}>{text}</Text>
+      render: (text: any) => <Text strong style={{ whiteSpace: 'nowrap', fontSize: 14 }}>{text}</Text>
     }] : []),
     {
       title: labels.colSite,
@@ -209,7 +209,7 @@ export const OrderCalendar: React.FC = () => {
       width: 220,
       render: (text: any, record: any) => (
         <div style={{ minWidth: 180 }}>
-          <Text bold style={{ fontSize: 15, whiteSpace: 'nowrap', display: 'block' }}>{text}</Text>
+          <Text strong style={{ fontSize: 15, whiteSpace: 'nowrap', display: 'block' }}>{text}</Text>
           <Text type="secondary" style={{ fontSize: 12 }}><EnvironmentOutlined /> {record.address}</Text>
         </div>
       )
@@ -224,13 +224,13 @@ export const OrderCalendar: React.FC = () => {
       title: labels.colPkg,
       dataIndex: 'package_name',
       width: 180,
-      render: (text: any) => <Text bold style={{ fontSize: 14 }}>{translatePackageTemplateName(text)}</Text>
+      render: (text: any) => <Text strong style={{ fontSize: 14 }}>{translatePackageTemplateName(text)}</Text>
     },
     {
       title: labels.colQty,
       dataIndex: 'quantity',
       width: 110,
-      render: (val: any) => <Text bold style={{ color: '#dc2626', fontSize: 17, whiteSpace: 'nowrap' }}>{val} {isEn ? 'pax' : '份'}</Text>
+      render: (val: any) => <Text strong style={{ color: '#dc2626', fontSize: 17, whiteSpace: 'nowrap' }}>{val} {isEn ? 'pax' : '份'}</Text>
     },
     {
       title: labels.colRemark,
@@ -270,7 +270,7 @@ export const OrderCalendar: React.FC = () => {
         <div style={{ padding: '16px 24px', background: '#f8fafc', borderRadius: '8px 8px 0 0', borderBottom: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Space size="middle">
             <FilterOutlined style={{ fontSize: 16, color: '#dc2626' }} />
-            <Text bold style={{ fontSize: 15 }}>{labels.selectCustomerPrompt}</Text>
+            <Text strong style={{ fontSize: 15 }}>{labels.selectCustomerPrompt}</Text>
             <Select
               style={{ width: 320 }}
               size="large"
@@ -302,7 +302,7 @@ export const OrderCalendar: React.FC = () => {
                 KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM
               </Text>
               <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <Text style={{ fontSize: 16 }}>Date: <Text bold style={{ fontSize: 16, color: '#0f172a' }}>{printSummaryData?.target_date ? `${dayjs(printSummaryData.target_date).format('DD-MM-YYYY')} (${dayjs(printSummaryData.target_date).format('dddd')})` : '-'}</Text></Text>
+                <Text style={{ fontSize: 16 }}>Date: <Text strong style={{ fontSize: 16, color: '#0f172a' }}>{printSummaryData?.target_date ? `${dayjs(printSummaryData.target_date).format('DD-MM-YYYY')} (${dayjs(printSummaryData.target_date).format('dddd')})` : '-'}</Text></Text>
                 <Text style={{ fontSize: 16 }}>{doNumber}</Text>
               </div>
             </div>
@@ -310,14 +310,14 @@ export const OrderCalendar: React.FC = () => {
             <Card size="small" style={{ marginBottom: 20, background: '#f8fafc', borderColor: '#cbd5e1' }}>
               <Row gutter={24} align="middle">
                 <Col span={14}>
-                  <div><Text bold style={{ fontSize: 16 }}>{labels.orderingUnit}{selectedFilterCustomer ? (printSummaryData?.customer_info?.company_name || selectedCustomerObj?.company_name) : labels.allClientsSummary}</Text></div>
+                  <div><Text strong style={{ fontSize: 16 }}>{labels.orderingUnit}{selectedFilterCustomer ? (printSummaryData?.customer_info?.company_name || selectedCustomerObj?.company_name) : labels.allClientsSummary}</Text></div>
                   {selectedFilterCustomer && printSummaryData?.customer_info?.company_reg_no && (
                     <div><Text type="secondary">{labels.regNo}{printSummaryData.customer_info.company_reg_no}</Text></div>
                   )}
                 </Col>
                 <Col span={10} style={{ textAlign: 'right' }}>
                   {selectedFilterCustomer && printSummaryData?.customer_info?.contact_name && (
-                    <div><Text bold style={{ fontSize: 14 }}><UserOutlined /> {labels.contactPerson}{printSummaryData.customer_info.contact_name}</Text></div>
+                    <div><Text strong style={{ fontSize: 14 }}><UserOutlined /> {labels.contactPerson}{printSummaryData.customer_info.contact_name}</Text></div>
                   )}
                   {selectedFilterCustomer && printSummaryData?.customer_info?.phone && (
                     <div><Text type="secondary"><PhoneOutlined /> {labels.phone}{printSummaryData.customer_info.phone}</Text></div>
@@ -337,22 +337,22 @@ export const OrderCalendar: React.FC = () => {
             />
 
             <div style={{ marginTop: 20, textAlign: 'right', paddingRight: 12 }}>
-              <Text style={{ fontSize: 16 }}>{labels.totalPortionsLabel}<Text bold style={{ fontSize: 24, color: '#dc2626' }}>{totalPortionsSum}{labels.portionsSuffix}</Text></Text>
+              <Text style={{ fontSize: 16 }}>{labels.totalPortionsLabel}<Text strong style={{ fontSize: 24, color: '#dc2626' }}>{totalPortionsSum}{labels.portionsSuffix}</Text></Text>
             </div>
 
             <div style={{ marginTop: 44, paddingTop: 24, borderTop: '1px dashed #94a3b8' }}>
               <Row gutter={32} style={{ textAlign: 'center' }}>
                 <Col span={8}>
                   <div style={{ minHeight: 60, borderBottom: '1px solid #000', marginBottom: 8 }}></div>
-                  <Text bold style={{ fontSize: 14 }}>{labels.checkedBy}</Text>
+                  <Text strong style={{ fontSize: 14 }}>{labels.checkedBy}</Text>
                 </Col>
                 <Col span={8}>
                   <div style={{ minHeight: 60, borderBottom: '1px solid #000', marginBottom: 8 }}></div>
-                  <Text bold style={{ fontSize: 14 }}>{labels.driver}</Text>
+                  <Text strong style={{ fontSize: 14 }}>{labels.driver}</Text>
                 </Col>
                 <Col span={8}>
                   <div style={{ minHeight: 60, borderBottom: '1px solid #000', marginBottom: 8 }}></div>
-                  <Text bold style={{ fontSize: 14 }}>{labels.chopAndReceived}</Text>
+                  <Text strong style={{ fontSize: 14 }}>{labels.chopAndReceived}</Text>
                 </Col>
               </Row>
             </div>

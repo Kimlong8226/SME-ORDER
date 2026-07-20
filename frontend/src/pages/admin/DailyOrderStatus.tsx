@@ -186,17 +186,17 @@ export const DailyOrderStatus: React.FC = () => {
 
   const columns = [
     { title: labels.colOrderId, dataIndex: 'id', key: 'id', width: 90, render: (val: number) => <Text type="secondary">#{val}</Text> },
-    { title: labels.colDeliveryDate, dataIndex: 'delivery_date', key: 'delivery_date', width: 120, render: (text: string) => <Text bold>{text}</Text> },
-    { title: labels.colCustomer, dataIndex: 'company_name', key: 'company_name', width: 160, render: (text: string) => <Text bold style={{ color: '#0f172a' }}>{text}</Text> },
+    { title: labels.colDeliveryDate, dataIndex: 'delivery_date', key: 'delivery_date', width: 120, render: (text: string) => <Text strong>{text}</Text> },
+    { title: labels.colCustomer, dataIndex: 'company_name', key: 'company_name', width: 160, render: (text: string) => <Text strong style={{ color: '#0f172a' }}>{text}</Text> },
     { title: labels.colSite, dataIndex: 'site_name', key: 'site_name', width: 150, render: (text: string) => <Tag color="geekblue">{text}</Tag> },
     {
       title: labels.colDetails,
       key: 'details',
-      render: (details: any[]) => (
+      render: (_: any, record: any) => (
         <Space direction="vertical" size={2}>
-          {(details || []).map((d: any, idx: number) => (
-            <div key={idx} style={{ fontSize: 13 }}>
-              <Text bold>{translateMealSection(d.meal_section)}: </Text>
+          {(record.details || []).map((d: any, idx: number) => (
+            <div key={d.id ?? idx} style={{ fontSize: 13 }}>
+              <Text strong>{translateMealSection(d.meal_section)}: </Text>
               <Text>{translatePackageTemplateName(d.package_name)}</Text>
               <Tag color="green" style={{ marginLeft: 6 }}>{d.quantity} {labels.portions}</Tag>
               {d.remark && <Text type="secondary" style={{ fontSize: 12 }}>({d.remark})</Text>}
@@ -206,12 +206,12 @@ export const DailyOrderStatus: React.FC = () => {
       )
     },
     { title: labels.colTotalPortions, dataIndex: 'total_portions', key: 'total_portions', width: 110, render: (val: number) => <Badge count={`${val} ${labels.portions}`} overflowCount={999} style={{ backgroundColor: '#dc2626' }} /> },
-    { title: labels.colTotalPrice, dataIndex: 'total_price', key: 'total_price', width: 130, render: (val: number) => <Text bold style={{ color: '#dc2626' }}>RM {val.toFixed(2)}</Text> },
+    { title: labels.colTotalPrice, dataIndex: 'total_price', key: 'total_price', width: 130, render: (val: number) => <Text strong style={{ color: '#dc2626' }}>RM {val.toFixed(2)}</Text> },
     {
       title: labels.colStatus,
       key: 'status',
       width: 150,
-      render: (record: any) => (
+      render: (_: any, record: any) => (
         <Select
           value={record.status}
           style={{ width: 130 }}
@@ -229,7 +229,7 @@ export const DailyOrderStatus: React.FC = () => {
       title: labels.colAction,
       key: 'actions',
       width: 160,
-      render: (record: any) => (
+      render: (_: any, record: any) => (
         <Space size="small">
           <Button size="small" type="primary" ghost icon={<EditOutlined />} onClick={() => handleOpenEditModal(record)}>
             {labels.btnEdit}
@@ -291,11 +291,11 @@ export const DailyOrderStatus: React.FC = () => {
           <div>
             <Row gutter={16} style={{ marginBottom: 16 }}>
               <Col span={12}>
-                <Text bold>{labels.colCustomer}: </Text>
+                <Text strong>{labels.colCustomer}: </Text>
                 <Text>{editingOrder.company_name}</Text>
               </Col>
               <Col span={12}>
-                <Text bold>{labels.colDeliveryDate}: </Text>
+                <Text strong>{labels.colDeliveryDate}: </Text>
                 <Text>{editingOrder.delivery_date}</Text>
               </Col>
             </Row>
@@ -323,7 +323,7 @@ export const DailyOrderStatus: React.FC = () => {
                 {editDetails.map((item, idx) => (
                   <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
                     <td style={{ padding: '8px 0' }}>
-                      <Text bold>{translateMealSection(item.meal_section)}</Text>
+                      <Text strong>{translateMealSection(item.meal_section)}</Text>
                     </td>
                     <td>
                       <Select

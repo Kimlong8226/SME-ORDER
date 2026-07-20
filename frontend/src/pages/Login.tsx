@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+﻿import React, { useState } from 'react';
 import { Card, Form, Input, Button, message, Space, Tag, Typography, Row, Col } from 'antd';
 import { UserOutlined, LockOutlined, GlobalOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -123,10 +123,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             </div>
 
             <Form form={form} layout="vertical" onFinish={handleLogin}>
-              <Form.Item name="username" label={<Text bold style={{ fontSize: 15 }}>{t('common.username')}</Text>} rules={[{ required: true }]}>
+              <Form.Item name="username" label={<Text strong style={{ fontSize: 15 }}>{t('common.username')}</Text>} rules={[{ required: true }]}>
                 <Input prefix={<UserOutlined />} placeholder="Username" size="large" style={{ height: 48, borderRadius: 8 }} />
               </Form.Item>
-              <Form.Item name="password" label={<Text bold style={{ fontSize: 15 }}>{t('common.password')}</Text>} rules={[{ required: true }]}>
+              <Form.Item name="password" label={<Text strong style={{ fontSize: 15 }}>{t('common.password')}</Text>} rules={[{ required: true }]}>
                 <Input.Password prefix={<LockOutlined />} placeholder="Password" size="large" style={{ height: 48, borderRadius: 8 }} />
               </Form.Item>
 
