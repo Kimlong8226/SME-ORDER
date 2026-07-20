@@ -30,10 +30,16 @@ def run_migration():
     sqlite_engine = create_engine(sqlite_url, connect_args={"check_same_thread": False})
     supabase_engine = create_engine(supabase_url)
 
-    # 1. Create tables
+    # NOTE: 先删除所有旧表再重建，确保表结构与当前 model 完全一致
+    print("--- Dropping old Supabase tables ---")
+    Base.metadata.drop_all(bind=supabase_engine)
+    print("Old tables dropped!")
+
+    # 1. Create tables with latest schema
     print("--- Creating table structures in Supabase ---")
     Base.metadata.create_all(bind=supabase_engine)
     print("Table schema created successfully!")
+
 
     # 2. Open Sessions
     SqliteSession = sessionmaker(bind=sqlite_engine)
