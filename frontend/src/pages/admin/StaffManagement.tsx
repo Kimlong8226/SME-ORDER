@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Modal, Form, Input, Select, message, Tag, Typography } from 'antd';
+import { App, Card, Table, Button, Modal, Form, Input, Select, Tag, Typography } from 'antd';
 import { PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -8,6 +8,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 export const StaffManagement: React.FC = () => {
+  const { message } = App.useApp();
   const { t, i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 

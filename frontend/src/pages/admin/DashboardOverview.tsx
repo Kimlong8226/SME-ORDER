@@ -104,10 +104,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         <Col xs={24} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
-              title={<Text type="secondary" strong>{labels.metricPortionsTitle}</Text>}
+              title={<Text type="secondary" bold>{labels.metricPortionsTitle}</Text>}
               value={stats?.today_portions || 0}
               suffix={labels.portionsSuffix}
-              styles={{ content: { color: '#16a34a', fontWeight: 'bold', fontSize: 32 } }}
+              valueStyle={{ color: '#16a34a', fontWeight: 'bold', fontSize: 32 }}
             />
             <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
               {labels.metricOrdersCount} {stats?.today_orders_count || 0} {labels.ordersSuffix}
@@ -118,11 +118,11 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         <Col xs={24} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
-              title={<Text type="secondary" strong>{labels.metricRevenueTitle}</Text>}
+              title={<Text type="secondary" bold>{labels.metricRevenueTitle}</Text>}
               value={stats?.month_revenue || 0}
               precision={2}
               prefix="RM"
-              styles={{ content: { color: '#dc2626', fontWeight: 'bold', fontSize: 32 } }}
+              valueStyle={{ color: '#dc2626', fontWeight: 'bold', fontSize: 32 }}
             />
             <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
               <ArrowUpOutlined style={{ color: '#16a34a' }} /> {labels.metricRevenueDesc}
@@ -133,10 +133,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         <Col xs={24} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
-              title={<Text type="secondary" strong>{labels.metricClientsTitle}</Text>}
+              title={<Text type="secondary" bold>{labels.metricClientsTitle}</Text>}
               value={stats?.total_customers || 0}
               suffix={labels.clientsSuffix}
-              styles={{ content: { color: '#0284c7', fontWeight: 'bold', fontSize: 32 } }}
+              valueStyle={{ color: '#0284c7', fontWeight: 'bold', fontSize: 32 }}
             />
             <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
               {labels.metricClientsDesc}
@@ -147,10 +147,10 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         <Col xs={24} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
-              title={<Text type="secondary" strong>{labels.metricBlockedTitle}</Text>}
+              title={<Text type="secondary" bold>{labels.metricBlockedTitle}</Text>}
               value={stats?.blocked_customers || 0}
               suffix={labels.clientsSuffix}
-              styles={{ content: { color: stats?.blocked_customers > 0 ? '#dc2626' : '#64748b', fontWeight: 'bold', fontSize: 32 } }}
+              valueStyle={{ color: stats?.blocked_customers > 0 ? '#dc2626' : '#64748b', fontWeight: 'bold', fontSize: 32 }}
             />
             <Text type="secondary" style={{ fontSize: 12, marginTop: 8, display: 'block' }}>
               {labels.metricBlockedDesc}
@@ -196,7 +196,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         <Col xs={24} lg={8}>
           <Card title={<Title level={4} style={{ margin: 0 }}>🛡️ {labels.riskTitle}</Title>} style={{ borderRadius: 12 }}>
             <Alert
-              title={labels.alertBlockedTitle}
+              message={labels.alertBlockedTitle}
               description={labels.alertBlockedDesc}
               type="warning"
               showIcon
@@ -204,7 +204,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
               style={{ marginBottom: 16 }}
             />
             <Alert
-              title={labels.alertPrivacyTitle}
+              message={labels.alertPrivacyTitle}
               description={labels.alertPrivacyDesc}
               type="info"
               showIcon

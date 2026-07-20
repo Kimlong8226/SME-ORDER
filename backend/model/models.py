@@ -132,6 +132,19 @@ class CustomerAddon(Base):
     customer = relationship("Customer", back_populates="addons")
     template = relationship("AddonTemplate")
 
+class CustomerMealSection(Base):
+    """
+    客户开通的下单餐次关联表
+    """
+    __tablename__ = "customer_meal_sections"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    meal_section_id = Column(Integer, ForeignKey("meal_sections.id"), nullable=False)
+
+    customer = relationship("Customer")
+    meal_section = relationship("MealSection")
+
 class MealSection(Base):
     """
     餐次定义（早班早餐、夜班早餐、午餐、晚餐、宵夜、3am餐食等）
@@ -141,6 +154,8 @@ class MealSection(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), nullable=False)  # 如: 早班早餐, 午餐, 宵夜
     sort_order = Column(Integer, default=0)
+    allowed_categories = Column(String(200), default="")  # 以逗号分隔的分类名称，如 "饭盒,大型供餐"
+
 
 class Order(Base):
     """

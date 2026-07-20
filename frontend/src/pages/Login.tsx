@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { Card, Form, Input, Button, message, Space, Tag, Typography, Row, Col } from 'antd';
 import { UserOutlined, LockOutlined, GlobalOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -74,7 +74,7 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.08)',
           overflow: 'hidden'
         }}
-        bodyStyle={{ padding: 0 }}
+        styles={{ body: { padding: 0 } }}
       >
         <Row style={{ minHeight: 560 }}>
           {/* 左侧：品牌展示 */}

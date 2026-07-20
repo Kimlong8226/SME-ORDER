@@ -7,13 +7,14 @@ from pydantic import BaseModel
 from database import get_db
 from model.models import (
     Customer, CustomerUser, DeliverySite, PackageTemplate, AddonTemplate,
-    CustomerPackage, CustomerAddon, StaffUser, Order, OrderDetail, MealSection, Invoice
+    CustomerPackage, CustomerAddon, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection
 )
 from schema.schemas import (
     CustomerCreate, CustomerResponse, CustomerBase, DeliverySiteCreate, DeliverySiteResponse,
     StaffUserCreate, StaffUserResponse, PackageTemplateCreate, PackageTemplateResponse,
     CustomerPackageAssign, CustomerPackageResponse,
-    AddonTemplateCreate, AddonTemplateResponse, CustomerAddonAssign, CustomerAddonResponse
+    AddonTemplateCreate, AddonTemplateResponse, CustomerAddonAssign, CustomerAddonResponse,
+    MealSectionCreate, MealSectionResponse, CustomerMealSectionsUpdate
 )
 from api.auth import get_password_hash
 
@@ -849,3 +850,106 @@ def delete_customer_addon(customer_id: int, ca_id: int, db: Session = Depends(ge
         )
 
     return {"detail": "已成功从该客户菜单库中移除"}
+
+
+# ============================================================
+# 10. 餐次排班管理 (Meal Sections Management)
+# ============================================================
+
+@router.get("/meal-sections", response_model=List[MealSectionResponse])
+def list_meal_sections(db: Session = Depends(get_db)):
+    """获取所有餐次定义，按 sort_order 升序"""
+    return db.query(MealSection).order_by(MealSection.sort_order.asc(), MealSection.id.asc()).all()
+
+
+@router.post("/meal-sections", response_model=MealSectionResponse)
+def create_meal_section(req: MealSectionCreate, db: Session = Depends(get_db)):
+    """创建新餐次"""
+    existing = db.query(MealSection).filter(MealSection.name == req.name).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="餐次名称已存在")
+    
+    sec = MealSection(
+        name=req.name,
+        sort_order=req.sort_order,
+        allowed_categories=req.allowed_categories
+    )
+    db.add(sec)
+    db.commit()
+    db.refresh(sec)
+    return sec
+
+
+@router.put("/meal-sections/{sec_id}", response_model=MealSectionResponse)
+def update_meal_section(sec_id: int, req: MealSectionCreate, db: Session = Depends(get_db)):
+    """更新餐次信息（名称、排序、可用分类）"""
+    sec = db.query(MealSection).filter(MealSection.id == sec_id).first()
+    if not sec:
+        raise HTTPException(status_code=404, detail="餐次不存在")
+    
+    # 重名检测
+    existing = db.query(MealSection).filter(MealSection.name == req.name, MealSection.id != sec_id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="餐次名称已存在")
+
+    sec.name = req.name
+    sec.sort_order = req.sort_order
+    sec.allowed_categories = req.allowed_categories
+    
+    db.commit()
+    db.refresh(sec)
+    return sec
+
+
+@router.delete("/meal-sections/{sec_id}")
+def delete_meal_section(sec_id: int, db: Session = Depends(get_db)):
+    """删除餐次（若已有订单引用则限制删除）"""
+    sec = db.query(MealSection).filter(MealSection.id == sec_id).first()
+    if not sec:
+        raise HTTPException(status_code=404, detail="餐次不存在")
+    
+    # 检查是否有订单明细使用了该餐次
+    in_use = db.query(OrderDetail).filter(OrderDetail.meal_section_id == sec_id).first()
+    if in_use:
+        raise HTTPException(
+            status_code=400,
+            detail="该餐次下已有订单历史记录，为了数据对账完整性，系统限制直接删除。请通过将该餐次的分类配置清空来对客户端隐藏该餐次。"
+        )
+
+    db.delete(sec)
+    db.commit()
+    return {"detail": "已成功删除该餐次定义"}
+
+
+# ============================================================
+# 11. 顾客下单餐次开通管理 (Customer Meal Sections Assign)
+# ============================================================
+
+@router.get("/customers/{customer_id}/meal-sections", response_model=List[int])
+def get_customer_assigned_meal_sections(customer_id: int, db: Session = Depends(get_db)):
+    """获取指定顾客当前开通的餐次 ID 列表"""
+    assigned = db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == customer_id).all()
+    return [item.meal_section_id for item in assigned]
+
+
+@router.post("/customers/{customer_id}/meal-sections")
+def save_customer_meal_sections(customer_id: int, req: CustomerMealSectionsUpdate, db: Session = Depends(get_db)):
+    """保存并更新指定顾客已开通的下单餐次"""
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+
+    # 1. 删除现有的开通记录
+    db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == customer_id).delete()
+
+    # 2. 批量写入新的开通记录
+    for sid in req.meal_section_ids:
+        # 确保餐次存在
+        exists = db.query(MealSection).filter(MealSection.id == sid).first()
+        if exists:
+            db.add(CustomerMealSection(customer_id=customer_id, meal_section_id=sid))
+            
+    db.commit()
+    return {"detail": "餐次开通权限已更新！"}
+
+

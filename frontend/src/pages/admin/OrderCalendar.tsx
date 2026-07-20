@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Card, Calendar, Badge, Modal, Button, Table, Tag, Typography, message, Row, Col, Select, Space } from 'antd';
+import { App, Card, Calendar, Badge, Modal, Button, Table, Tag, Typography, Row, Col, Select, Space } from 'antd';
 import { PrinterOutlined, FilterOutlined, EnvironmentOutlined, UserOutlined, PhoneOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -9,6 +9,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 export const OrderCalendar: React.FC = () => {
+  const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 

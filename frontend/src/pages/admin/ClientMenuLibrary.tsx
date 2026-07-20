@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Card, Table, Button, Modal, Form, InputNumber, Select, message,
+  App, Card, Table, Button, Modal, Form, InputNumber, Select, Checkbox,
   Tag, Typography, Space, Popconfirm, Badge, Alert, Switch, Tooltip, Tabs
 } from 'antd';
 import {
@@ -15,6 +15,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 export const ClientMenuLibrary: React.FC = () => {
+  const { message } = App.useApp();
   const { t, i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -137,6 +138,12 @@ export const ClientMenuLibrary: React.FC = () => {
   const [assignModalVisible, setAssignModalVisible] = useState(false);
   const [editPriceModalVisible, setEditPriceModalVisible] = useState(false);
   const [editingAssignedPkg, setEditingAssignedPkg] = useState<any | null>(null);
+
+  // ── 餐次开通控制 State ──
+  const [allMealSections, setAllMealSections] = useState<any[]>([]);
+  const [assignedSectionIds, setAssignedSectionIds] = useState<number[]>([]);
+  const [savingSections, setSavingSections] = useState(false);
+
   const [assignForm] = Form.useForm();
   const [priceForm] = Form.useForm();
 
@@ -150,6 +157,40 @@ export const ClientMenuLibrary: React.FC = () => {
   const [addonPriceForm] = Form.useForm();
 
   // ── 获取数据 ──
+  const fetchMealSections = async () => {
+    try {
+      const res = await axiosInstance.get('/admin/meal-sections');
+      setAllMealSections(res.data || []);
+    } catch {
+      message.error(isEn ? 'Failed to load meal shifts' : '获取餐次定义失败');
+    }
+  };
+
+  const fetchCustomerMealSections = async (cid: number) => {
+    try {
+      const res = await axiosInstance.get(`/admin/customers/${cid}/meal-sections`);
+      setAssignedSectionIds(res.data || []);
+    } catch {
+      message.error(isEn ? 'Failed to load customer shifts' : '加载客户已开通餐次失败');
+    }
+  };
+
+  const handleSaveMealSections = async (checkedIds: any[]) => {
+    if (!selectedCustomerId) return;
+    setSavingSections(true);
+    try {
+      await axiosInstance.post(`/admin/customers/${selectedCustomerId}/meal-sections`, {
+        meal_section_ids: checkedIds
+      });
+      setAssignedSectionIds(checkedIds);
+      message.success(isEn ? 'Shifts assignment updated!' : '下单餐次开通权限已更新！');
+    } catch {
+      message.error(isEn ? 'Failed to update shifts' : '更新餐次开通权限失败');
+    } finally {
+      setSavingSections(false);
+    }
+  };
+
   const fetchPackages = async () => {
     try {
       const res = await axiosInstance.get('/admin/packages');
@@ -205,12 +246,14 @@ export const ClientMenuLibrary: React.FC = () => {
     fetchPackages();
     fetchCustomers();
     fetchAllAddons();
+    fetchMealSections();
   }, []);
 
   useEffect(() => {
     if (selectedCustomerId) {
       fetchAssignedPackages(selectedCustomerId);
       fetchAssignedAddons(selectedCustomerId);
+      fetchCustomerMealSections(selectedCustomerId);
     }
   }, [selectedCustomerId]);
 
@@ -407,7 +450,7 @@ export const ClientMenuLibrary: React.FC = () => {
       title: labels.colAction,
       key: 'actions',
       width: 160,
-      render: (_: any, record: any) => (
+      render: (record: any) => (
         <Space size="small">
           <Button size="small" type="link" icon={<EditOutlined />} onClick={() => handleOpenEditPrice(record)}>
             {labels.btnEditPrice}
@@ -473,7 +516,7 @@ export const ClientMenuLibrary: React.FC = () => {
       title: labels.colAddonAction,
       key: 'actions',
       width: 160,
-      render: (_: any, record: any) => (
+      render: (record: any) => (
         <Space size="small">
           <Button
             size="small"
@@ -591,7 +634,7 @@ export const ClientMenuLibrary: React.FC = () => {
 
       <Card
         style={{ borderRadius: 14, boxShadow: '0 2px 16px rgba(0,0,0,0.07)' }}
-        bodyStyle={{ padding: '20px 24px' }}
+        styles={{ body: { padding: '20px 24px' } }}
       >
         {/* 顾客选择 + 冻结控制栏 */}
         {renderCustomerControlBar()}
@@ -602,9 +645,43 @@ export const ClientMenuLibrary: React.FC = () => {
             title={labels.blockedWarning}
             type="error"
             showIcon
-            icon={<StopOutlined />}
             style={{ marginBottom: 16, borderRadius: 8 }}
           />
+        )}
+
+        {/* ── 开通下单餐次控制面板 ── */}
+        {selectedCustomerId && !currentCustomerObj?.is_blocked && (
+          <Card
+            size="small"
+            title={<Text strong style={{ color: '#1e3a8a' }}>⏱️ 开通下单餐次 (勾选以允许该顾客自助下单对应餐次)</Text>}
+            style={{ marginBottom: 20, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}
+          >
+            {allMealSections.length === 0 ? (
+              <Text type="secondary">暂无定义的餐次项目，请先前往「餐次排班管理」配置定义。</Text>
+            ) : (
+              <Checkbox.Group
+                style={{ width: '100%' }}
+                value={assignedSectionIds}
+                onChange={handleSaveMealSections}
+                disabled={savingSections}
+              >
+                <Row gutter={[16, 16]}>
+                  {allMealSections.map((sec) => (
+                    <Col key={sec.id} xs={12} sm={8} md={6}>
+                      <Checkbox value={sec.id}>
+                        <Text strong={assignedSectionIds.includes(sec.id)}>{sec.name}</Text>
+                        {sec.allowed_categories && (
+                          <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>
+                            ({sec.allowed_categories})
+                          </span>
+                        )}
+                      </Checkbox>
+                    </Col>
+                  ))}
+                </Row>
+              </Checkbox.Group>
+            )}
+          </Card>
         )}
 
         {/* ── Tabs：套餐 / Add-on ── */}

@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
-import { Table, Button, Modal, Form, Input, Select, Card, Tag, Space, message, Row, Col, Typography, Divider, Popconfirm } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { App, Table, Button, Modal, Form, Input, Select, Card, Tag, Space, Row, Col, Typography, Divider, Popconfirm } from 'antd';
 import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -8,6 +8,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 export const CustomerManagement: React.FC = () => {
+  const { message } = App.useApp();
   const { t, i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -182,7 +183,7 @@ export const CustomerManagement: React.FC = () => {
       title: t('customer.sites'),
       key: 'sites',
       render: (record: any) => (
-        <Space direction="vertical" size={2}>
+        <Space orientation="vertical" size={2}>
           {record.sites && record.sites.map((s: any) => (
             <Tag color="blue" key={s.id} icon={<EnvironmentOutlined />}>
               {s.site_name} ({s.address})

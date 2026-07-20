@@ -58,6 +58,25 @@ def run_migration():
             (OrderDetail, "order_details")
         ]
 
+        # NOTE: 先清空所有表（按反向依赖顺序），避免重复迁移时 UniqueViolation
+        print("--- Clearing existing Supabase data before migration ---")
+        clear_order = [
+            "order_details", "orders", "invoices", "meal_sections",
+            "customer_addons", "customer_packages", "addon_templates",
+            "package_templates", "delivery_sites", "customer_users",
+            "customers", "staff_users"
+        ]
+        from sqlalchemy import text
+        with supabase_engine.connect() as conn:
+            for tbl in clear_order:
+                try:
+                    conn.execute(text(f"TRUNCATE TABLE {tbl} CASCADE"))
+                    print(f"  Cleared: {tbl}")
+                except Exception:
+                    pass  # 表不存在时跳过
+            conn.commit()
+        print("Existing data cleared!")
+
         for model_class, table_name in tables_to_migrate:
             print(f"Migrating table {table_name}...")
             
@@ -81,14 +100,13 @@ def run_migration():
             # Update serial sequences for PostgreSQL auto-increment IDs
             if supabase_url.startswith("postgresql"):
                 try:
-                    db_supabase.execute(
-                        f"SELECT setval(pg_get_serial_sequence('{table_name}', 'id'), COALESCE(MAX(id), 1)) FROM {table_name};"
-                    )
-                    db_supabase.commit()
-                except Exception as e:
-                    db_supabase.rollback()
-                    # Skip if table has no serial sequence
-                    pass
+                    with supabase_engine.connect() as conn:
+                        conn.execute(text(
+                            f"SELECT setval(pg_get_serial_sequence('{table_name}', 'id'), COALESCE(MAX(id), 1)) FROM {table_name};"
+                        ))
+                        conn.commit()
+                except Exception:
+                    pass  # 没有 serial sequence 的表跳过
 
         print("SUCCESS: Data migration completed successfully!")
 

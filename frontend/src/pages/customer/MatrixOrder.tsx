@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, InputNumber, Button, Select, DatePicker, Tag, Typography, message, Alert, Space, Row, Col, Divider, Modal, Input, Badge, Empty } from 'antd';
+import { App, Card, InputNumber, Button, Select, DatePicker, Tag, Typography, Alert, Space, Row, Col, Divider, Modal, Input, Badge, Empty } from 'antd';
 import { SendOutlined, ThunderboltOutlined, PlusOutlined, MinusOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -8,17 +8,8 @@ import { useTranslation } from 'react-i18next';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
-// 定义每个餐次能够匹配的后台套餐分类 (Category)
-const MEAL_SECTION_CATEGORIES: Record<string, string[]> = {
-  "早餐": ["早餐"],
-  "早班午餐": ["饭盒", "大型供餐"],
-  "早班晚餐": ["饭盒", "大型供餐"],
-  "客户/顾问加餐饭盒": ["饭盒", "大型供餐"],
-  "夜班餐食 10pm Buffet": ["Buffet"],
-  "夜班餐食 3am 宵夜": ["宵夜"]
-};
-
 export const MatrixOrder: React.FC = () => {
+  const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -105,7 +96,6 @@ export const MatrixOrder: React.FC = () => {
 
   const [userInfo, setUserInfo] = useState<any>(null);
   const [sites, setSites] = useState<any[]>([]);
-  const [packages, setPackages] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().add(1, 'day').format('YYYY-MM-DD'));
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null);
 
@@ -119,42 +109,28 @@ export const MatrixOrder: React.FC = () => {
   const [gspBuffet10pmVal, setGspBuffet10pmVal] = useState<number>(42);
   const [gspSupper3amVal, setGspSupper3amVal] = useState<number>(40);
 
+  // 数据库定义的动态餐次列表
+  const [dbMealSections, setDbMealSections] = useState<any[]>([]);
+
   // 矩阵输入数据 (份数数量)
-  const [matrixData, setMatrixData] = useState<any>({
-    "早餐": 0,
-    "早班午餐": 0,
-    "早班晚餐": 0,
-    "客户/顾问加餐饭盒": 0,
-    "夜班餐食 10pm Buffet": 0,
-    "夜班餐食 3am 宵夜": 0
-  });
+  const [matrixData, setMatrixData] = useState<any>({});
 
   // 每个餐次独立选定的套餐 ID (存 customer_package.id)
   const [matrixPackages, setMatrixPackages] = useState<Record<string, number>>({});
 
   // 加白饭数量数据
-  const [matrixAddons, setMatrixAddons] = useState<Record<string, number>>({
-    "早餐": 0,
-    "早班午餐": 0,
-    "早班晚餐": 0,
-    "客户/顾问加餐饭盒": 0,
-    "夜班餐食 10pm Buffet": 0,
-    "夜班餐食 3am 宵夜": 0
-  });
+  const [matrixAddons, setMatrixAddons] = useState<Record<string, number>>({});
 
   const [remark, setRemark] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
 
   /**
    * 获取某个餐次可用的套餐列表
-   * 规则：① 分类匹配该餐次允许的分类 ② is_shown_to_customer = true（管理员已勾选显示）
+   * 直接从后端为该餐次加载好（并包含默认价/协议价）的 packages 数组中返回
    */
   const getAvailablePackagesForSection = (sectionName: string) => {
-    const allowedCategories = MEAL_SECTION_CATEGORIES[sectionName] || [];
-    return packages.filter(p =>
-      allowedCategories.includes(p.category) &&
-      p.is_shown_to_customer !== false  // NOTE: 默认 true，若后台取消勾选则不显示
-    );
+    const section = dbMealSections.find(s => s.name === sectionName);
+    return section ? (section.packages || []) : [];
   };
 
   useEffect(() => {
@@ -168,42 +144,36 @@ export const MatrixOrder: React.FC = () => {
 
   const fetchCustomerProfile = async (cid: number) => {
     try {
-      const resPkgs = await axiosInstance.get(`/admin/customers/${cid}/packages`);
-      setPackages(resPkgs.data);
+      // 1. 获取为该顾客开通的动态餐次和对应的公共套餐
+      const resSections = await axiosInstance.get(`/orders/meal-sections?customer_id=${cid}`);
+      const sectionsList = resSections.data || [];
+      setDbMealSections(sectionsList);
 
-      // 根据后台拉取到的协议套餐，初始化各餐次的默认套餐配置
+      // 初始化矩阵状态的结构
+      const initialData: Record<string, number> = {};
+      const initialAddons: Record<string, number> = {};
+      sectionsList.forEach((s: any) => {
+        initialData[s.name] = 0;
+        initialAddons[s.name] = 0;
+      });
+
+      // 根据后台拉取到的公用套餐，初始化各餐次的默认套餐配置
       const initialPkgs: Record<string, number> = {};
-      Object.keys(matrixData).forEach(section => {
-        const allowedCategories = MEAL_SECTION_CATEGORIES[section] || [];
-        const matchingPkgs = resPkgs.data.filter((p: any) => allowedCategories.includes(p.category));
-        if (matchingPkgs.length > 0) {
-          initialPkgs[section] = matchingPkgs[0].id;
+      sectionsList.forEach((s: any) => {
+        if (s.packages && s.packages.length > 0) {
+          initialPkgs[s.name] = s.packages[0].id;
         }
       });
 
-      // 检查是否有要编辑的订单载入
+      // 3. 检查是否有要编辑的订单载入
       const editingRaw = localStorage.getItem('editing_order');
       if (editingRaw) {
         const order = JSON.parse(editingRaw);
         setSelectedDate(order.delivery_date);
         setSelectedSiteId(order.site_id);
 
-        const newQuantities = {
-          "早餐": 0,
-          "早班午餐": 0,
-          "早班晚餐": 0,
-          "客户/顾问加餐饭盒": 0,
-          "夜班餐食 10pm Buffet": 0,
-          "夜班餐食 3am 宵夜": 0
-        };
-        const newAddons = {
-          "早餐": 0,
-          "早班午餐": 0,
-          "早班晚餐": 0,
-          "客户/顾问加餐饭盒": 0,
-          "夜班餐食 10pm Buffet": 0,
-          "夜班餐食 3am 宵夜": 0
-        };
+        const newQuantities = { ...initialData };
+        const newAddons = { ...initialAddons };
         const newPackages = { ...initialPkgs };
 
         order.details.forEach((d: any) => {
@@ -230,15 +200,17 @@ export const MatrixOrder: React.FC = () => {
         localStorage.removeItem('editing_order');
         message.info(labels.msgLoadedEdit);
       } else {
+        setMatrixData(initialData);
+        setMatrixAddons(initialAddons);
         setMatrixPackages(initialPkgs);
       }
 
-      const resCusts = await axiosInstance.get('/admin/customers');
-      const cur = resCusts.data.find((c: any) => c.id === cid);
-      if (cur && cur.sites) {
-        setSites(cur.sites);
-        if (!editingRaw && cur.sites.length > 0) {
-          setSelectedSiteId(cur.sites[0].id);
+      // NOTE: 使用客户专用接口获取自身资料和送货地址，避免不安全地加载所有客户列表
+      const resCust = await axiosInstance.get(`/orders/customer-profile/${cid}`);
+      if (resCust.data?.sites) {
+        setSites(resCust.data.sites);
+        if (!editingRaw && resCust.data.sites.length > 0) {
+          setSelectedSiteId(resCust.data.sites[0].id);
         } else if (editingRaw) {
           const order = JSON.parse(editingRaw);
           setSelectedSiteId(order.site_id);
@@ -320,11 +292,6 @@ export const MatrixOrder: React.FC = () => {
         return (qty as number) > 0 && sectionPkgs.length > 0;
       })
       .map(([sectionName, qty]) => {
-        const MEAL_SECTION_ID_MAP: Record<string, number> = {
-          '早餐': 1, '早班午餐': 2, '早班晚餐': 3,
-          '客户/顾问加餐饭盒': 4, '夜班餐食 10pm Buffet': 5, '夜班餐食 3am 宵夜': 6
-        };
-
         const sectionPkgs = getAvailablePackagesForSection(sectionName);
         const chosenPkgId = matrixPackages[sectionName] || (sectionPkgs.length > 0 ? sectionPkgs[0].id : null);
         
@@ -335,9 +302,13 @@ export const MatrixOrder: React.FC = () => {
           remark ? remark : ''
         ].filter(Boolean).join(' | ');
 
+        // 动态根据名称查找数据库餐次 ID
+        const matchedSection = dbMealSections.find(s => s.name === sectionName);
+        const actualSectionId = matchedSection ? matchedSection.id : 1;
+
         return {
           delivery_site_id: selectedSiteId!,
-          meal_section_id: MEAL_SECTION_ID_MAP[sectionName] || 1,
+          meal_section_id: actualSectionId,
           customer_package_id: chosenPkgId,
           quantity: qty as number,
           remark: itemRemark
@@ -405,7 +376,7 @@ export const MatrixOrder: React.FC = () => {
       >
         <Row align="middle" justify="space-between" gutter={[20, 20]}>
           <Col xs={24} md={14}>
-            <Space direction="vertical" size={2}>
+            <Space orientation="vertical" size={2}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Title level={3} style={{ margin: 0, color: '#ffffff', fontWeight: 800, fontSize: 24 }}>{labels.title}</Title>
                 <Tag color="success" style={{ borderRadius: 6, fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff' }}>{labels.fastMode}</Tag>
@@ -475,7 +446,7 @@ export const MatrixOrder: React.FC = () => {
       >
         <Row gutter={[24, 24]}>
           <Col xs={24} sm={12}>
-            <Space direction="vertical" style={{ width: '100%' }} size={6}>
+            <Space orientation="vertical" style={{ width: '100%' }} size={6}>
               <Text strong style={{ fontSize: 14, color: '#334155' }}>{labels.deliveryDate}</Text>
               <DatePicker
                 size="large"
@@ -488,7 +459,7 @@ export const MatrixOrder: React.FC = () => {
           </Col>
           
           <Col xs={24} sm={12}>
-            <Space direction="vertical" style={{ width: '100%' }} size={6}>
+            <Space orientation="vertical" style={{ width: '100%' }} size={6}>
               <Text strong style={{ fontSize: 14, color: '#334155' }}>{labels.deliverySite}</Text>
               <Select
                 size="large"
@@ -529,7 +500,8 @@ export const MatrixOrder: React.FC = () => {
                 const sectionPkgs = getAvailablePackagesForSection(sectionName);
                 const currentPkgId = matrixPackages[sectionName] || (sectionPkgs.length > 0 ? sectionPkgs[0].id : undefined);
                 
-                const allowedCategories = MEAL_SECTION_CATEGORIES[sectionName] || [];
+                const matchedSecObj = dbMealSections.find(s => s.name === sectionName);
+                const allowedCategories = matchedSecObj ? (matchedSecObj.allowed_categories || []) : [];
                 const supportsExtraRice = allowedCategories.includes("饭盒") || allowedCategories.includes("大型供餐");
 
                 return (
@@ -544,7 +516,7 @@ export const MatrixOrder: React.FC = () => {
                         overflow: 'hidden',
                         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                       }}
-                      bodyStyle={{ padding: 20 }}
+                      styles={{ body: { padding: 20 } }}
                       onClick={() => {
                         if (!isSelected && !isBlocked && !(isYilian && isSunday)) {
                           setMatrixData({ ...matrixData, [sectionName]: 1 });
@@ -569,13 +541,13 @@ export const MatrixOrder: React.FC = () => {
                         <Select
                           size="middle"
                           style={{ width: '100%' }}
-                          dropdownStyle={{ borderRadius: 10 }}
+                          styles={{ popup: { root: { borderRadius: 10 } } }}
                           value={currentPkgId}
                           onChange={(val) => setMatrixPackages({ ...matrixPackages, [sectionName]: val })}
                           disabled={isBlocked || (isYilian && isSunday)}
                         >
                           {sectionPkgs.map((p) => (
-                            <Option key={p.id} value={p.id}>{translatePackageTemplateName(p.template_name)}</Option>
+                            <Option key={p.id} value={p.id}>{translatePackageTemplateName(p.name)}</Option>
                           ))}
                         </Select>
                       </div>
@@ -598,7 +570,7 @@ export const MatrixOrder: React.FC = () => {
                             <InputNumber
                               min={0}
                               max={9999}
-                              bordered={false}
+                              variant="borderless"
                               controls={false}
                               value={qty}
                               onChange={(val) => setMatrixData({ ...matrixData, [sectionName]: val || 0 })}
@@ -636,7 +608,7 @@ export const MatrixOrder: React.FC = () => {
                               <InputNumber
                                 min={0}
                                 max={999}
-                                bordered={false}
+                                variant="borderless"
                                 controls={false}
                                 value={addonQty}
                                 onChange={(val) => setMatrixAddons({ ...matrixAddons, [sectionName]: val || 0 })}
@@ -704,8 +676,9 @@ export const MatrixOrder: React.FC = () => {
                     return (qty as number) > 0 && sectionPkgs.length > 0;
                   })
                   .map(([sectionName, qty]) => {
-                    const pkgId = matrixPackages[sectionName];
-                    const pkg = packages.find(p => p.id === pkgId);
+                    const sectionPkgs = getAvailablePackagesForSection(sectionName);
+                    const pkgId = matrixPackages[sectionName] || (sectionPkgs.length > 0 ? sectionPkgs[0].id : undefined);
+                    const pkg = sectionPkgs.find((p: any) => p.id === pkgId);
                     const extraRiceQty = matrixAddons[sectionName] || 0;
                     
                     return (

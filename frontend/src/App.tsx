@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { App as AntdApp, ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip } from 'antd';
+import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp } from 'antd';
 import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
   FormOutlined, GlobalOutlined, LogoutOutlined, DashboardOutlined,
-  FileTextOutlined, UnorderedListOutlined, BookOutlined
+  FileTextOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import './i18n';
@@ -21,6 +21,7 @@ import { DailyOrderStatus } from './pages/admin/DailyOrderStatus';
 import { MatrixOrder } from './pages/customer/MatrixOrder';
 import { OrderHistory } from './pages/customer/WeeklyOrder';
 import { DeliveryOrders } from './pages/customer/DeliveryOrders';
+import { MealSectionsManagement } from './pages/admin/MealSectionsManagement';
 
 const { Header, Content, Sider } = Layout;
 const { Title } = Typography;
@@ -56,12 +57,10 @@ export const App: React.FC = () => {
   if (!currentUser) {
     return (
       <ConfigProvider theme={brightTheme}>
-        <AntdApp>
-          <Login onLoginSuccess={(u) => {
-            setCurrentUser(u);
-            setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
-          }} />
-        </AntdApp>
+        <Login onLoginSuccess={(u) => {
+          setCurrentUser(u);
+          setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
+        }} />
       </ConfigProvider>
     );
   }
@@ -81,6 +80,7 @@ export const App: React.FC = () => {
     { key: 'customers', icon: <UsergroupAddOutlined />, label: t('nav.customers') },
     { key: 'packages', icon: <AppstoreOutlined />, label: t('nav.packages') },
     { key: 'clientMenuLibrary', icon: <BookOutlined />, label: t('nav.clientMenuLibrary') },
+    { key: 'mealSections', icon: <OrderedListOutlined />, label: t('nav.mealSections') },
     { key: 'invoices', icon: <FileTextOutlined />, label: t('nav.invoices') },
     ...(isSuperadmin ? [{ key: 'staff', icon: <TeamOutlined />, label: t('nav.staff') }] : []),
   ];
@@ -157,6 +157,7 @@ export const App: React.FC = () => {
               {activeMenu === 'customers' && <CustomerManagement />}
               {activeMenu === 'packages' && <PackageManagement />}
               {activeMenu === 'clientMenuLibrary' && <ClientMenuLibrary />}
+              {activeMenu === 'mealSections' && <MealSectionsManagement />}
               {activeMenu === 'invoices' && <InvoiceManagement />}
               {activeMenu === 'staff' && <StaffManagement />}
               {activeMenu === 'matrixOrder' && <MatrixOrder />}
@@ -166,7 +167,7 @@ export const App: React.FC = () => {
           </Content>
         </Layout>
       </Layout>
-      </AntdApp>
+    </AntdApp>
     </ConfigProvider>
   );
 };

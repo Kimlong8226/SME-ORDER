@@ -194,3 +194,25 @@ class CalendarDaySummary(BaseModel):
     total_orders_count: int
     total_portions_count: int
     customer_summaries: List[dict]
+
+
+# --- Meal Section Schemas ---
+class MealSectionBase(BaseModel):
+    name: str
+    sort_order: int = 0
+    allowed_categories: str = ""  # 逗号分隔的套餐分类字符串
+
+class MealSectionCreate(MealSectionBase):
+    pass
+
+class MealSectionResponse(MealSectionBase):
+    id: int
+
+    class Config:
+        from_attributes = True
+
+
+class CustomerMealSectionsUpdate(BaseModel):
+    meal_section_ids: List[int]
+
+

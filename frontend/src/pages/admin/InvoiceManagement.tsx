@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Table, Button, Tag, Typography, Modal, Row, Col, Divider, message, Select, DatePicker, Form, Space, Popconfirm } from 'antd';
+﻿import React, { useEffect, useState } from 'react';
+import { App, Card, Table, Button, Tag, Typography, Modal, Row, Col, Divider, Select, DatePicker, Form, Space, Popconfirm } from 'antd';
 import { PrinterOutlined, FileTextOutlined, PlusOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
@@ -9,6 +9,7 @@ const { Option } = Select;
 const { RangePicker } = DatePicker;
 
 export const InvoiceManagement: React.FC = () => {
+  const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -229,7 +230,7 @@ export const InvoiceManagement: React.FC = () => {
   const columns = [
     { title: labels.colInvNo, dataIndex: 'invoice_number', key: 'invoice_number', render: (t: string) => <Text strong style={{ color: '#1e40af' }}>{t}</Text> },
     { title: labels.colCompany, dataIndex: 'company_name', key: 'company_name', render: (t: string, r: any) => <div><Text strong>{t}</Text><div><Text type="secondary" style={{ fontSize: 12 }}>Reg: {r.company_reg_no || '-'}</Text></div></div> },
-    { title: labels.colBillingPeriod, key: 'billing_period', render: (_: any, r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
+    { title: labels.colBillingPeriod, key: 'billing_period', render: (r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
     { title: labels.colBillingCycle, dataIndex: 'billing_cycle', key: 'billing_cycle', render: (t: string) => <Tag color="orange">{isEn ? t.replace('天一结', ' Days Cycle') : t}</Tag> },
     { title: labels.colTotalOrders, dataIndex: 'total_orders', key: 'total_orders', render: (val: number) => `${val} ${labels.ordersCount}` },
     { title: labels.colTotalAmount, dataIndex: 'total_amount', key: 'total_amount', render: (val: number) => <Text strong style={{ color: '#dc2626', fontSize: 16 }}>RM {val.toFixed(2)}</Text> },
@@ -237,7 +238,7 @@ export const InvoiceManagement: React.FC = () => {
     {
       title: labels.colAction,
       key: 'actions',
-      render: (_: any, r: any) => (
+      render: (r: any) => (
         <Space size="middle">
           <Button size="small" type="primary" ghost icon={<FileTextOutlined />} onClick={() => handleOpenInvoiceModal(r)}>
             {labels.btnPreview}

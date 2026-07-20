@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database
+*.db
+*.sqlite3
+
+# Environment
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Frontend Node
+node_modules/
+dist/
+build/
+.eslintcache
+
+# Video Slicing Temporary Frames
+backend/scratch_frames/

@@ -34,7 +34,8 @@
     "deliveryOrders": "DO & Billing Status",
     "dashboard": "Dashboard Overview",
     "orderStatus": "Daily Orders Status",
-    "invoices": "Billing & Invoice"
+    "invoices": "Billing & Invoice",
+    "mealSections": "Meal Shifts & Scheduling"
   },
   "customer": {
     "companyName": "Company Name",

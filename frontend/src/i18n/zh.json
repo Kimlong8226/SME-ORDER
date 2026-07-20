@@ -34,7 +34,8 @@
     "deliveryOrders": "送货单与账期看板",
     "dashboard": "运营概览 Dashboard",
     "orderStatus": "每日订单状态看板",
-    "invoices": "客户账期与发票"
+    "invoices": "客户账期与发票",
+    "mealSections": "餐次排班管理"
   },
   "customer": {
     "companyName": "公司名称",

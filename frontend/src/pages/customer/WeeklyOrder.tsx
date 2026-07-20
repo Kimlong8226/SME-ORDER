@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Table, Tag, Button, Space, Typography, message, Modal, Alert, Tooltip } from 'antd';
+import { App, Card, Table, Tag, Button, Space, Typography, Modal, Alert, Tooltip } from 'antd';
 import { EditOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
@@ -11,6 +11,7 @@ interface OrderHistoryProps {
 }
 
 export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
+  const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -65,7 +66,8 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
   const fetchOrders = async (customerId: number) => {
     setLoading(true);
     try {
-      const res = await axiosInstance.get(`/admin/all-orders?customer_id=${customerId}`);
+      // NOTE: 使用专为客户设计的接口，避免调用需要管理员权限的 /admin/all-orders
+      const res = await axiosInstance.get(`/orders/customer-history/${customerId}`);
       setOrders(res.data || []);
     } catch (err) {
       message.error(labels.loadFailed);
@@ -245,7 +247,6 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
         description={labels.policyDesc}
         type="info"
         showIcon
-        icon={<InfoCircleOutlined />}
         style={{ marginBottom: 20, borderRadius: 8 }}
       />
 

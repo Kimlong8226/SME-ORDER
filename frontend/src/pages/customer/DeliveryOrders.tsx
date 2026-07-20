@@ -1,5 +1,5 @@
 ﻿import React, { useEffect, useState } from 'react';
-import { Card, Table, Tag, Button, Typography, Space, Modal, Divider, message, Row, Col } from 'antd';
+import { App, Card, Table, Tag, Button, Typography, Space, Modal, Divider, Row, Col } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 const { Title, Text } = Typography;
 
 export const DeliveryOrders: React.FC = () => {
+  const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -70,13 +71,14 @@ export const DeliveryOrders: React.FC = () => {
   const fetchOrdersAndProfile = async (customerId: number) => {
     setLoading(true);
     try {
-      const resCusts = await axiosInstance.get('/admin/customers');
-      const cur = resCusts.data?.find((c: any) => c.id === customerId);
-      if (cur) {
-        setCustomerProfile(cur);
+      // NOTE: 使用客户专用接口获取自身资料，避免调用需要管理员权限的 /admin/customers
+      const resCust = await axiosInstance.get(`/orders/customer-profile/${customerId}`);
+      if (resCust.data) {
+        setCustomerProfile(resCust.data);
       }
 
-      const resOrders = await axiosInstance.get(`/admin/all-orders?customer_id=${customerId}`);
+      // NOTE: 使用客户专用历史接口，避免调用需要管理员权限的 /admin/all-orders
+      const resOrders = await axiosInstance.get(`/orders/customer-history/${customerId}`);
       setOrders(resOrders.data || []);
     } catch (err) {
       message.error(isEn ? 'Failed to load delivery orders' : '加载送货单与账期数据失败');
@@ -324,7 +326,7 @@ export const DeliveryOrders: React.FC = () => {
         width={680}
         styles={{ body: { padding: '24px 8px' } }}
         style={{ borderRadius: 16 }}
-        destroyOnClose
+        destroyOnHidden
       >
         {selectedDo ? (
           <div style={{ padding: '0 16px', fontFamily: 'monospace, sans-serif' }}>

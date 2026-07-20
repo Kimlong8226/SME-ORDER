@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Card, Table, DatePicker, Select, Tag, Typography, message, Space, Button, Badge, Modal, Form, InputNumber, Input, Row, Col, Popconfirm, Divider } from 'antd';
+﻿import React, { useEffect, useState } from 'react';
+import { App, Card, Table, DatePicker, Select, Tag, Typography, Space, Button, Badge, Modal, Form, InputNumber, Input, Row, Col, Popconfirm, Divider } from 'antd';
 import { ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -8,7 +8,24 @@ import { useTranslation } from 'react-i18next';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
+// NOTE: 定义餐次与套餐分类的对应关系，用于编辑订单时过滤可选套餐
+const MEAL_SECTION_CATEGORIES: Record<string, string[]> = {
+  '早餐': ['早餐'],
+  'Breakfast': ['早餐'],
+  '早班午餐': ['饭盒', '大型供餐'],
+  'Day Shift Lunch': ['饭盒', '大型供餐'],
+  '早班晚餐': ['饭盒', '大型供餐'],
+  'Day Shift Dinner': ['饭盒', '大型供餐'],
+  '客户/顾问加餐饭盒': ['饭盒', '大型供餐'],
+  'Visitor Bento': ['饭盒', '大型供餐'],
+  '夜班餐食 10pm Buffet': ['Buffet'],
+  'Night Shift 10pm Buffet': ['Buffet'],
+  '夜班餐食 3am 宵夜': ['宵夜'],
+  'Night Shift 3am Supper': ['宵夜'],
+};
+
 export const DailyOrderStatus: React.FC = () => {
+  const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
@@ -191,27 +208,31 @@ export const DailyOrderStatus: React.FC = () => {
     { title: labels.colSite, dataIndex: 'site_name', key: 'site_name', width: 150, render: (text: string) => <Tag color="geekblue">{text}</Tag> },
     {
       title: labels.colDetails,
+      dataIndex: 'details',
       key: 'details',
-      render: (_: any, record: any) => (
-        <Space direction="vertical" size={2}>
-          {(record.details || []).map((d: any, idx: number) => (
-            <div key={d.id ?? idx} style={{ fontSize: 13 }}>
+      // NOTE: render 第一参数是 dataIndex 对应的字段值（details 数组）
+      render: (details: any[]) => (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {(details || []).map((d: any, idx: number) => (
+            <div key={idx} style={{ fontSize: 13 }}>
               <Text strong>{translateMealSection(d.meal_section)}: </Text>
               <Text>{translatePackageTemplateName(d.package_name)}</Text>
               <Tag color="green" style={{ marginLeft: 6 }}>{d.quantity} {labels.portions}</Tag>
               {d.remark && <Text type="secondary" style={{ fontSize: 12 }}>({d.remark})</Text>}
             </div>
           ))}
-        </Space>
+        </div>
       )
     },
     { title: labels.colTotalPortions, dataIndex: 'total_portions', key: 'total_portions', width: 110, render: (val: number) => <Badge count={`${val} ${labels.portions}`} overflowCount={999} style={{ backgroundColor: '#dc2626' }} /> },
     { title: labels.colTotalPrice, dataIndex: 'total_price', key: 'total_price', width: 130, render: (val: number) => <Text strong style={{ color: '#dc2626' }}>RM {val.toFixed(2)}</Text> },
     {
       title: labels.colStatus,
+      dataIndex: 'status',
       key: 'status',
       width: 150,
-      render: (_: any, record: any) => (
+      // NOTE: 加了 dataIndex='status'，render 第一参数为 status 值，第二参数为整行 record
+      render: (_: string, record: any) => (
         <Select
           value={record.status}
           style={{ width: 130 }}
@@ -229,6 +250,7 @@ export const DailyOrderStatus: React.FC = () => {
       title: labels.colAction,
       key: 'actions',
       width: 160,
+      // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
       render: (_: any, record: any) => (
         <Space size="small">
           <Button size="small" type="primary" ghost icon={<EditOutlined />} onClick={() => handleOpenEditModal(record)}>
