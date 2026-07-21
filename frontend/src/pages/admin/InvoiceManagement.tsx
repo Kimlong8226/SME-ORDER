@@ -14,13 +14,13 @@ export const InvoiceManagement: React.FC = () => {
   const isEn = i18n.language === 'en';
 
   const labels = {
-    title: isEn ? 'Statements of Account & Invoices' : '客户账期对账单与发票 (Statements of Account)',
-    colInvNo: isEn ? 'Invoice No.' : '账单编号 (Invoice No.)',
-    colCompany: isEn ? 'Customer Company' : '企业客户公司',
-    colBillingCycle: isEn ? 'Billing Cycle' : '结算账期',
-    colTotalOrders: isEn ? 'Total Orders' : '订单总量',
-    colTotalAmount: isEn ? 'Total Receivable (RM)' : '应收总金额 (RM)',
-    colPaymentStatus: isEn ? 'Payment Status' : '付款状态',
+    title: isEn ? 'Statements of Account & Invoices' : '客户账单',
+    colInvNo: isEn ? 'Invoice No.' : '账单编号',
+    colCompany: isEn ? 'Customer Company' : '客户',
+    colBillingCycle: isEn ? 'Billing Cycle' : '账期',
+    colTotalOrders: isEn ? 'Total Orders' : '订单数',
+    colTotalAmount: isEn ? 'Total Receivable (RM)' : '总金额',
+    colPaymentStatus: isEn ? 'Payment Status' : '状态',
     colAction: isEn ? 'Actions' : '操作',
     btnPreview: isEn ? 'Preview' : '预览对账单',
     ordersCount: isEn ? 'orders' : '笔',
@@ -64,8 +64,8 @@ export const InvoiceManagement: React.FC = () => {
     btnCancelInv: isEn ? 'Cancel' : '撤销对账单',
     btnSave: isEn ? 'Confirm' : '确认',
     btnCancel: isEn ? 'Cancel' : '取消',
-    colBillingPeriod: isEn ? 'Billing Period' : '对账账期区间',
-    colDoList: isEn ? 'Included DOs' : '包含的 DO 号',
+    colBillingPeriod: isEn ? 'Billing Period' : '账期区间',
+    colDoList: isEn ? 'Included DOs' : 'DO 号',
     includedDosInfo: isEn ? 'Included DOs:' : '包含的 DO：',
   };
 
@@ -300,7 +300,7 @@ export const InvoiceManagement: React.FC = () => {
             loading={unbilledLoading}
             dataSource={unbilledOrders}
             rowKey="id"
-            scroll={{ x: 600 }}
+            scroll={{ x: 'max-content' }}
             rowSelection={{
               selectedRowKeys: selectedOrderIds,
               onChange: (selectedKeys, selectedRows) => {
@@ -335,7 +335,7 @@ export const InvoiceManagement: React.FC = () => {
           key: '2',
           label: isEn ? "Statement History" : "历史对账单",
           children: (
-          <Table columns={columns} dataSource={invoices} rowKey="id" loading={loading} style={{ width: '100%' }} scroll={{ x: 1000 }} />
+          <Table columns={columns} dataSource={invoices} rowKey="id" loading={loading} style={{ width: '100%' }} scroll={{ x: 'max-content' }} />
           )
         }
       ]} />
@@ -390,6 +390,7 @@ export const InvoiceManagement: React.FC = () => {
               pagination={false}
               size="small"
               bordered
+              scroll={{ x: 'max-content' }}
               dataSource={
                 (selectedInvoice.orders_detail || []).flatMap((order: any) =>
                   order.meal_details.map((m: any, i: number) => ({

@@ -24,8 +24,8 @@ export const MatrixOrder: React.FC = () => {
     weekendReminderDesc: isEn ? 'Pro3C plant exclusive: Weekend order deadline extended to 18:00 PM. Please submit after headcount is finalized.' : 'pro3c 厂区专享：知道您周末员工排班统计较慢，您的截止订餐时间已延长至傍晚 18:00，请安心统计后提交。',
     sundayReminderTitle: isEn ? 'Sunday Routine Rest Notice' : '星期日例行休息提示',
     sundayReminderDesc: isEn ? 'Note: Based on your delivery schedule, Sunday is a rest day and no delivery is scheduled.' : '温馨提示：根据您的送餐习惯，星期日工厂安排例休无需送餐。',
-    deliveryDate: isEn ? 'Select Delivery Date' : '选择送餐日期',
-    deliverySite: isEn ? 'Select Delivery Site / Factory' : '选择送餐分点/工厂',
+    deliveryDate: isEn ? 'Select Delivery Date' : '送餐日期',
+    deliverySite: isEn ? 'Select Delivery Site / Factory' : '送餐分点/工厂',
     selectSitePlaceholder: isEn ? 'Select Receiving Site' : '请选择接收工厂/厂区',
     orderPageTitle: isEn ? 'Order Page' : '下单页面',
     orderPageDesc: isEn ? 'Only showing shifts assigned to your profile by central kitchen.' : '系统仅显示后台已为您开通并配置了协议套餐的餐品类别。',
@@ -37,18 +37,18 @@ export const MatrixOrder: React.FC = () => {
     selectTemplate: isEn ? 'Select Package Template:' : '选择配餐套餐：',
     orderPax: isEn ? 'Order Pax / Portions' : '报餐人数/份数',
     extraRice: isEn ? 'Extra White Rice (Portions)' : '加白饭 (份数)',
-    orderSummary: isEn ? 'Order Summary' : '已选订购小结',
+    orderSummary: isEn ? 'Order Summary' : '已选',
     clearAll: isEn ? 'Clear Selections' : '清空选择',
-    emptyCartTitle: isEn ? 'Your Cart is Empty' : '购物车空空如也',
-    emptyCartDesc: isEn ? 'Please click meal cards to add order quantities.' : '请点击左侧菜品卡片设置人数报餐',
+    emptyCartTitle: isEn ? 'Your Cart is Empty' : '购物车为空',
+    emptyCartDesc: isEn ? 'Please click meal cards to add order quantities.' : '',
     defaultPkg: isEn ? 'Default Package' : '默认配餐',
     pax: isEn ? 'Pax' : '人',
     extraRiceShort: isEn ? 'Extra Rice' : '加白饭需求',
-    remarkTitle: isEn ? 'Order Remarks (Preferences, etc.)' : '订单备注 (加饭/忌口等)',
+    remarkTitle: isEn ? 'Order Remarks (Preferences, etc.)' : '备注',
     remarkPlaceholder: isEn ? 'e.g. Day shift 71, Night shift 40. Extra rice 5, no coriander...' : '例: 早班71份，夜班40份。加饭 5 份，不要香菜...',
-    factory: isEn ? 'Delivery Site' : '配送工厂/分点',
+    factory: isEn ? 'Delivery Site' : '工厂/分点',
     notSpecified: isEn ? 'Not Specified' : '未指定',
-    totalPax: isEn ? 'Total Order Pax' : '总报餐人数',
+    totalPax: isEn ? 'Total Order Pax' : '总人数',
     btnSubmit: isEn ? 'Confirm & Submit Order' : '确认无误，极速提交订单',
     btnLocked: isEn ? 'Account Locked, Ordering Restricted' : '账号锁定，限制下单',
     msgSuccess: isEn ? '🎉 Order submitted successfully!' : '🎉 订单提交成功！中央厨房已准备。',
@@ -335,8 +335,8 @@ export const MatrixOrder: React.FC = () => {
         <Row align="middle" justify="space-between" gutter={[20, 20]}>
           <Col xs={24} md={14}>
             <Space orientation="vertical" size={2}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <Title level={3} style={{ margin: 0, color: '#ffffff', fontWeight: 800, fontSize: 24 }}>{labels.title}</Title>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <Title level={3} style={{ margin: 0, color: '#ffffff', fontWeight: 800, fontSize: 22, wordBreak: 'break-all' }}>{labels.title}</Title>
                 <Tag color="success" style={{ borderRadius: 6, fontWeight: 'bold', border: 'none', background: '#10b981', color: '#fff' }}>{labels.fastMode}</Tag>
               </div>
               <Text style={{ color: '#94a3b8', fontSize: 14 }}>{labels.subtitle}</Text>

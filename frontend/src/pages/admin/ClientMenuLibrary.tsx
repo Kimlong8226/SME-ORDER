@@ -22,22 +22,22 @@ export const ClientMenuLibrary: React.FC = () => {
 
   // NOTE: 所有文案集中在此，方便后续语言切换维护
   const labels = {
-    pageTitle: isEn ? '📖 Client Menu Library' : '📖 顾客专属菜单管理库 (Client Menu Library)',
-    currentCustomer: isEn ? 'Managing Customer: ' : '当前管理顾客：',
+    pageTitle: isEn ? 'Client Menu' : '专属菜单',
+    currentCustomer: isEn ? 'Managing Customer: ' : '当前客户：',
     // ── 套餐 Tab ──
     tabPackages: isEn ? '🍱 Packages' : '🍱 套餐',
-    btnAddPkgToClient: isEn ? '+ Add Package to Customer Menu' : '+ 添加套餐至该顾客菜单库',
-    colAssignedName: isEn ? 'Package Name' : '专属套餐名称',
+    btnAddPkgToClient: isEn ? '+ Add Package to Customer Menu' : '+ 添加套餐',
+    colAssignedName: isEn ? 'Package Name' : '套餐名称',
     colCategory: isEn ? 'Category' : '分类',
-    colAgreementPrice: isEn ? 'Agreement Price (RM)' : '客户专属协议价 (RM)',
+    colAgreementPrice: isEn ? 'Agreement Price (RM)' : '协议价 (RM)',
     colStatus: isEn ? 'Status' : '状态控制',
-    colAction: isEn ? 'Actions' : '菜单库操作',
+    colAction: isEn ? 'Actions' : '操作',
     statusActive: isEn ? 'Active' : '已启用',
-    btnEditPrice: isEn ? 'Edit Price' : '改协议价',
+    btnEditPrice: isEn ? 'Edit Price' : '改价',
     btnDelete: isEn ? 'Delete' : '删除',
     statusTagSuspended: isEn ? '🚫 Suspended' : '🚫 已冻结',
     statusTagActive: isEn ? '🟢 Active' : '🟢 正常',
-    btnSuspend: isEn ? 'Suspend Ordering' : '一键冻结下单',
+    btnSuspend: isEn ? 'Suspend Ordering' : '冻结下单',
     btnActivate: isEn ? 'Lift Suspension' : '解除冻结',
     freezeConfirmTitle: isEn ? 'Suspend Ordering Confirmation' : '冻结下单确认',
     freezeConfirmDesc: isEn
@@ -77,7 +77,7 @@ export const ClientMenuLibrary: React.FC = () => {
     emptyMenuHint: isEn
       ? 'No packages assigned yet. Click "Add Package" to get started.'
       : '该客户目前没有专属套餐，点击「添加套餐」开始配置。',
-    colVisible: isEn ? 'Show on Order Page' : '在下单页显示',
+    colVisible: isEn ? 'Show on Order Page' : '前端显示',
     switchOnTip: isEn ? 'Showing on order page. Click to hide.' : '已显示在下单页。点击屏蔽',
     switchOffTip: isEn ? 'Hidden from order page. Click to show.' : '已从下单页隐藏。点击开启',
     toggleSuccess: isEn ? 'Display status updated!' : '显示状态已更新！',
@@ -627,7 +627,6 @@ export const ClientMenuLibrary: React.FC = () => {
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       {/* 页面标题栏 */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <BookOutlined style={{ fontSize: 26, color: '#2563eb' }} />
         <Title level={3} style={{ margin: 0, color: '#1e293b' }}>
           {labels.pageTitle}
         </Title>
@@ -654,7 +653,7 @@ export const ClientMenuLibrary: React.FC = () => {
         {selectedCustomerId && !currentCustomerObj?.is_blocked && (
           <Card
             size="small"
-            title={<Text strong style={{ color: '#1e3a8a' }}>⏱️ 开通下单餐次 (勾选以允许该顾客自助下单对应餐次)</Text>}
+            title={<Text strong style={{ color: '#1e3a8a' }}>⏱️ 开通餐次</Text>}
             style={{ marginBottom: 20, borderRadius: 10, background: '#f8fafc', border: '1px solid #e2e8f0' }}
           >
             {allMealSections.length === 0 ? (

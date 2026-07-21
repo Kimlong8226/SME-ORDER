@@ -36,8 +36,8 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     btnDailyOrders: isEn ? 'Daily Orders Status' : '每日订单状态看板',
     btnCalendar: isEn ? 'Calendar & DO Slips' : '排单日历与送货单',
     btnCustomers: isEn ? 'Profiles & Freeze Switch' : '客户档案与冻结开关',
-    btnPackages: isEn ? 'Custom Menus Database' : '顾客专属菜单管理库',
-    btnBilling: isEn ? 'Billing & Invoice Statement' : '客户账期发票对账',
+    btnPackages: isEn ? 'Custom Menus Database' : '顾客专属菜单',
+    btnBilling: isEn ? 'Billing & Invoice Statement' : '客户账单',
     riskTitle: isEn ? 'Risk Control & Alerts' : '风控与提醒',
     alertBlockedTitle: isEn ? 'Payment Outstanding Block' : '欠款拦截提示',
     alertBlockedDesc: isEn ? 'If a client exceeds their billing terms, enable [Block Ordering] in profiles to block their submissions.' : '如客户逾期未结款，请在客户档案管理中开启【冻结下单】，系统将拦截其订餐员提报。',
@@ -84,11 +84,15 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       }}>
         <Row align="middle" justify="space-between" gutter={[16, 16]}>
           <Col xs={24} lg={18}>
-            <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 900, fontSize: 'clamp(20px, 4vw, 30px)' }}>
-              <span style={{ color: '#fef08a' }}>{isEn ? 'Kim Long ' : '金龙中央厨房'}</span>{isEn ? 'Catering' : '伙食下单系统'} Dashboard
+            <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 900, fontSize: 'clamp(16px, 3.5vw, 24px)' }}>
+              {isEn ? (
+                <><span style={{ color: '#fef08a' }}>Kim Long</span> Central Kitchen System</>
+              ) : (
+                <><span style={{ color: '#fef08a' }}>金龙中央厨房</span>伙食下单系统</>
+              )}
             </Title>
-            <Text style={{ color: '#dcfce7', fontSize: 'clamp(12px, 2.5vw, 14px)', marginTop: 4, display: 'block' }}>
-              {labels.subtitle}
+            <Text style={{ color: '#dcfce7', fontSize: 'clamp(11px, 2vw, 13px)', marginTop: 4, display: 'block' }}>
+              {isEn ? 'KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM | Operation Hub' : '运营指挥中枢'}
             </Text>
           </Col>
           <Col xs={24} lg={6} style={{ display: 'flex', justifyContent: 'flex-start' }}>
@@ -101,7 +105,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
 
       {/* 核心指标统计卡片 */}
       <Row gutter={[20, 20]} style={{ marginBottom: 24 }}>
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
               title={<Text type="secondary" strong>{labels.metricPortionsTitle}</Text>}
@@ -115,7 +119,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </Card>
         </Col>
 
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
               title={<Text type="secondary" strong>{labels.metricRevenueTitle}</Text>}
@@ -130,7 +134,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </Card>
         </Col>
 
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
               title={<Text type="secondary" strong>{labels.metricClientsTitle}</Text>}
@@ -144,7 +148,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </Card>
         </Col>
 
-        <Col xs={24} sm={12} lg={6}>
+        <Col xs={12} sm={12} lg={6}>
           <Card loading={loading} style={{ borderRadius: 12 }}>
             <Statistic
               title={<Text type="secondary" strong>{labels.metricBlockedTitle}</Text>}
@@ -162,7 +166,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       {/* 快捷导航与运营风险预警 */}
       <Row gutter={[20, 20]}>
         <Col xs={24} lg={16}>
-          <Card title={<Title level={4} style={{ margin: 0 }}>{labels.quickNavTitle}</Title>} style={{ borderRadius: 12 }}>
+          <Card title={<Title level={4} style={{ margin: 0 }}>⚡ {labels.quickNavTitle}</Title>} style={{ borderRadius: 12 }}>
             <Row gutter={[16, 16]}>
               <Col xs={24} sm={12} md={8}>
                 <Button type="primary" size="large" block icon={<UnorderedListOutlined />} onClick={() => onNavigate('orderStatus')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold', background: '#dc2626', borderColor: '#dc2626' }}>
@@ -193,22 +197,37 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
           </Card>
         </Col>
 
-        <Col xs={24} lg={8}>
+        <Col xs={24} lg={24}>
           <Card title={<Title level={4} style={{ margin: 0 }}>{labels.riskTitle}</Title>} style={{ borderRadius: 12 }}>
-            <Alert
-              title={labels.alertBlockedTitle}
-              description={labels.alertBlockedDesc}
-              type="warning"
-              showIcon
-              icon={<WarningOutlined />}
-              style={{ marginBottom: 16 }}
-            />
-            <Alert
-              title={labels.alertPrivacyTitle}
-              description={labels.alertPrivacyDesc}
-              type="info"
-              showIcon
-            />
+            <Row gutter={[12, 12]}>
+              <Col xs={12}>
+                <Alert
+                  message={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <strong style={{ fontSize: 13 }}>{labels.alertBlockedTitle}</strong>
+                      <span style={{ fontSize: 11, lineHeight: 1.4, color: '#854d0e' }}>{labels.alertBlockedDesc}</span>
+                    </div>
+                  }
+                  type="warning"
+                  showIcon
+                  icon={<WarningOutlined />}
+                  style={{ height: '100%', padding: '8px 10px', alignItems: 'flex-start' }}
+                />
+              </Col>
+              <Col xs={12}>
+                <Alert
+                  message={
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      <strong style={{ fontSize: 13 }}>{labels.alertPrivacyTitle}</strong>
+                      <span style={{ fontSize: 11, lineHeight: 1.4, color: '#0369a1' }}>{labels.alertPrivacyDesc}</span>
+                    </div>
+                  }
+                  type="info"
+                  showIcon
+                  style={{ height: '100%', padding: '8px 10px', alignItems: 'flex-start' }}
+                />
+              </Col>
+            </Row>
           </Card>
         </Col>
       </Row>

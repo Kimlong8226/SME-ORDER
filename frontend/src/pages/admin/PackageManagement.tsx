@@ -18,8 +18,8 @@ export const PackageManagement: React.FC = () => {
 
   // NOTE: 文案集中管理，便于维护
   const labels = {
-    pageTitle: isEn ? 'Central Kitchen Base Packages Database' : '中央厨房基础套餐模板库 (全局主档)',
-    addonSectionTitle: isEn ? 'Add-on Pool (Single Items)' : 'Add-on 单点池（全局主档）',
+    pageTitle: isEn ? 'Central Kitchen Base Packages Database' : '套餐库',
+    addonSectionTitle: isEn ? 'Add-on Pool (Single Items)' : '单点池 (Add-on)',
     addonSectionDesc: isEn
       ? 'Manage individual add-ons (e.g. Egg, White Rice, Fruit) that can be assigned to any customer menu.'
       : '管理可单独点购的项目（如鸡蛋、白饭、水果等），可在客户菜单库中分配给指定客户。',
@@ -27,10 +27,10 @@ export const PackageManagement: React.FC = () => {
     // 套餐区
     colPkgName: isEn ? 'Package Name' : '套餐名称',
     colCategory: isEn ? 'Category' : '分类',
-    colDefaultPrice: isEn ? 'Default Base Price' : '默认基础价',
-    colDescription: isEn ? 'Description' : '配料描述',
+    colDefaultPrice: isEn ? 'Default Base Price' : '默认价',
+    colDescription: isEn ? 'Description' : '描述',
     colAction: isEn ? 'Actions' : '操作',
-    btnCreatePkg: isEn ? '+ Create Package' : '+ 创建新套餐',
+    btnCreatePkg: isEn ? '+ Create Package' : '+ 新建套餐',
     modalCreateTitle: isEn ? 'Create New Package Template' : '创建新基础套餐模板',
     modalEditTitle: isEn ? 'Edit Package Template' : '修改基础套餐模板',
     formPkgName: isEn ? 'Package Name' : '套餐名称',
@@ -48,8 +48,8 @@ export const PackageManagement: React.FC = () => {
     catBuffet: isEn ? 'Buffet Meal' : 'Buffet 自助餐',
 
     // Add-on 区
-    colAddonName: isEn ? 'Add-on Name' : '单点项目名称',
-    colAddonDefaultPrice: isEn ? 'Default Price (RM)' : '默认单价 (RM)',
+    colAddonName: isEn ? 'Add-on Name' : '名称',
+    colAddonDefaultPrice: isEn ? 'Default Price (RM)' : '单价 (RM)',
     colAddonDescription: isEn ? 'Description' : '描述',
     btnCreateAddon: isEn ? '+ Create Add-on' : '+ 创建新 Add-on',
     modalCreateAddonTitle: isEn ? 'Create New Add-on' : '创建新 Add-on 单点项',
@@ -421,7 +421,6 @@ export const PackageManagement: React.FC = () => {
     <div style={{ maxWidth: 1100, margin: '0 auto' }}>
       {/* ── 页面标题 ── */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <AppstoreOutlined style={{ fontSize: 26, color: '#16a34a' }} />
         <Title level={3} style={{ margin: 0, color: '#1e293b' }}>
           {labels.pageTitle}
         </Title>
@@ -449,7 +448,6 @@ export const PackageManagement: React.FC = () => {
       {/* ── Add-on 单点池区块 ── */}
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-          <PlusSquareOutlined style={{ fontSize: 22, color: '#ea580c' }} />
           <Title level={4} style={{ margin: 0, color: '#1e293b' }}>
             {labels.addonSectionTitle}
           </Title>

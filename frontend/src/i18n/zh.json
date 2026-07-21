@@ -27,7 +27,7 @@
     "customers": "客户档案管理",
     "staff": "员工协同管理",
     "packages": "基础套餐模板库",
-    "clientMenuLibrary": "顾客专属菜单库",
+    "clientMenuLibrary": "顾客专属菜单",
     "matrixOrder": "下单页面",
     "weeklyOrder": "周历申报错单",
     "orderHistory": "订单状态与修改",

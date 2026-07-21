@@ -16,8 +16,8 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
   const isEn = i18n.language === 'en';
 
   const labels = {
-    title: isEn ? 'Order Status & Self-Edit Dashboard' : '订单状态与自助修改看板',
-    btnRefresh: isEn ? 'Refresh Orders' : '刷新订单列表',
+    title: isEn ? 'Order Status & Self-Edit Dashboard' : '订单状态',
+    btnRefresh: isEn ? 'Refresh Orders' : '刷新',
     loadFailed: isEn ? 'Failed to load order history' : '加载订单历史失败',
     cancelConfirmTitle: isEn ? 'Confirm Cancellation?' : '确认取消订单吗？',
     cancelConfirmContent: isEn ? 'Once cancelled, the order will be permanently deleted and the central kitchen will stop preparation.' : '取消后订单将被永久删除，中央厨房将停止该批伙食的配餐准备。',
@@ -31,9 +31,9 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
     statusDelivered: isEn ? 'Delivered' : '已送达',
     statusBilled: isEn ? 'Billed' : '已结账',
     statusCancelled: isEn ? 'Cancelled' : '已取消',
-    colDeliveryDate: isEn ? 'Delivery Date' : '送餐日期',
-    colSite: isEn ? 'Delivery Site / Factory' : '送餐分点/工厂',
-    colDetails: isEn ? 'Order Details' : '预订明细内容',
+    colDeliveryDate: isEn ? 'Delivery Date' : '日期',
+    colSite: isEn ? 'Delivery Site / Factory' : '分点/工厂',
+    colDetails: isEn ? 'Order Details' : '明细',
     pax: isEn ? 'pax' : '人',
     remarkLabel: isEn ? 'Remark: ' : '备注: ',
     colOrderRemark: isEn ? 'Order Remark' : '订单备注',
@@ -256,6 +256,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 8 }}
+        scroll={{ x: 'max-content' }}
         style={{ borderRadius: 8 }}
       />
     </Card>

@@ -30,7 +30,7 @@ export const DailyOrderStatus: React.FC = () => {
   const isEn = i18n.language === 'en';
 
   const labels = {
-    title: isEn ? 'Daily Orders Status Dashboard' : '每日订单状态看板',
+    title: isEn ? 'Orders Status' : '订单状态',
     loadFailed: isEn ? 'Failed to fetch orders' : '获取订单失败',
     statusUpdated: isEn ? 'Order status updated successfully' : '订单状态已更新',
     statusUpdateFailed: isEn ? 'Failed to update order status' : '修改状态失败',
@@ -38,16 +38,16 @@ export const DailyOrderStatus: React.FC = () => {
     deleteFailed: isEn ? 'Failed to delete order' : '删除订单失败',
     saveSuccess: isEn ? 'Order updated successfully!' : '后台已成功修改该订单数据！',
     saveFailed: isEn ? 'Failed to save order updates' : '保存订单修改失败',
-    colOrderId: isEn ? 'Order ID' : '订单编号',
-    colDeliveryDate: isEn ? 'Delivery Date' : '配送日期',
-    colCustomer: isEn ? 'Customer Client' : '企业客户',
-    colSite: isEn ? 'Delivery Site' : '送餐分点/工厂',
-    colDetails: isEn ? 'Meal & Package Details' : '餐次与套餐明细 (Details)',
+    colOrderId: isEn ? 'Order ID' : '编号',
+    colDeliveryDate: isEn ? 'Delivery Date' : '日期',
+    colCustomer: isEn ? 'Customer Client' : '客户',
+    colSite: isEn ? 'Delivery Site' : '送餐',
+    colDetails: isEn ? 'Meal & Package Details' : '套餐明细',
     portions: isEn ? 'portions' : '份',
-    colTotalPortions: isEn ? 'Total Portions' : '总配餐份数',
-    colTotalPrice: isEn ? 'Amount (RM)' : '折合金额 (RM)',
-    colStatus: isEn ? 'Current Status' : '当前状态',
-    colAction: isEn ? 'Admin Management' : '后台数据管理',
+    colTotalPortions: isEn ? 'Total Portions' : '配餐份数',
+    colTotalPrice: isEn ? 'Amount (RM)' : '金额 (RM)',
+    colStatus: isEn ? 'Current Status' : '状态',
+    colAction: isEn ? 'Admin Management' : '数据管理',
     btnEdit: isEn ? 'Edit' : '编辑',
     btnDelete: isEn ? 'Delete' : '删除',
     confirmDeleteTitle: isEn ? 'Confirm Delete' : '删除订单确认',
@@ -294,7 +294,7 @@ export const DailyOrderStatus: React.FC = () => {
           <Button type="primary" icon={<ReloadOutlined />} onClick={fetchOrders}>{labels.btnRefresh}</Button>
         </Space>
       </div>
-      <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 1000 }} />
+      <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 'max-content' }} />
 
       {/* 编辑订单 Modal */}
       <Modal

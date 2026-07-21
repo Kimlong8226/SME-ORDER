@@ -62,13 +62,13 @@ export const MealSectionsManagement: React.FC = () => {
   const isEn = i18n.language === 'en';
 
   const labels = {
-    title: isEn ? 'Meal Shifts & Schedule Management' : '餐次与排班管理',
-    subtitle: isEn ? 'Configure meal section ordering, display sequence, and bound menu package categories.' : '灵活配置订餐系统各时段餐次定义、前端展示顺序及对应可订套餐分类。',
-    colName: isEn ? 'Shift Name & Type' : '餐次名称',
-    colSort: isEn ? 'Sort & Order' : '前端排序',
-    colCategories: isEn ? 'Bound Categories' : '关联套餐分类 (下单可选)',
+    title: isEn ? 'Meal Shifts Management' : '餐次管理',
+    subtitle: isEn ? 'Configure meal section ordering, display sequence, and bound menu package categories.' : '配置订餐餐次、排序及关联套餐分类。',
+    colName: isEn ? 'Shift Name' : '名称',
+    colSort: isEn ? 'Order' : '排序',
+    colCategories: isEn ? 'Bound Categories' : '关联分类',
     colAction: isEn ? 'Actions' : '操作',
-    btnAdd: isEn ? 'Add Meal Shift' : '新增餐次定义',
+    btnAdd: isEn ? 'Add Meal Shift' : '新增餐次',
     btnPresets: isEn ? 'Quick Add Presets' : '一键预设餐次',
     btnEdit: isEn ? 'Edit' : '编辑',
     btnDelete: isEn ? 'Delete' : '删除',
@@ -352,7 +352,7 @@ export const MealSectionsManagement: React.FC = () => {
           return (
             <Tooltip title="未配置关联分类的餐次，客户在前台下单页面将无法选购任何套餐。点击【编辑】以绑定套餐分类。">
               <Tag icon={<ExclamationCircleOutlined />} color="warning" style={{ borderRadius: 6, padding: '3px 8px', cursor: 'pointer' }} onClick={() => handleOpenEditModal(record)}>
-                {isEn ? 'No Categories (Hidden)' : '未配置分类 (下单页隐藏)'}
+                {isEn ? 'No Categories (Hidden)' : '未配置 (隐藏)'}
               </Tag>
             </Tooltip>
           );
@@ -432,14 +432,10 @@ export const MealSectionsManagement: React.FC = () => {
         <Row align="middle" justify="space-between" gutter={[16, 16]}>
           <Col xs={24} md={16}>
             <Space align="start" size="middle">
-              <span style={{ fontSize: 32, lineHeight: 1 }}>⏱️</span>
               <div>
                 <Title level={3} style={{ color: '#ffffff', margin: 0, fontWeight: 700 }}>
                   {labels.title}
                 </Title>
-                <Paragraph style={{ color: '#94a3b8', margin: '4px 0 0 0', fontSize: 13 }}>
-                  {labels.subtitle}
-                </Paragraph>
               </div>
             </Space>
           </Col>
@@ -470,19 +466,19 @@ export const MealSectionsManagement: React.FC = () => {
       <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
         <Col xs={12} sm={6}>
           <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>总餐次定义</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>总餐次</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: '#0f172a' }}>{stats.total}</Title>
           </Card>
         </Col>
         <Col xs={12} sm={6}>
           <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>已绑定分类餐次</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>已配置餐次</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: '#16a34a' }}>{stats.configured}</Title>
           </Card>
         </Col>
         <Col xs={12} sm={6}>
           <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>未配置/隐藏餐次</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>未配置/隐藏</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: stats.unconfigured > 0 ? '#ea580c' : '#64748b' }}>
               {stats.unconfigured}
             </Title>
@@ -490,7 +486,7 @@ export const MealSectionsManagement: React.FC = () => {
         </Col>
         <Col xs={12} sm={6}>
           <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
-            <Text type="secondary" style={{ fontSize: 12 }}>关联套餐分类总数</Text>
+            <Text type="secondary" style={{ fontSize: 12 }}>关联分类</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: '#2563eb' }}>{stats.categoriesCount}</Title>
           </Card>
         </Col>

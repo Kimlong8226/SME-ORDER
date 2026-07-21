@@ -307,6 +307,7 @@ export const DeliveryOrders: React.FC = () => {
         rowKey="id"
         loading={loading}
         pagination={{ pageSize: 8 }}
+        scroll={{ x: 'max-content' }}
         style={{ borderRadius: 8 }}
       />
 

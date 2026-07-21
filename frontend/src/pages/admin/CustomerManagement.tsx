@@ -254,12 +254,12 @@ export const CustomerManagement: React.FC = () => {
   return (
     <Card>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-        <Title level={4} style={{ margin: 0 }}>{t('nav.customers')} {labels.subtitle}</Title>
+        <Title level={4} style={{ margin: 0 }}>{t('nav.customers')}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
           {labels.btnCreate}
         </Button>
       </div>
-      <Table columns={columns} dataSource={customers} rowKey="id" loading={loading} scroll={{ x: 1000 }} />
+      <Table columns={columns} dataSource={customers} rowKey="id" loading={loading} scroll={{ x: 'max-content' }} />
 
       {/* 创建/编辑客户 Modal */}
       <Modal

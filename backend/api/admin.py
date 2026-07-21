@@ -11,7 +11,7 @@ from model.models import (
 )
 from schema.schemas import (
     CustomerCreate, CustomerResponse, CustomerBase, DeliverySiteCreate, DeliverySiteResponse,
-    StaffUserCreate, StaffUserResponse, PackageTemplateCreate, PackageTemplateResponse,
+    StaffUserCreate, StaffUserResponse, StaffUserUpdate, PackageTemplateCreate, PackageTemplateResponse,
     CustomerPackageAssign, CustomerPackageResponse,
     AddonTemplateCreate, AddonTemplateResponse, CustomerAddonAssign, CustomerAddonResponse,
     MealSectionCreate, MealSectionResponse, CustomerMealSectionsUpdate, CustomerUpdate
@@ -163,6 +163,39 @@ def create_staff(req: StaffUserCreate, db: Session = Depends(get_db)):
 @router.get("/staff", response_model=List[StaffUserResponse])
 def list_staff(db: Session = Depends(get_db)):
     return db.query(StaffUser).all()
+
+@router.put("/staff/{staff_id}", response_model=StaffUserResponse)
+def update_staff(staff_id: int, req: StaffUserUpdate, db: Session = Depends(get_db)):
+    staff = db.query(StaffUser).filter(StaffUser.id == staff_id).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="员工不存在")
+    
+    update_data = req.dict(exclude_unset=True)
+    if "username" in update_data and update_data["username"] != staff.username:
+        existing = db.query(StaffUser).filter(StaffUser.username == update_data["username"]).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="用户名已存在")
+            
+    if "password" in update_data:
+        if update_data["password"]:
+            staff.password_hash = get_password_hash(update_data["password"])
+        del update_data["password"]
+
+    for key, value in update_data.items():
+        setattr(staff, key, value)
+        
+    db.commit()
+    db.refresh(staff)
+    return staff
+
+@router.delete("/staff/{staff_id}")
+def delete_staff(staff_id: int, db: Session = Depends(get_db)):
+    staff = db.query(StaffUser).filter(StaffUser.id == staff_id).first()
+    if not staff:
+        raise HTTPException(status_code=404, detail="员工不存在")
+    db.delete(staff)
+    db.commit()
+    return {"message": "删除成功"}
 
 # --- 3. 菜单与套餐库管理 ---
 @router.post("/packages", response_model=PackageTemplateResponse)

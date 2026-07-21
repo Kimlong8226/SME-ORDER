@@ -145,6 +145,14 @@ export const OrderCalendar: React.FC = () => {
     return name;
   };
 
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const cellRender = (current: Dayjs, info: { type: string }) => {
     if (info.type !== 'date') return null;
     const dateStr = current.format('YYYY-MM-DD');
@@ -154,17 +162,23 @@ export const OrderCalendar: React.FC = () => {
 
     return (
       <div
-        style={{ padding: '2px 0', cursor: 'pointer' }}
+        style={{ cursor: 'pointer', height: '100%', minHeight: isMobile ? 0 : 80 }}
         onClick={(e) => {
           e.stopPropagation();
           handleOpenPrintModal(dateStr, null);
         }}
       >
-        {Object.values(dayData).map((item: any, idx: number) => (
-          <div key={idx} style={{ fontSize: 11, marginBottom: 2, background: '#f0fdf4', padding: '2px 4px', borderRadius: 4, border: '1px solid #bbf7d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <Badge status="success" text={<Text style={{ fontSize: 11 }} strong>{item.company_name}: {item.total_portions}{isEn ? ' pax' : '份'}</Text>} />
+        {isMobile ? (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: -8 }}>
+            <Badge status="success" />
           </div>
-        ))}
+        ) : (
+          Object.values(dayData).map((item: any, idx: number) => (
+            <div key={idx} style={{ fontSize: 11, marginBottom: 2, background: '#f0fdf4', padding: '2px 4px', borderRadius: 4, border: '1px solid #bbf7d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Badge status="success" text={<Text style={{ fontSize: 11 }} strong>{item.company_name}: {item.total_portions}{isEn ? ' pax' : '份'}</Text>} />
+            </div>
+          ))
+        )}
       </div>
     );
   };
@@ -249,7 +263,7 @@ export const OrderCalendar: React.FC = () => {
         </Button>
       </div>
       <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
-        <Calendar cellRender={cellRender} onSelect={(date) => setSelectedDate(date.format('YYYY-MM-DD'))} />
+        <Calendar fullscreen={!isMobile} cellRender={cellRender} onSelect={(date) => setSelectedDate(date.format('YYYY-MM-DD'))} />
       </div>
 
       {/* 订单签收单 Modal */}

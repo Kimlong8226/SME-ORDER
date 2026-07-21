@@ -27,6 +27,13 @@ class StaffUserBase(BaseModel):
 class StaffUserCreate(StaffUserBase):
     password: str
 
+class StaffUserUpdate(BaseModel):
+    username: Optional[str] = None
+    full_name: Optional[str] = None
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    password: Optional[str] = None
+
 class StaffUserResponse(StaffUserBase):
     id: int
     created_at: datetime
