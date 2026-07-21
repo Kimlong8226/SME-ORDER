@@ -273,13 +273,16 @@ def toggle_package_visibility(customer_id: int, cp_id: int, db: Session = Depend
 # --- 4. 每日订单状态与后台数据编辑 API ---
 @router.get("/all-orders")
 def get_all_orders(
-    target_date: Optional[date] = None,
+    start_date: Optional[date] = None,
+    end_date: Optional[date] = None,
     customer_id: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     query = db.query(Order)
-    if target_date:
-        query = query.filter(Order.delivery_date == target_date)
+    if start_date:
+        query = query.filter(Order.delivery_date >= start_date)
+    if end_date:
+        query = query.filter(Order.delivery_date <= end_date)
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
 

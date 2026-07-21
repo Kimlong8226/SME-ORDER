@@ -64,6 +64,8 @@ export const InvoiceManagement: React.FC = () => {
     btnSave: isEn ? 'Confirm' : '确认',
     btnCancel: isEn ? 'Cancel' : '取消',
     colBillingPeriod: isEn ? 'Billing Period' : '对账账期区间',
+    colDoList: isEn ? 'Included DOs' : '包含的 DO 号',
+    includedDosInfo: isEn ? 'Included DOs:' : '包含的 DO：',
   };
 
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -74,7 +76,7 @@ export const InvoiceManagement: React.FC = () => {
   const [generateModalVisible, setGenerateModalVisible] = useState(false);
   
   const [genForm] = Form.useForm();
-  const [unbilledStats, setUnbilledStats] = useState<{ count: number; amount: number } | null>(null);
+  const [unbilledStats, setUnbilledStats] = useState<{ count: number; amount: number; orders?: any[] } | null>(null);
   const [unbilledLoading, setUnbilledLoading] = useState(false);
 
   const fetchInvoices = async () => {
@@ -121,7 +123,8 @@ export const InvoiceManagement: React.FC = () => {
       });
       setUnbilledStats({
         count: res.data.orders.length,
-        amount: res.data.total_amount
+        amount: res.data.total_amount,
+        orders: res.data.orders
       });
     } catch (err) {
       console.error(err);
@@ -232,6 +235,22 @@ export const InvoiceManagement: React.FC = () => {
     { title: labels.colBillingPeriod, key: 'billing_period', render: (_: any, r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
     { title: labels.colBillingCycle, dataIndex: 'billing_cycle', key: 'billing_cycle', render: (t: string) => <Tag color="orange">{isEn ? t.replace('天一结', ' Days Cycle') : t}</Tag> },
     { title: labels.colTotalOrders, dataIndex: 'total_orders', key: 'total_orders', render: (val: number) => `${val} ${labels.ordersCount}` },
+    { 
+      title: labels.colDoList, 
+      key: 'do_numbers', 
+      render: (_: any, r: any) => {
+        if (!r.orders_detail || r.orders_detail.length === 0) return <Text type="secondary">-</Text>;
+        const doList = r.orders_detail.map((o: any) => o.do_number).filter(Boolean);
+        if (doList.length === 0) return <Text type="secondary">-</Text>;
+        return (
+          <div style={{ maxWidth: 200, display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {doList.map((doNo: string, idx: number) => (
+              <Tag key={idx} color="blue" style={{ margin: 0 }}>{doNo}</Tag>
+            ))}
+          </div>
+        );
+      }
+    },
     { title: labels.colTotalAmount, dataIndex: 'total_amount', key: 'total_amount', render: (val: number) => <Text strong style={{ color: '#dc2626', fontSize: 16 }}>RM {val.toFixed(2)}</Text> },
     { title: labels.colPaymentStatus, dataIndex: 'status', key: 'status', render: (st: string) => st === 'PAID' ? <Tag color="green">{labels.statusPaid}</Tag> : <Tag color="volcano">{labels.statusUnpaid}</Tag> },
     {
@@ -307,6 +326,16 @@ export const InvoiceManagement: React.FC = () => {
               <Col><Text type="secondary">{labels.infoTotalAmount}</Text></Col>
               <Col><Text strong style={{ fontSize: 18, color: '#dc2626' }}>RM {unbilledStats.amount.toFixed(2)}</Text></Col>
             </Row>
+            {unbilledStats.orders && unbilledStats.orders.length > 0 && (
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px dashed #cbd5e1' }}>
+                <Text type="secondary" style={{ fontSize: 12 }}>{labels.includedDosInfo}</Text>
+                <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {unbilledStats.orders.map((o: any, idx: number) => (
+                    <Tag key={idx} color="blue">{o.do_number || `ID: ${o.id}`}</Tag>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         )}
       </Modal>

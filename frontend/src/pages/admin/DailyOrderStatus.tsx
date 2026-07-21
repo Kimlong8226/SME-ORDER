@@ -54,7 +54,7 @@ export const DailyOrderStatus: React.FC = () => {
 
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs(), dayjs()]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // 编辑订单 Modal 状态
@@ -69,7 +69,7 @@ export const DailyOrderStatus: React.FC = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      let url = `/admin/all-orders?target_date=${selectedDate}`;
+      let url = `/admin/all-orders?start_date=${dateRange[0].format('YYYY-MM-DD')}&end_date=${dateRange[1].format('YYYY-MM-DD')}`;
       const res = await axiosInstance.get(url);
       setOrders(res.data || []);
     } catch (err) {
@@ -81,7 +81,7 @@ export const DailyOrderStatus: React.FC = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [selectedDate]);
+  }, [dateRange]);
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
     try {
@@ -257,9 +257,13 @@ export const DailyOrderStatus: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
           <Title level={4} style={{ margin: 0 }}>📋 {labels.title}</Title>
           <Space>
-            <DatePicker
-              value={dayjs(selectedDate)}
-              onChange={(d) => d && setSelectedDate(d.format('YYYY-MM-DD'))}
+            <DatePicker.RangePicker
+              value={dateRange}
+              onChange={(dates) => {
+                if (dates && dates[0] && dates[1]) {
+                  setDateRange([dates[0], dates[1]]);
+                }
+              }}
               allowClear={false}
             />
             <Select value={statusFilter} onChange={(val) => setStatusFilter(val)} style={{ width: 140 }}>
