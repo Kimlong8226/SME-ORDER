@@ -14,7 +14,7 @@ from schema.schemas import (
     StaffUserCreate, StaffUserResponse, PackageTemplateCreate, PackageTemplateResponse,
     CustomerPackageAssign, CustomerPackageResponse,
     AddonTemplateCreate, AddonTemplateResponse, CustomerAddonAssign, CustomerAddonResponse,
-    MealSectionCreate, MealSectionResponse, CustomerMealSectionsUpdate
+    MealSectionCreate, MealSectionResponse, CustomerMealSectionsUpdate, CustomerUpdate
 )
 from api.auth import get_password_hash
 
@@ -80,19 +80,47 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
 
 @router.get("/customers", response_model=List[CustomerResponse])
 def list_customers(db: Session = Depends(get_db)):
-    return db.query(Customer).order_by(Customer.id.desc()).all()
+    customers = db.query(Customer).order_by(Customer.id.desc()).all()
+    for c in customers:
+        c.username = c.users[0].username if c.users else None
+    return customers
 
 @router.put("/customers/{customer_id}", response_model=CustomerResponse)
-def update_customer(customer_id: int, req: CustomerBase, db: Session = Depends(get_db)):
+def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends(get_db)):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
 
-    for key, value in req.dict().items():
-        setattr(customer, key, value)
+    update_data = req.dict(exclude_unset=True)
+    username = update_data.pop("username", None)
+    password = update_data.pop("password", None)
+
+    if username or password:
+        c_user = db.query(CustomerUser).filter(CustomerUser.customer_id == customer_id).first()
+        if c_user:
+            if username:
+                existing = db.query(CustomerUser).filter(CustomerUser.username == username, CustomerUser.id != c_user.id).first()
+                if existing:
+                    raise HTTPException(status_code=400, detail="订餐员用户名已存在")
+                c_user.username = username
+            if password:
+                c_user.password_hash = get_password_hash(password)
+        elif username and password:
+            new_user = CustomerUser(
+                customer_id=customer_id,
+                username=username,
+                password_hash=get_password_hash(password),
+                contact_name=customer.contact_name or customer.company_name
+            )
+            db.add(new_user)
+
+    for key, value in update_data.items():
+        if hasattr(customer, key):
+            setattr(customer, key, value)
 
     db.commit()
     db.refresh(customer)
+    customer.username = customer.users[0].username if customer.users else None
     return customer
 
 @router.post("/customers/{customer_id}/sites", response_model=DeliverySiteResponse)
@@ -497,8 +525,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
 # --- 7. 对账账单 Invoice API ---
 class InvoiceCreateRequest(BaseModel):
     customer_id: int
-    start_date: date
-    end_date: date
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    order_ids: Optional[List[int]] = None
 
 class InvoiceStatusUpdate(BaseModel):
     status: str
@@ -562,14 +591,17 @@ def list_invoices(db: Session = Depends(get_db)):
     return results
 
 @router.get("/invoices/unbilled-orders")
-def get_unbilled_orders(customer_id: int, start_date: date, end_date: date, db: Session = Depends(get_db)):
-    orders = db.query(Order).filter(
+def get_unbilled_orders(customer_id: int, start_date: Optional[date] = None, end_date: Optional[date] = None, db: Session = Depends(get_db)):
+    query = db.query(Order).filter(
         Order.customer_id == customer_id,
-        Order.delivery_date >= start_date,
-        Order.delivery_date <= end_date,
         Order.invoice_id == None,
         Order.status != "cancelled"
-    ).all()
+    )
+    if start_date:
+        query = query.filter(Order.delivery_date >= start_date)
+    if end_date:
+        query = query.filter(Order.delivery_date <= end_date)
+    orders = query.all()
     
     total_amount = 0.0
     order_list = []
@@ -593,16 +625,31 @@ def get_unbilled_orders(customer_id: int, start_date: date, end_date: date, db: 
 
 @router.post("/invoices")
 def create_invoice(req: InvoiceCreateRequest, db: Session = Depends(get_db)):
-    orders = db.query(Order).filter(
-        Order.customer_id == req.customer_id,
-        Order.delivery_date >= req.start_date,
-        Order.delivery_date <= req.end_date,
-        Order.invoice_id == None,
-        Order.status != "cancelled"
-    ).all()
-    
-    if not orders:
-        raise HTTPException(status_code=400, detail="所选日期范围内没有未对账的订单")
+    if req.order_ids:
+        orders = db.query(Order).filter(
+            Order.id.in_(req.order_ids),
+            Order.customer_id == req.customer_id,
+            Order.invoice_id == None,
+            Order.status != "cancelled"
+        ).all()
+        if not orders:
+            raise HTTPException(status_code=400, detail="所选订单已结算或不存在")
+        
+        req.start_date = min(o.delivery_date for o in orders)
+        req.end_date = max(o.delivery_date for o in orders)
+    else:
+        if not req.start_date or not req.end_date:
+            raise HTTPException(status_code=400, detail="请指定日期范围或选择特定订单")
+        orders = db.query(Order).filter(
+            Order.customer_id == req.customer_id,
+            Order.delivery_date >= req.start_date,
+            Order.delivery_date <= req.end_date,
+            Order.invoice_id == None,
+            Order.status != "cancelled"
+        ).all()
+        
+        if not orders:
+            raise HTTPException(status_code=400, detail="所选日期范围内没有未对账的订单")
         
     total_amount = sum(sum(d.quantity * d.final_unit_price for d in o.details) for o in orders)
     

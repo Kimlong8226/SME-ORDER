@@ -161,7 +161,7 @@ export const OrderCalendar: React.FC = () => {
         }}
       >
         {Object.values(dayData).map((item: any, idx: number) => (
-          <div key={idx} style={{ fontSize: 11, marginBottom: 2, background: '#f0fdf4', padding: '2px 4px', borderRadius: 4, border: '1px solid #bbf7d0' }}>
+          <div key={idx} style={{ fontSize: 11, marginBottom: 2, background: '#f0fdf4', padding: '2px 4px', borderRadius: 4, border: '1px solid #bbf7d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             <Badge status="success" text={<Text style={{ fontSize: 11 }} strong>{item.company_name}: {item.total_portions}{isEn ? ' pax' : '份'}</Text>} />
           </div>
         ))}
@@ -241,16 +241,16 @@ export const OrderCalendar: React.FC = () => {
   ];
 
   return (
-    <Card
-      title={<Title level={4} style={{ margin: 0 }}>📅 {labels.title}</Title>}
-      extra={
+    <Card style={{ width: '100%', borderRadius: 12 }}>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>{labels.title}</Title>
         <Button type="primary" icon={<PrinterOutlined />} onClick={() => handleOpenPrintModal(selectedDate, null)}>
           {labels.btnPrintToday} ({selectedDate})
         </Button>
-      }
-      style={{ width: '100%', borderRadius: 12 }}
-    >
-      <Calendar cellRender={cellRender} onSelect={(date) => setSelectedDate(date.format('YYYY-MM-DD'))} />
+      </div>
+      <div style={{ width: '100%', overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <Calendar cellRender={cellRender} onSelect={(date) => setSelectedDate(date.format('YYYY-MM-DD'))} />
+      </div>
 
       {/* 订单签收单 Modal */}
       <Modal
@@ -280,7 +280,6 @@ export const OrderCalendar: React.FC = () => {
               onChange={handleCustomerFilterChange}
               allowClear
             >
-              <Option value={null}>{labels.allCustomersOption}</Option>
               {customers.map((c) => (
                 <Option key={c.id} value={c.id}>🏢 {c.company_name}</Option>
               ))}
@@ -329,7 +328,7 @@ export const OrderCalendar: React.FC = () => {
 
             <Table
               dataSource={printSummaryData?.delivery_breakdown || []}
-              rowKey={(r, idx) => `${r.company_name}_${r.site_name}_${idx}`}
+              rowKey={(r) => r.id || [r.company_name, r.site_name, r.meal_section_name, r.package_name].join('_')}
               pagination={false}
               bordered
               size="middle"

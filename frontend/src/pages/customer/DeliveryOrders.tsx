@@ -257,7 +257,7 @@ export const DeliveryOrders: React.FC = () => {
     <Card
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <Title level={4} style={{ margin: 0 }}>📦 {labels.title}</Title>
+          <Title level={4} style={{ margin: 0 }}>{labels.title}</Title>
           <Tag color="cyan" style={{ padding: '4px 12px', borderRadius: 6, fontSize: 13 }}>
             {labels.billingCycle}: {customerProfile?.billing_cycle ? `${customerProfile.billing_cycle} ${isEn ? 'Days' : '天一结'}` : (isEn ? '30 Days' : '30天一结')}
           </Tag>

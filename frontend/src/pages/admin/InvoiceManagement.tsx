@@ -1,5 +1,5 @@
-﻿import React, { useEffect, useState } from 'react';
-import { App, Card, Table, Button, Tag, Typography, Modal, Row, Col, Divider, Select, DatePicker, Form, Space, Popconfirm } from 'antd';
+import React, { useEffect, useState } from 'react';
+import { App, Card, Table, Button, Tag, Typography, Modal, Row, Col, Divider, Select, DatePicker, Form, Space, Popconfirm, Tabs } from 'antd';
 import { PrinterOutlined, FileTextOutlined, PlusOutlined, CheckOutlined, CloseOutlined, DeleteOutlined } from '@ant-design/icons';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
@@ -65,6 +65,8 @@ export const InvoiceManagement: React.FC = () => {
     btnSave: isEn ? 'Confirm' : '确认',
     btnCancel: isEn ? 'Cancel' : '取消',
     colBillingPeriod: isEn ? 'Billing Period' : '对账账期区间',
+    colDoList: isEn ? 'Included DOs' : '包含的 DO 号',
+    includedDosInfo: isEn ? 'Included DOs:' : '包含的 DO：',
   };
 
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -75,8 +77,12 @@ export const InvoiceManagement: React.FC = () => {
   const [generateModalVisible, setGenerateModalVisible] = useState(false);
   
   const [genForm] = Form.useForm();
-  const [unbilledStats, setUnbilledStats] = useState<{ count: number; amount: number } | null>(null);
   const [unbilledLoading, setUnbilledLoading] = useState(false);
+  
+  const [selectedOrderIds, setSelectedOrderIds] = useState<React.Key[]>([]);
+  const [selectedOrdersAmount, setSelectedOrdersAmount] = useState<number>(0);
+  const [unbilledOrders, setUnbilledOrders] = useState<any[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<number | null>(null);
 
   const fetchInvoices = async () => {
     setLoading(true);
@@ -104,48 +110,36 @@ export const InvoiceManagement: React.FC = () => {
     fetchCustomers();
   }, []);
 
-  const handleFetchUnbilled = async () => {
-    const vals = genForm.getFieldsValue();
-    if (!vals.customer_id || !vals.date_range) {
-      setUnbilledStats(null);
-      return;
-    }
+  const handleCustomerChange = async (val: number) => {
+    setSelectedCustomer(val);
     setUnbilledLoading(true);
+    setSelectedOrderIds([]);
+    setSelectedOrdersAmount(0);
     try {
-      const [start, end] = vals.date_range;
       const res = await axiosInstance.get('/admin/invoices/unbilled-orders', {
-        params: {
-          customer_id: vals.customer_id,
-          start_date: start.format('YYYY-MM-DD'),
-          end_date: end.format('YYYY-MM-DD')
-        }
+        params: { customer_id: val }
       });
-      setUnbilledStats({
-        count: res.data.orders.length,
-        amount: res.data.total_amount
-      });
+      setUnbilledOrders(res.data.orders || []);
     } catch (err) {
       console.error(err);
-      setUnbilledStats(null);
+      setUnbilledOrders([]);
     } finally {
       setUnbilledLoading(false);
     }
   };
 
-  const handleGenerateInvoice = async () => {
+  const handleGenerateSelectedInvoices = async () => {
+    if (!selectedCustomer || selectedOrderIds.length === 0) return;
     try {
-      const vals = await genForm.validateFields();
-      const [start, end] = vals.date_range;
       await axiosInstance.post('/admin/invoices', {
-        customer_id: vals.customer_id,
-        start_date: start.format('YYYY-MM-DD'),
-        end_date: end.format('YYYY-MM-DD')
+        customer_id: selectedCustomer,
+        order_ids: selectedOrderIds as number[]
       });
       message.success(isEn ? 'Invoice generated successfully!' : '对账发票生成成功！');
-      setGenerateModalVisible(false);
-      genForm.resetFields();
-      setUnbilledStats(null);
-      fetchInvoices();
+      setSelectedOrderIds([]);
+      setSelectedOrdersAmount(0);
+      handleCustomerChange(selectedCustomer); // refresh unbilled
+      fetchInvoices(); // refresh history
     } catch (err: any) {
       const errMsg = err.response?.data?.detail || (isEn ? 'Failed to generate invoice' : '生成对账发票失败');
       message.error(errMsg);
@@ -233,6 +227,22 @@ export const InvoiceManagement: React.FC = () => {
     { title: labels.colBillingPeriod, key: 'billing_period', render: (r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
     { title: labels.colBillingCycle, dataIndex: 'billing_cycle', key: 'billing_cycle', render: (t: string) => <Tag color="orange">{isEn ? t.replace('天一结', ' Days Cycle') : t}</Tag> },
     { title: labels.colTotalOrders, dataIndex: 'total_orders', key: 'total_orders', render: (val: number) => `${val} ${labels.ordersCount}` },
+    { 
+      title: labels.colDoList, 
+      key: 'do_numbers', 
+      render: (_: any, r: any) => {
+        if (!r.orders_detail || r.orders_detail.length === 0) return <Text type="secondary">-</Text>;
+        const doList = r.orders_detail.map((o: any) => o.do_number).filter(Boolean);
+        if (doList.length === 0) return <Text type="secondary">-</Text>;
+        return (
+          <div style={{ maxWidth: 200, display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+            {doList.map((doNo: string, idx: number) => (
+              <Tag key={idx} color="blue" style={{ margin: 0 }}>{doNo}</Tag>
+            ))}
+          </div>
+        );
+      }
+    },
     { title: labels.colTotalAmount, dataIndex: 'total_amount', key: 'total_amount', render: (val: number) => <Text strong style={{ color: '#dc2626', fontSize: 16 }}>RM {val.toFixed(2)}</Text> },
     { title: labels.colPaymentStatus, dataIndex: 'status', key: 'status', render: (st: string) => st === 'PAID' ? <Tag color="green">{labels.statusPaid}</Tag> : <Tag color="volcano">{labels.statusUnpaid}</Tag> },
     {
@@ -263,54 +273,72 @@ export const InvoiceManagement: React.FC = () => {
 
   return (
     <Card 
-      title={<Title level={4} style={{ margin: 0 }}>🧾 {labels.title}</Title>}
-      extra={
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setGenerateModalVisible(true)} size="large" style={{ borderRadius: 8, background: '#16a34a', borderColor: '#16a34a' }}>
-          {labels.btnGenerateInvoice}
-        </Button>
-      }
+      title={<Title level={4} style={{ margin: 0 }}>{labels.title}</Title>}
       style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
     >
-      <Table columns={columns} dataSource={invoices} rowKey="id" loading={loading} style={{ width: '100%' }} />
-
-      {/* 生成对账发票 Modal */}
-      <Modal
-        title={labels.modalGenTitle}
-        open={generateModalVisible}
-        onCancel={() => setGenerateModalVisible(false)}
-        onOk={handleGenerateInvoice}
-        width={550}
-        okText={labels.confirmGenerate}
-        cancelText={labels.btnCancel}
-      >
-        <Form form={genForm} layout="vertical" style={{ marginTop: 20 }} onValuesChange={handleFetchUnbilled}>
-          <Form.Item name="customer_id" label={labels.formCustomer} rules={[{ required: true }]}>
-            <Select placeholder={labels.formCustomer} size="large">
-              {customers.map((c) => (
-                <Option key={c.id} value={c.id}>{c.company_name} ({c.billing_cycle}天一结)</Option>
-              ))}
-            </Select>
-          </Form.Item>
-          <Form.Item name="date_range" label={labels.formDateRange} rules={[{ required: true }]}>
-            <RangePicker style={{ width: '100%' }} size="large" />
-          </Form.Item>
-        </Form>
-
-        {unbilledLoading && <Text type="secondary">正在计算未对账订单...</Text>}
-        
-        {!unbilledLoading && unbilledStats && (
-          <Card style={{ background: '#f8fafc', border: '1px solid #e2e8f0', marginTop: 10 }}>
-            <Row justify="space-between" style={{ marginBottom: 8 }}>
-              <Col><Text type="secondary">{labels.infoMatchingOrders}</Text></Col>
-              <Col><Text strong style={{ fontSize: 16 }}>{unbilledStats.count} 笔订单</Text></Col>
-            </Row>
-            <Row justify="space-between">
-              <Col><Text type="secondary">{labels.infoTotalAmount}</Text></Col>
-              <Col><Text strong style={{ fontSize: 18, color: '#dc2626' }}>RM {unbilledStats.amount.toFixed(2)}</Text></Col>
-            </Row>
-          </Card>
-        )}
-      </Modal>
+      <Tabs defaultActiveKey="1" size="large" items={[
+        {
+          key: '1',
+          label: isEn ? "Unbilled Orders" : "待对账订单",
+          children: (
+            <>
+          <div style={{ marginBottom: 16 }}>
+             <Select 
+               placeholder={labels.formCustomer} 
+               style={{ width: 300 }} 
+               size="large"
+               onChange={handleCustomerChange}
+               value={selectedCustomer}
+             >
+               {customers.map((c) => (
+                 <Option key={c.id} value={c.id}>{c.company_name} ({c.billing_cycle}天一结)</Option>
+               ))}
+             </Select>
+          </div>
+          
+          <Table 
+            loading={unbilledLoading}
+            dataSource={unbilledOrders}
+            rowKey="id"
+            scroll={{ x: 600 }}
+            rowSelection={{
+              selectedRowKeys: selectedOrderIds,
+              onChange: (selectedKeys, selectedRows) => {
+                setSelectedOrderIds(selectedKeys);
+                const sum = selectedRows.reduce((acc, row) => acc + row.amount, 0);
+                setSelectedOrdersAmount(sum);
+              }
+            }}
+            columns={[
+              { title: labels.colDoNo, dataIndex: 'id', render: (id) => <Tag color="blue">Order #{id}</Tag> },
+              { title: labels.colDate, dataIndex: 'delivery_date' },
+              { title: labels.colQty, dataIndex: 'portions' },
+              { title: labels.colTotalAmount, dataIndex: 'amount', render: (val) => <Text strong>RM {val.toFixed(2)}</Text> }
+            ]}
+          />
+          
+          {selectedOrderIds.length > 0 && (
+            <div style={{ marginTop: 16, padding: 16, background: '#f8fafc', borderRadius: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <Text style={{ fontSize: 16, marginRight: 24 }}>已选择: <Text strong style={{ color: '#16a34a' }}>{selectedOrderIds.length}</Text> 笔订单</Text>
+                <Text style={{ fontSize: 16 }}>总金额: <Text strong style={{ fontSize: 20, color: '#dc2626' }}>RM {selectedOrdersAmount.toFixed(2)}</Text></Text>
+              </div>
+              <Button type="primary" size="large" onClick={handleGenerateSelectedInvoices} style={{ background: '#16a34a', borderColor: '#16a34a' }}>
+                {labels.btnGenerateInvoice}
+              </Button>
+            </div>
+          )}
+            </>
+          )
+        },
+        {
+          key: '2',
+          label: isEn ? "Statement History" : "历史对账单",
+          children: (
+          <Table columns={columns} dataSource={invoices} rowKey="id" loading={loading} style={{ width: '100%' }} scroll={{ x: 1000 }} />
+          )
+        }
+      ]} />
 
       {/* 对账发票打印 Modal */}
       <Modal

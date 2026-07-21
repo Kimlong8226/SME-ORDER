@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { App, Card, Table, DatePicker, Select, Tag, Typography, Space, Button, Badge, Modal, Form, InputNumber, Input, Row, Col, Popconfirm, Divider } from 'antd';
 import { ReloadOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -274,30 +274,27 @@ export const DailyOrderStatus: React.FC = () => {
   ];
 
   return (
-    <Card
-      title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <Title level={4} style={{ margin: 0 }}>📋 {labels.title}</Title>
-          <Space>
-            <DatePicker
-              value={dayjs(selectedDate)}
-              onChange={(d) => d && setSelectedDate(d.format('YYYY-MM-DD'))}
-              allowClear={false}
-            />
-            <Select value={statusFilter} onChange={(val) => setStatusFilter(val)} style={{ width: 140 }}>
-              <Option value="all">{labels.filterAll}</Option>
-              <Option value="submitted">{labels.statusSubmitted}</Option>
-              <Option value="delivered">{labels.statusDelivered}</Option>
-              <Option value="billed">{labels.statusBilled}</Option>
-              <Option value="paid">{labels.statusPaid}</Option>
-              <Option value="cancelled">{labels.statusCancelled}</Option>
-            </Select>
-            <Button type="primary" icon={<ReloadOutlined />} onClick={fetchOrders}>{labels.btnRefresh}</Button>
-          </Space>
-        </div>
-      }
-    >
-      <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} />
+    <Card>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>{labels.title}</Title>
+        <Space style={{ flexWrap: 'wrap' }}>
+          <DatePicker
+            value={dayjs(selectedDate)}
+            onChange={(d) => d && setSelectedDate(d.format('YYYY-MM-DD'))}
+            allowClear={false}
+          />
+          <Select value={statusFilter} onChange={(val) => setStatusFilter(val)} style={{ width: 140 }}>
+            <Option value="all">{labels.filterAll}</Option>
+            <Option value="submitted">{labels.statusSubmitted}</Option>
+            <Option value="delivered">{labels.statusDelivered}</Option>
+            <Option value="billed">{labels.statusBilled}</Option>
+            <Option value="paid">{labels.statusPaid}</Option>
+            <Option value="cancelled">{labels.statusCancelled}</Option>
+          </Select>
+          <Button type="primary" icon={<ReloadOutlined />} onClick={fetchOrders}>{labels.btnRefresh}</Button>
+        </Space>
+      </div>
+      <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 1000 }} />
 
       {/* 编辑订单 Modal */}
       <Modal

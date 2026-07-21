@@ -333,24 +333,8 @@ export const MealSectionsManagement: React.FC = () => {
       dataIndex: 'name',
       key: 'name',
       render: (t: string) => {
-        const theme = getShiftTheme(t);
         return (
           <Space align="center" size="middle">
-            <span 
-              style={{ 
-                fontSize: 20, 
-                width: 36, 
-                height: 36, 
-                borderRadius: 10, 
-                display: 'inline-flex', 
-                alignItems: 'center', 
-                justifyContent: 'center',
-                background: theme.badgeBg,
-                boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
-              }}
-            >
-              {theme.icon}
-            </span>
             <div>
               <Text strong style={{ fontSize: 15, color: '#0f172a', display: 'block' }}>{t}</Text>
               <Text type="secondary" style={{ fontSize: 11 }}>预订时段标识</Text>
@@ -436,7 +420,7 @@ export const MealSectionsManagement: React.FC = () => {
     <div style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 24 }}>
       {/* 顶部页头 banner */}
       <Card
-        bordered={false}
+        variant="borderless"
         style={{
           borderRadius: 16,
           background: 'linear-gradient(135deg, #1e293b 0%, #0f172a 100%)',
@@ -485,19 +469,19 @@ export const MealSectionsManagement: React.FC = () => {
       {/* 关键指标概览面板 */}
       <Row gutter={[16, 16]} style={{ marginBottom: 20 }}>
         <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>总餐次定义</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: '#0f172a' }}>{stats.total}</Title>
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>已绑定分类餐次</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: '#16a34a' }}>{stats.configured}</Title>
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>未配置/隐藏餐次</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: stats.unconfigured > 0 ? '#ea580c' : '#64748b' }}>
               {stats.unconfigured}
@@ -505,7 +489,7 @@ export const MealSectionsManagement: React.FC = () => {
           </Card>
         </Col>
         <Col xs={12} sm={6}>
-          <Card bordered={false} style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
+          <Card variant="borderless" style={{ borderRadius: 12, background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.03)' }}>
             <Text type="secondary" style={{ fontSize: 12 }}>关联套餐分类总数</Text>
             <Title level={3} style={{ margin: '4px 0 0 0', color: '#2563eb' }}>{stats.categoriesCount}</Title>
           </Card>
@@ -514,14 +498,14 @@ export const MealSectionsManagement: React.FC = () => {
 
       {/* 极速预设餐次工具栏 */}
       <Card
-        bordered={false}
+        variant="borderless"
         style={{
           borderRadius: 12,
           background: '#f8fafc',
           marginBottom: 20,
           border: '1px solid #e2e8f0'
         }}
-        bodyStyle={{ padding: '12px 16px' }}
+        styles={{ body: { padding: '12px 16px' } }}
       >
         <Row align="middle" justify="space-between" gutter={[12, 12]}>
           <Col xs={24} md={14}>
@@ -546,7 +530,7 @@ export const MealSectionsManagement: React.FC = () => {
                         color: isExist ? '#94a3b8' : '#334155'
                       }}
                     >
-                      {tmpl.icon} {tmpl.name} {isExist && <CheckCircleOutlined style={{ color: '#10b981' }} />}
+                      {tmpl.name} {isExist && <CheckCircleOutlined style={{ color: '#10b981' }} />}
                     </Button>
                   </Tooltip>
                 );
@@ -574,13 +558,13 @@ export const MealSectionsManagement: React.FC = () => {
 
       {/* 餐次表格列表 */}
       <Card
-        bordered={false}
+        variant="borderless"
         style={{
           borderRadius: 16,
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.04)',
           background: '#ffffff'
         }}
-        bodyStyle={{ padding: '0 0 16px 0' }}
+        styles={{ body: { padding: '0 0 16px 0' } }}
       >
         <Table
           dataSource={filteredSections}
@@ -589,6 +573,7 @@ export const MealSectionsManagement: React.FC = () => {
           loading={loading}
           pagination={{ pageSize: 10, showSizeChanger: true, showTotal: (total) => `共 ${total} 条餐次规则` }}
           locale={{ emptyText: <Empty description="暂无餐次数据，点击右上角新建或点选快捷预设" /> }}
+          scroll={{ x: 800 }}
         />
       </Card>
 
@@ -691,14 +676,14 @@ export const MealSectionsManagement: React.FC = () => {
 
           {/* 实时下单效果预览卡片 */}
           <Card
-            bordered={false}
+            variant="borderless"
             style={{
               background: '#f8fafc',
               borderRadius: 12,
               border: '1px dashed #cbd5e1',
               padding: 0
             }}
-            bodyStyle={{ padding: 12 }}
+            styles={{ body: { padding: 12 } }}
           >
             <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
               👀 前台订餐页面效果预览：

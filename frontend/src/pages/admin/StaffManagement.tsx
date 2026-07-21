@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { App, Card, Table, Button, Modal, Form, Input, Select, Tag, Typography } from 'antd';
 import { PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -99,11 +99,12 @@ export const StaffManagement: React.FC = () => {
   ];
 
   return (
-    <Card
-      title={<Title level={4} style={{ margin: 0 }}>👨‍🍳 {labels.title} {labels.adminSuffix}</Title>}
-      extra={<Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>{labels.btnAdd}</Button>}
-    >
-      <Table columns={columns} dataSource={staffList} rowKey="id" loading={loading} />
+    <Card>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>{labels.title} {labels.adminSuffix}</Title>
+        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalVisible(true)}>{labels.btnAdd}</Button>
+      </div>
+      <Table columns={columns} dataSource={staffList} rowKey="id" loading={loading} scroll={{ x: 800 }} />
 
       <Modal title={labels.modalTitle} open={modalVisible} onCancel={() => setModalVisible(false)} onOk={() => form.submit()}>
         <Form form={form} layout="vertical" onFinish={handleCreateStaff}>

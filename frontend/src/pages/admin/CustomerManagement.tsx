@@ -252,15 +252,14 @@ export const CustomerManagement: React.FC = () => {
   ];
 
   return (
-    <Card
-      title={<Title level={4} style={{ margin: 0 }}>🏢 {t('nav.customers')} {labels.subtitle}</Title>}
-      extra={
+    <Card>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <Title level={4} style={{ margin: 0 }}>{t('nav.customers')} {labels.subtitle}</Title>
         <Button type="primary" icon={<PlusOutlined />} onClick={() => handleOpenModal()}>
           {labels.btnCreate}
         </Button>
-      }
-    >
-      <Table columns={columns} dataSource={customers} rowKey="id" loading={loading} />
+      </div>
+      <Table columns={columns} dataSource={customers} rowKey="id" loading={loading} scroll={{ x: 1000 }} />
 
       {/* 创建/编辑客户 Modal */}
       <Modal
@@ -284,20 +283,18 @@ export const CustomerManagement: React.FC = () => {
             </Col>
           </Row>
 
-          {!editingCustomer && (
-            <Row gutter={16}>
-              <Col span={12}>
-                <Form.Item name="username" label={labels.formUsername} rules={[{ required: true }]}>
-                  <Input placeholder={labels.placeholderUsername} />
-                </Form.Item>
-              </Col>
-              <Col span={12}>
-                <Form.Item name="password" label={labels.formPassword} rules={[{ required: true }]}>
-                  <Input.Password placeholder="Password" />
-                </Form.Item>
-              </Col>
-            </Row>
-          )}
+          <Row gutter={16}>
+            <Col span={12}>
+              <Form.Item name="username" label={labels.formUsername} rules={[{ required: true }]}>
+                <Input placeholder={labels.placeholderUsername} />
+              </Form.Item>
+            </Col>
+            <Col span={12}>
+              <Form.Item name="password" label={editingCustomer ? "修改登录密码 (留空则不修改)" : labels.formPassword} rules={[{ required: !editingCustomer }]}>
+                <Input.Password placeholder="Password" />
+              </Form.Item>
+            </Col>
+          </Row>
 
           <Row gutter={16}>
             <Col span={12}>

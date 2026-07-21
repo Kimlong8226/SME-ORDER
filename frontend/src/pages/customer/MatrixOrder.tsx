@@ -18,7 +18,6 @@ export const MatrixOrder: React.FC = () => {
     subtitle: isEn ? 'Meals are dynamically displayed based on your agreement packages. To add new shifts, please contact administration.' : '依据后台给您分派的协议套餐动态显示餐品。若需新增餐次（如早餐、夜班），请联系中央厨房后台安排。',
     fastMode: isEn ? 'Fast Ordering Mode' : '快速订餐模式',
     quickFillYilian: isEn ? 'Quick Fill Yilian' : '一键易联标准',
-    gspCalculator: isEn ? 'GSP Headcount Calculator' : 'GSP 算头拆分器',
     blockedTitle: isEn ? 'Ordering Restricted' : '订餐服务受限',
     blockedDesc: isEn ? 'Your account has been restricted from ordering due to outstanding payment. Please contact finance to verify invoice status.' : '您的账号目前存在未付账期款项，下单功能已被系统自动锁定，请联系财务核对对账单。',
     weekendReminderTitle: isEn ? 'Weekend Overtime Order Deadline Reminder' : '专享周末加班截止提醒',
@@ -58,19 +57,8 @@ export const MatrixOrder: React.FC = () => {
     msgLoadFailed: isEn ? 'Failed to load configuration.' : '加载订餐配置失败',
     msgLoadedEdit: isEn ? 'Order details successfully loaded for edit.' : '已成功载入您选择的订单数据以供修改。',
     msgQuickFillYilian: isEn ? 'Standard filled for Yilian: Breakfast 2, Lunch 2' : '已一键按【易联习惯】填充: 早餐2份 + 午餐2份',
-    msgGspApplied: isEn ? 'GSP calculator settings applied successfully.' : '已自动拆解套用 GSP 快捷数据！',
     msgCleared: isEn ? 'Order quantities cleared.' : '报餐数量已清空',
-    gspCalcTitle: isEn ? 'GSP Headcount Calculator' : 'GSP 专属算头公式拆分器',
-    gspCalcDesc: isEn ? 'Enter headcount for each section and system will auto-distribute them to the cart.' : '根据您的习惯，输入各项目份数，系统全自动为您换算并填入报餐清单。',
-    btnGspApply: isEn ? 'Apply & Fill Cart' : '确认并填充购物车',
     btnCancel: isEn ? 'Cancel' : '取消',
-    gspDayBreakfast: isEn ? 'Day Shift Breakfast (Default 71):' : '早班早餐 (默认 71份)：',
-    gspNightBreakfast: isEn ? 'Night Shift Breakfast (Default 40):' : '夜班早餐 (默认 40份)：',
-    gspDayLunch: isEn ? 'Day Shift Lunch/Dinner (Default 76):' : '早班午/晚餐 (默认 76份)：',
-    gspExtraBento: isEn ? 'Visitor Lunch/Dinner Bento (Extra 3):' : '客户午/晚餐饭盒 (另外 3份)：',
-    gspRbaBento: isEn ? 'RBA Consultant Bento (Default 0):' : 'RBA 顾问饭盒 (默认 0份)：',
-    gspBuffet10pm: isEn ? 'Night Shift 10pm Buffet (Default 42):' : '夜班 10pm Buffet (默认 42份)：',
-    gspSupper3am: isEn ? 'Night Shift 3am Supper (Default 40):' : '夜班 3am 宵夜 (默认 40份)：',
   };
 
   const translateMealSection = (name: string) => {
@@ -98,16 +86,6 @@ export const MatrixOrder: React.FC = () => {
   const [sites, setSites] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().add(1, 'day').format('YYYY-MM-DD'));
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null);
-
-  // GSP 专用公式辅助算头状态
-  const [gspFormVisible, setGspFormVisible] = useState(false);
-  const [gspDayBreakfastVal, setGspDayBreakfastVal] = useState<number>(71);
-  const [gspNightBreakfastVal, setGspNightBreakfastVal] = useState<number>(40);
-  const [gspDayLunchVal, setGspDayLunchVal] = useState<number>(76);
-  const [gspExtraBentoVal, setGspExtraBentoVal] = useState<number>(3);
-  const [gspRbaBentoVal, setGspRbaBentoVal] = useState<number>(0);
-  const [gspBuffet10pmVal, setGspBuffet10pmVal] = useState<number>(42);
-  const [gspSupper3amVal, setGspSupper3amVal] = useState<number>(40);
 
   // 数据库定义的动态餐次列表
   const [dbMealSections, setDbMealSections] = useState<any[]>([]);
@@ -224,7 +202,6 @@ export const MatrixOrder: React.FC = () => {
   const isBlocked = userInfo?.is_blocked;
   const isPro3c = userInfo?.name?.toLowerCase().includes('pro3c') || userInfo?.username?.includes('pro3c');
   const isYilian = userInfo?.name?.includes('易联') || userInfo?.username?.includes('yilian');
-  const isGSP = userInfo?.name?.includes('GSP') || userInfo?.username?.includes('gsp');
 
   const isSunday = dayjs(selectedDate).day() === 0;
   const isWeekend = dayjs(selectedDate).day() === 0 || dayjs(selectedDate).day() === 6;
@@ -238,25 +215,6 @@ export const MatrixOrder: React.FC = () => {
     });
     setRemark(isEn ? 'Yilian Standard: Breakfast Bento 2 + Lunch Bento 2' : '易联软件标准：早餐餐盒 2份 + 午餐餐盒 2份');
     message.success(labels.msgQuickFillYilian);
-  };
-
-  // GSP 公式快捷算数套用
-  const handleApplyGspFormula = () => {
-    setMatrixData({
-      "早餐": gspDayBreakfastVal + gspNightBreakfastVal,
-      "早班午餐": gspDayLunchVal,
-      "早班晚餐": 0,
-      "客户/顾问加餐饭盒": gspExtraBentoVal + gspRbaBentoVal,
-      "夜班餐食 10pm Buffet": gspBuffet10pmVal,
-      "夜班餐食 3am 宵夜": gspSupper3amVal
-    });
-    setRemark(
-      isEn 
-        ? `GSP Formula: Breakfast (${gspDayBreakfastVal}+${gspNightBreakfastVal}), Visitor Bento ${gspExtraBentoVal}, RBA Consultant ${gspRbaBentoVal}, Night Shift (10pm ${gspBuffet10pmVal} + 3am ${gspSupper3amVal})`
-        : `GSP习惯拆分: 早餐(${gspDayBreakfastVal}+${gspNightBreakfastVal}), 客户饭盒${gspExtraBentoVal}份, RBA顾问${gspRbaBentoVal}份, 夜班(10pm ${gspBuffet10pmVal} + 3am ${gspSupper3amVal})`
-    );
-    setGspFormVisible(false);
-    message.success(labels.msgGspApplied);
   };
 
   // 清空选择
@@ -390,11 +348,6 @@ export const MatrixOrder: React.FC = () => {
               {isYilian && !isSunday && (
                 <Button type="primary" onClick={handleQuickFillYilian} style={{ background: '#38bdf8', borderColor: '#38bdf8', color: '#0f172a', borderRadius: 8, height: 40, fontWeight: 'bold' }}>
                   {labels.quickFillYilian}
-                </Button>
-              )}
-              {isGSP && (
-                <Button type="primary" onClick={() => setGspFormVisible(true)} style={{ background: '#10b981', borderColor: '#10b981', borderRadius: 8, height: 40, fontWeight: 'bold' }}>
-                  {labels.gspCalculator}
                 </Button>
               )}
             </Space>
@@ -774,67 +727,6 @@ export const MatrixOrder: React.FC = () => {
           </div>
         </Col>
       </Row>
-
-      {/* GSP 习惯算头拆分 Modal */}
-      <Modal
-        title={
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span>{labels.gspCalcTitle}</span>
-          </div>
-        }
-        open={gspFormVisible}
-        onCancel={() => setGspFormVisible(false)}
-        onOk={handleApplyGspFormula}
-        okText={labels.btnGspApply}
-        cancelText={labels.btnCancel}
-        width={580}
-        styles={{ body: { padding: '8px 4px' } }}
-        style={{ borderRadius: 16 }}
-      >
-        <Text type="secondary" style={{ marginBottom: 20, display: 'block', fontSize: 13 }}>
-          {labels.gspCalcDesc}
-        </Text>
-
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspDayBreakfast}</Text>
-            <InputNumber value={gspDayBreakfastVal} onChange={(v) => setGspDayBreakfastVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspNightBreakfast}</Text>
-            <InputNumber value={gspNightBreakfastVal} onChange={(v) => setGspNightBreakfastVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-        </Row>
-
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspDayLunch}</Text>
-            <InputNumber value={gspDayLunchVal} onChange={(v) => setGspDayLunchVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspExtraBento}</Text>
-            <InputNumber value={gspExtraBentoVal} onChange={(v) => setGspExtraBentoVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-        </Row>
-
-        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspRbaBento}</Text>
-            <InputNumber value={gspRbaBentoVal} onChange={(v) => setGspRbaBentoVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspBuffet10pm}</Text>
-            <InputNumber value={gspBuffet10pmVal} onChange={(v) => setGspBuffet10pmVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-        </Row>
-
-        <Row gutter={[16, 16]}>
-          <Col span={12}>
-            <Text strong style={{ display: 'block', marginBottom: 6, color: '#475569' }}>{labels.gspSupper3am}</Text>
-            <InputNumber value={gspSupper3amVal} onChange={(v) => setGspSupper3amVal(v || 0)} style={{ width: '100%', borderRadius: 10 }} size="large" />
-          </Col>
-        </Row>
-      </Modal>
     </div>
   );
 };

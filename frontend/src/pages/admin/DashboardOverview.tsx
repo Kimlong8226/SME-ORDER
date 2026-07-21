@@ -82,16 +82,16 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         marginBottom: 24,
         boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.05)'
       }}>
-        <Row align="middle" justify="space-between">
-          <Col>
-            <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 900 }}>
+        <Row align="middle" justify="space-between" gutter={[16, 16]}>
+          <Col xs={24} lg={18}>
+            <Title level={2} style={{ color: '#ffffff', margin: 0, fontWeight: 900, fontSize: 'clamp(20px, 4vw, 30px)' }}>
               <span style={{ color: '#fef08a' }}>{isEn ? 'Kim Long ' : '金龙中央厨房'}</span>{isEn ? 'Catering' : '伙食下单系统'} Dashboard
             </Title>
-            <Text style={{ color: '#dcfce7', fontSize: 14, marginTop: 4, display: 'block' }}>
+            <Text style={{ color: '#dcfce7', fontSize: 'clamp(12px, 2.5vw, 14px)', marginTop: 4, display: 'block' }}>
               {labels.subtitle}
             </Text>
           </Col>
-          <Col>
+          <Col xs={24} lg={6} style={{ display: 'flex', justifyContent: 'flex-start' }}>
             <Tag color="gold" style={{ fontSize: 14, padding: '4px 12px', fontWeight: 'bold' }}>
               {labels.currentDate} {formatDate()}
             </Tag>
@@ -162,30 +162,30 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
       {/* 快捷导航与运营风险预警 */}
       <Row gutter={[20, 20]}>
         <Col xs={24} lg={16}>
-          <Card title={<Title level={4} style={{ margin: 0 }}>⚡ {labels.quickNavTitle}</Title>} style={{ borderRadius: 12 }}>
+          <Card title={<Title level={4} style={{ margin: 0 }}>{labels.quickNavTitle}</Title>} style={{ borderRadius: 12 }}>
             <Row gutter={[16, 16]}>
-              <Col span={8}>
-                <Button type="primary" size="large" block icon={<UnorderedListOutlined />} onClick={() => onNavigate('orderStatus')} style={{ height: 60, fontSize: 15, fontWeight: 'bold', background: '#dc2626', borderColor: '#dc2626' }}>
+              <Col xs={24} sm={12} md={8}>
+                <Button type="primary" size="large" block icon={<UnorderedListOutlined />} onClick={() => onNavigate('orderStatus')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold', background: '#dc2626', borderColor: '#dc2626' }}>
                   {labels.btnDailyOrders}
                 </Button>
               </Col>
-              <Col span={8}>
-                <Button type="primary" ghost size="large" block icon={<CalendarOutlined />} onClick={() => onNavigate('calendar')} style={{ height: 60, fontSize: 15, fontWeight: 'bold' }}>
+              <Col xs={24} sm={12} md={8}>
+                <Button type="primary" ghost size="large" block icon={<CalendarOutlined />} onClick={() => onNavigate('calendar')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
                   {labels.btnCalendar}
                 </Button>
               </Col>
-              <Col span={8}>
-                <Button type="primary" ghost size="large" block icon={<UsergroupAddOutlined />} onClick={() => onNavigate('customers')} style={{ height: 60, fontSize: 15, fontWeight: 'bold' }}>
+              <Col xs={24} sm={12} md={8}>
+                <Button type="primary" ghost size="large" block icon={<UsergroupAddOutlined />} onClick={() => onNavigate('customers')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
                   {labels.btnCustomers}
                 </Button>
               </Col>
-              <Col span={8}>
-                <Button type="primary" ghost size="large" block icon={<AppstoreOutlined />} onClick={() => onNavigate('packages')} style={{ height: 60, fontSize: 15, fontWeight: 'bold' }}>
+              <Col xs={24} sm={12} md={8}>
+                <Button type="primary" ghost size="large" block icon={<AppstoreOutlined />} onClick={() => onNavigate('packages')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
                   {labels.btnPackages}
                 </Button>
               </Col>
-              <Col span={8}>
-                <Button type="primary" ghost size="large" block icon={<FileTextOutlined />} onClick={() => onNavigate('invoices')} style={{ height: 60, fontSize: 15, fontWeight: 'bold' }}>
+              <Col xs={24} sm={12} md={8}>
+                <Button type="primary" ghost size="large" block icon={<FileTextOutlined />} onClick={() => onNavigate('invoices')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
                   {labels.btnBilling}
                 </Button>
               </Col>
@@ -194,7 +194,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
         </Col>
 
         <Col xs={24} lg={8}>
-          <Card title={<Title level={4} style={{ margin: 0 }}>🛡️ {labels.riskTitle}</Title>} style={{ borderRadius: 12 }}>
+          <Card title={<Title level={4} style={{ margin: 0 }}>{labels.riskTitle}</Title>} style={{ borderRadius: 12 }}>
             <Alert
               title={labels.alertBlockedTitle}
               description={labels.alertBlockedDesc}

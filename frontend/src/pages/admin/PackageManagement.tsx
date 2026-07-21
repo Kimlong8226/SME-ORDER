@@ -18,8 +18,8 @@ export const PackageManagement: React.FC = () => {
 
   // NOTE: 文案集中管理，便于维护
   const labels = {
-    pageTitle: isEn ? '🍱 Central Kitchen Base Packages Database' : '🍱 中央厨房基础套餐模板库 (全局主档)',
-    addonSectionTitle: isEn ? '🥚 Add-on Pool (Single Items)' : '🥚 Add-on 单点池（全局主档）',
+    pageTitle: isEn ? 'Central Kitchen Base Packages Database' : '中央厨房基础套餐模板库 (全局主档)',
+    addonSectionTitle: isEn ? 'Add-on Pool (Single Items)' : 'Add-on 单点池（全局主档）',
     addonSectionDesc: isEn
       ? 'Manage individual add-ons (e.g. Egg, White Rice, Fruit) that can be assigned to any customer menu.'
       : '管理可单独点购的项目（如鸡蛋、白饭、水果等），可在客户菜单库中分配给指定客户。',
@@ -442,6 +442,7 @@ export const PackageManagement: React.FC = () => {
           rowKey="id"
           pagination={{ pageSize: 8, showSizeChanger: false }}
           style={{ width: '100%' }}
+          scroll={{ x: 800 }}
         />
       </Card>
 
@@ -477,6 +478,7 @@ export const PackageManagement: React.FC = () => {
           rowKey="id"
           pagination={{ pageSize: 8, showSizeChanger: false }}
           style={{ width: '100%' }}
+          scroll={{ x: 800 }}
           locale={{
             emptyText: isEn
               ? 'No Add-ons yet. Click "+ Create Add-on" to get started.'

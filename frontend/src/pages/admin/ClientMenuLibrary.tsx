@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   App, Card, Table, Button, Modal, Form, InputNumber, Select, Checkbox,
-  Tag, Typography, Space, Popconfirm, Badge, Alert, Switch, Tooltip, Tabs
+  Tag, Typography, Space, Popconfirm, Badge, Alert, Switch, Tooltip, Tabs,
+  Row, Col
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, EyeOutlined, EyeInvisibleOutlined,
@@ -558,12 +559,12 @@ export const ClientMenuLibrary: React.FC = () => {
       }}
     >
       {/* 左侧：顾客选择器 */}
-      <Space size="middle" align="center">
-        <Text strong style={{ fontSize: 15 }}>
+      <Space size="middle" align="center" wrap style={{ flex: 1 }}>
+        <Text strong style={{ fontSize: 15, whiteSpace: 'nowrap' }}>
           {labels.currentCustomer}
         </Text>
         <Select
-          style={{ minWidth: 280 }}
+          style={{ minWidth: 220, flex: 1, maxWidth: 350 }}
           size="large"
           value={selectedCustomerId}
           onChange={(val) => setSelectedCustomerId(val)}
@@ -720,6 +721,7 @@ export const ClientMenuLibrary: React.FC = () => {
                     locale={{ emptyText: labels.emptyMenuHint }}
                     style={{ width: '100%' }}
                     rowClassName={() => 'menu-row'}
+                    scroll={{ x: 800 }}
                   />
                 </>
               ),
@@ -747,6 +749,7 @@ export const ClientMenuLibrary: React.FC = () => {
                     pagination={{ pageSize: 8, showSizeChanger: false }}
                     locale={{ emptyText: labels.emptyAddonHint }}
                     style={{ width: '100%' }}
+                    scroll={{ x: 800 }}
                   />
                 </>
               ),

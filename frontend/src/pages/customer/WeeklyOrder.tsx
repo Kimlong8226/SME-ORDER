@@ -234,7 +234,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
     <Card
       title={
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Title level={4} style={{ margin: 0 }}>📋 {labels.title}</Title>
+          <Title level={4} style={{ margin: 0 }}>{labels.title}</Title>
           <Button type="primary" onClick={() => userInfo && fetchOrders(userInfo.customer_id)}>
             {labels.btnRefresh}
           </Button>

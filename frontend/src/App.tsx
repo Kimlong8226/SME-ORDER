@@ -3,7 +3,8 @@ import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App a
 import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
   FormOutlined, GlobalOutlined, LogoutOutlined, DashboardOutlined,
-  FileTextOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined
+  FileTextOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import './i18n';
@@ -23,13 +24,14 @@ import { OrderHistory } from './pages/customer/WeeklyOrder';
 import { DeliveryOrders } from './pages/customer/DeliveryOrders';
 import { MealSectionsManagement } from './pages/admin/MealSectionsManagement';
 
-const { Header, Content, Sider } = Layout;
+const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
 
 export const App: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [currentUser, setCurrentUser] = useState<any | null>(null);
   const [activeMenu, setActiveMenu] = useState<string>('dashboard');
+  const [collapsed, setCollapsed] = useState<boolean>(false);
 
   useEffect(() => {
     const raw = localStorage.getItem('user_info');
@@ -57,10 +59,12 @@ export const App: React.FC = () => {
   if (!currentUser) {
     return (
       <ConfigProvider theme={brightTheme}>
-        <Login onLoginSuccess={(u) => {
-          setCurrentUser(u);
-          setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
-        }} />
+        <AntdApp>
+          <Login onLoginSuccess={(u) => {
+            setCurrentUser(u);
+            setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
+          }} />
+        </AntdApp>
       </ConfigProvider>
     );
   }
@@ -103,13 +107,19 @@ export const App: React.FC = () => {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          padding: '0 32px',
+          padding: '0 16px',
           height: 68,
           borderBottom: '1px solid #e2e8f0',
           width: '100%'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center' }}>
-            <Title level={3} style={{ margin: 0, color: '#dc2626', fontSize: 21, fontWeight: 900, letterSpacing: '0.5px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', flex: 1, overflow: 'hidden' }}>
+            <Button
+              type="text"
+              icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+              onClick={() => setCollapsed(!collapsed)}
+              style={{ fontSize: 18, marginRight: 12, padding: 0, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            />
+            <Title level={3} style={{ margin: 0, color: '#dc2626', fontSize: 18, fontWeight: 900, letterSpacing: '0.5px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
               {t('common.appName')}
             </Title>
           </div>
@@ -139,32 +149,52 @@ export const App: React.FC = () => {
         </Header>
 
         <Layout style={{ width: '100%' }}>
-          <Sider width={240} theme="light" style={{ borderRight: '1px solid #e2e8f0', background: '#ffffff' }}>
+          <Sider
+            width={240}
+            theme="light"
+            breakpoint="lg"
+            collapsedWidth="0"
+            collapsed={collapsed}
+            onCollapse={(value) => setCollapsed(value)}
+            trigger={null}
+            style={{ borderRight: '1px solid #e2e8f0', background: '#ffffff', zIndex: 10 }}
+          >
             <Menu
               mode="inline"
               selectedKeys={[activeMenu]}
-              onClick={(e) => setActiveMenu(e.key)}
+              onClick={(e) => {
+                setActiveMenu(e.key);
+                if (window.innerWidth < 992) {
+                  setCollapsed(true);
+                }
+              }}
               items={menuItems}
               style={{ height: '100%', borderRight: 0, paddingTop: 16, fontSize: 14 }}
             />
           </Sider>
 
-          <Content style={{ padding: '24px 32px', background: '#f8fafc', minHeight: 'calc(100vh - 68px)', width: '100%' }}>
-            <div style={{ width: '100%' }}>
-              {activeMenu === 'dashboard' && <DashboardOverview onNavigate={(key) => setActiveMenu(key)} />}
-              {activeMenu === 'orderStatus' && <DailyOrderStatus />}
-              {activeMenu === 'calendar' && <OrderCalendar />}
-              {activeMenu === 'customers' && <CustomerManagement />}
-              {activeMenu === 'packages' && <PackageManagement />}
-              {activeMenu === 'clientMenuLibrary' && <ClientMenuLibrary />}
-              {activeMenu === 'mealSections' && <MealSectionsManagement />}
-              {activeMenu === 'invoices' && <InvoiceManagement />}
-              {activeMenu === 'staff' && <StaffManagement />}
-              {activeMenu === 'matrixOrder' && <MatrixOrder />}
-              {activeMenu === 'orderHistory' && <OrderHistory onEditOrder={handleEditOrder} />}
-              {activeMenu === 'deliveryOrders' && <DeliveryOrders />}
-            </div>
-          </Content>
+          <Layout style={{ background: '#f8fafc' }}>
+            <Content style={{ padding: '16px', minHeight: 'calc(100vh - 68px - 70px)', width: '100%' }}>
+              <div style={{ width: '100%' }}>
+                {activeMenu === 'dashboard' && <DashboardOverview onNavigate={(key) => setActiveMenu(key)} />}
+                {activeMenu === 'orderStatus' && <DailyOrderStatus />}
+                {activeMenu === 'calendar' && <OrderCalendar />}
+                {activeMenu === 'customers' && <CustomerManagement />}
+                {activeMenu === 'packages' && <PackageManagement />}
+                {activeMenu === 'clientMenuLibrary' && <ClientMenuLibrary />}
+                {activeMenu === 'mealSections' && <MealSectionsManagement />}
+                {activeMenu === 'invoices' && <InvoiceManagement />}
+                {activeMenu === 'staff' && <StaffManagement />}
+                {activeMenu === 'matrixOrder' && <MatrixOrder />}
+                {activeMenu === 'orderHistory' && <OrderHistory onEditOrder={handleEditOrder} />}
+                {activeMenu === 'deliveryOrders' && <DeliveryOrders />}
+              </div>
+            </Content>
+            <Footer style={{ textAlign: 'left', color: '#64748b', fontSize: 11, background: 'transparent', padding: '16px 24px', letterSpacing: '0.5px' }}>
+              COPY RIGHT by KIM LONG CATERING SDN BHD <br />
+              REG: 202301025752 (1519675-T)
+            </Footer>
+          </Layout>
         </Layout>
       </Layout>
     </AntdApp>

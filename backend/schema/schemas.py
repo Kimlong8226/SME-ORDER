@@ -70,9 +70,14 @@ class CustomerCreate(CustomerBase):
     password: str  # 初始订餐员密码
     sites: List[DeliverySiteCreate] = []
 
+class CustomerUpdate(CustomerBase):
+    username: Optional[str] = None
+    password: Optional[str] = None
+
 class CustomerResponse(CustomerBase):
     id: int
     created_at: datetime
+    username: Optional[str] = None
     sites: List[DeliverySiteResponse] = []
 
     class Config:
