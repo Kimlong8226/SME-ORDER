@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { App, Card, Calendar, Badge, Modal, Button, Table, Tag, Typography, Row, Col, Select, Space } from 'antd';
 import { PrinterOutlined, FilterOutlined, EnvironmentOutlined, UserOutlined, PhoneOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
@@ -162,7 +162,7 @@ export const OrderCalendar: React.FC = () => {
       >
         {Object.values(dayData).map((item: any, idx: number) => (
           <div key={idx} style={{ fontSize: 11, marginBottom: 2, background: '#f0fdf4', padding: '2px 4px', borderRadius: 4, border: '1px solid #bbf7d0' }}>
-            <Badge status="success" text={<Text style={{ fontSize: 11 }} bold>{item.company_name}: {item.total_portions}{isEn ? ' pax' : '份'}</Text>} />
+            <Badge status="success" text={<Text style={{ fontSize: 11 }} strong>{item.company_name}: {item.total_portions}{isEn ? ' pax' : '份'}</Text>} />
           </div>
         ))}
       </div>

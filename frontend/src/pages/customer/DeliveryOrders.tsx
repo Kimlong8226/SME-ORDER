@@ -1,4 +1,4 @@
-﻿import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { App, Card, Table, Tag, Button, Typography, Space, Modal, Divider, Row, Col } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -220,7 +220,7 @@ export const DeliveryOrders: React.FC = () => {
         const info = calculatePaymentStatus(record.delivery_date);
         return (
           <Text 
-            bold={info.isOverdue} 
+            strong={info.isOverdue} 
             style={{ 
               fontSize: 13, 
               color: info.isOverdue ? '#ef4444' : (info.statusText === labels.statusPaid ? '#10b981' : '#475569') 
