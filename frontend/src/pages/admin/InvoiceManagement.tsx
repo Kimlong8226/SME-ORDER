@@ -273,10 +273,11 @@ export const InvoiceManagement: React.FC = () => {
   ];
 
   return (
-    <Card 
-      title={<Title level={4} style={{ margin: 0 }}>{labels.title}</Title>}
-      style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
-    >
+    <>
+      <Card 
+        title={<Title level={4} style={{ margin: 0 }}>{labels.title}</Title>}
+        style={{ borderRadius: 12, boxShadow: '0 4px 12px rgba(0,0,0,0.05)' }}
+      >
       <Tabs defaultActiveKey="1" size="large" items={[
         {
           key: '1',
@@ -478,6 +479,6 @@ export const InvoiceManagement: React.FC = () => {
           </div>
         )}
       </Modal>
-    </Card>
+    </>
   );
 };
