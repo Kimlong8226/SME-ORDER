@@ -77,6 +77,7 @@ export const InvoiceManagement: React.FC = () => {
   const [generateModalVisible, setGenerateModalVisible] = useState(false);
   
   const [genForm] = Form.useForm();
+
   const [unbilledLoading, setUnbilledLoading] = useState(false);
   
   const [selectedOrderIds, setSelectedOrderIds] = useState<React.Key[]>([]);
@@ -337,8 +338,8 @@ export const InvoiceManagement: React.FC = () => {
           children: (
           <Table columns={columns} dataSource={invoices} rowKey="id" loading={loading} style={{ width: '100%' }} scroll={{ x: 'max-content' }} />
           )
-        }
       ]} />
+    </Card>
 
       {/* 对账发票打印 Modal */}
       <Modal
