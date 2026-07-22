@@ -119,6 +119,7 @@ export const App: React.FC = () => {
               onClick={() => setCollapsed(!collapsed)}
               style={{ fontSize: 18, marginRight: 12, padding: 0, width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             />
+            <img src="/logo.jpg" alt="Kim Long Catering Logo" style={{ height: 36, width: 36, objectFit: 'cover', borderRadius: 6, marginRight: 10 }} />
             <Title level={3} style={{ margin: 0, color: '#dc2626', fontSize: 18, fontWeight: 900, letterSpacing: '0.5px', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
               {t('common.appName')}
             </Title>

@@ -85,8 +85,11 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
             justifyContent: 'space-between'
           }}>
             <div>
-              <Title level={2} style={{ color: '#ffffff', margin: 0, fontSize: 24, fontWeight: 900 }}>{t('common.appName')}</Title>
-              <Text style={{ color: '#dcfce7', fontSize: 13, marginTop: 8, display: 'block', fontWeight: 600 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
+                <img src="/logo.jpg" alt="Kim Long Catering Logo" style={{ height: 44, width: 44, objectFit: 'cover', borderRadius: 8, background: '#ffffff', padding: 2 }} />
+                <Title level={2} style={{ color: '#ffffff', margin: 0, fontSize: 24, fontWeight: 900 }}>{t('common.appName')}</Title>
+              </div>
+              <Text style={{ color: '#dcfce7', fontSize: 13, display: 'block', fontWeight: 600 }}>
                 KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM
               </Text>
 
