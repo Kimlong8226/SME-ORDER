@@ -13,15 +13,15 @@ export const DeliveryOrders: React.FC = () => {
   const isEn = i18n.language === 'en';
 
   const labels = {
-    title: isEn ? 'Delivery Orders (DO) & Billing Panel' : '送货单 (DO) 与账期对账面板',
+    title: isEn ? 'Delivery Orders (DO) & Billing Panel' : '送货单与对账',
     billingCycle: isEn ? 'Billing Cycle' : '结算账期',
     daysSuffix: isEn ? 'Days Cycle' : '天一结',
-    colDoNo: isEn ? 'DO Number' : 'DO 送货单号',
-    colDate: isEn ? 'Delivery Date' : '送货日期',
-    colSite: isEn ? 'Delivery Site' : '接收厂区',
-    colDetails: isEn ? 'Meal Details (No Price)' : '餐食细节 (不显示金额)',
+    colDoNo: isEn ? 'DO Number' : 'DO 号',
+    colDate: isEn ? 'Delivery Date' : '日期',
+    colSite: isEn ? 'Delivery Site' : '厂区',
+    colDetails: isEn ? 'Meal Details (No Price)' : '餐食细节',
     colPaymentStatus: isEn ? 'Payment Status' : '付款状态',
-    colCountdown: isEn ? 'Due Countdown' : '账期倒计时',
+    colCountdown: isEn ? 'Due Countdown' : '账期',
     colAction: isEn ? 'Actions' : '操作',
     btnViewDo: isEn ? 'View DO' : '查看 DO',
     statusPending: isEn ? 'Pending Delivery' : '待送货',
