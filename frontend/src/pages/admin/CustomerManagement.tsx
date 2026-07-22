@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { App, Table, Button, Modal, Form, Input, Select, Card, Tag, Space, Row, Col, Typography, Divider, Popconfirm } from 'antd';
-import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined } from '@ant-design/icons';
+import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
 
@@ -54,12 +54,16 @@ export const CustomerManagement: React.FC = () => {
     placeholderTaxNo: isEn ? 'Company Tax Number' : '公司税号',
     placeholderAddress: isEn ? 'Company legal registration or billing address' : '公司法定注册或发票账单地址',
     modalSiteTitle: isEn ? 'Add Delivery Site / Factory' : '新增送餐分点/工厂 (Delivery Site)',
+    editSiteTitle: isEn ? 'Edit Delivery Site / Factory' : '编辑送餐分点/工厂 (Edit Site)',
     formSiteName: isEn ? 'Site Name' : '分点/工厂名称',
     placeholderSiteName: isEn ? 'e.g. Tmn Tek Plant / Sinergy Branch' : '例如: tmn tek 工厂 / sinergy 分部',
     formSiteAddress: isEn ? 'Delivery Address' : '具体送餐地址',
     placeholderSiteAddress: isEn ? 'Detailed delivery street address' : '详细送餐门牌与街道地址',
     formSiteContact: isEn ? 'On-site Contact Person' : '现场接收负责人',
     formSitePhone: isEn ? 'On-site Phone' : '现场电话',
+    editSiteSuccess: isEn ? 'Delivery site updated successfully' : '修改送餐点成功',
+    deleteSiteSuccess: isEn ? 'Delivery site deleted' : '已成功删除送餐点',
+    deleteSiteConfirm: isEn ? 'Are you sure you want to delete this delivery site?' : '确定要删除该送餐分点吗？',
   };
 
   const [customers, setCustomers] = useState<any[]>([]);
@@ -69,6 +73,7 @@ export const CustomerManagement: React.FC = () => {
 
   const [siteModalVisible, setSiteModalVisible] = useState(false);
   const [currentCustomerId, setCurrentCustomerId] = useState<number | null>(null);
+  const [editingSite, setEditingSite] = useState<any | null>(null);
 
   const [form] = Form.useForm();
   const [siteForm] = Form.useForm();
@@ -134,13 +139,42 @@ export const CustomerManagement: React.FC = () => {
     }
   };
 
-  const handleAddSite = async (values: any) => {
-    if (!currentCustomerId) return;
+  const handleOpenAddSite = (customerId: number) => {
+    setCurrentCustomerId(customerId);
+    setEditingSite(null);
+    siteForm.resetFields();
+    setSiteModalVisible(true);
+  };
+
+  const handleOpenEditSite = (site: any) => {
+    setEditingSite(site);
+    siteForm.setFieldsValue(site);
+    setSiteModalVisible(true);
+  };
+
+  const handleDeleteSite = async (siteId: number) => {
     try {
-      await axiosInstance.post(`/admin/customers/${currentCustomerId}/sites`, values);
-      message.success(labels.addSiteSuccess);
+      await axiosInstance.delete(`/admin/customers/sites/${siteId}`);
+      message.success(labels.deleteSiteSuccess);
+      fetchCustomers();
+    } catch (err) {
+      message.error(isEn ? 'Failed to delete site' : '删除送餐点失败');
+    }
+  };
+
+  const handleSaveSite = async (values: any) => {
+    try {
+      if (editingSite) {
+        await axiosInstance.put(`/admin/customers/sites/${editingSite.id}`, values);
+        message.success(labels.editSiteSuccess);
+      } else {
+        if (!currentCustomerId) return;
+        await axiosInstance.post(`/admin/customers/${currentCustomerId}/sites`, values);
+        message.success(labels.addSiteSuccess);
+      }
       setSiteModalVisible(false);
       siteForm.resetFields();
+      setEditingSite(null);
       fetchCustomers();
     } catch (err) {
       message.error(labels.addSiteFailed);
@@ -183,13 +217,43 @@ export const CustomerManagement: React.FC = () => {
       title: t('customer.sites'),
       key: 'sites',
       render: (record: any) => (
-        <Space orientation="vertical" size={2}>
+        <Space orientation="vertical" size={4} style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
           {record.sites && record.sites.map((s: any) => (
-            <Tag color="blue" key={s.id} icon={<EnvironmentOutlined />}>
-              {s.site_name} ({s.address})
+            <Tag 
+              color="blue" 
+              key={s.id} 
+              icon={<EnvironmentOutlined />}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 12, margin: '2px 0' }}
+            >
+              <span>{s.site_name} ({s.address})</span>
+              <Space size={4} style={{ marginLeft: 6 }}>
+                <EditOutlined 
+                  title="修改此分点" 
+                  style={{ cursor: 'pointer', color: '#1890ff', fontSize: 13 }} 
+                  onClick={(e) => { e.stopPropagation(); handleOpenEditSite(s); }} 
+                />
+                <Popconfirm
+                  title={labels.deleteSiteConfirm}
+                  onConfirm={() => handleDeleteSite(s.id)}
+                  okText={isEn ? 'Delete' : '删除'}
+                  cancelText={labels.btnCancel}
+                >
+                  <DeleteOutlined 
+                    title="删除此分点" 
+                    style={{ cursor: 'pointer', color: '#ff4d4f', fontSize: 13 }} 
+                    onClick={(e) => e.stopPropagation()} 
+                  />
+                </Popconfirm>
+              </Space>
             </Tag>
           ))}
-          <Button type="dashed" size="small" icon={<PlusOutlined />} onClick={() => { setCurrentCustomerId(record.id); setSiteModalVisible(true); }}>
+          <Button 
+            type="dashed" 
+            size="small" 
+            icon={<PlusOutlined />} 
+            onClick={() => handleOpenAddSite(record.id)}
+            style={{ borderRadius: 12, marginTop: 2 }}
+          >
             {t('customer.addSite')}
           </Button>
         </Space>
@@ -354,14 +418,14 @@ export const CustomerManagement: React.FC = () => {
         </Form>
       </Modal>
 
-      {/* 新增送餐地点 Modal */}
+      {/* 新增/编辑送餐地点 Modal */}
       <Modal
-        title={labels.modalSiteTitle}
+        title={editingSite ? labels.editSiteTitle : labels.modalSiteTitle}
         open={siteModalVisible}
-        onCancel={() => setSiteModalVisible(false)}
+        onCancel={() => { setSiteModalVisible(false); setEditingSite(null); }}
         onOk={() => siteForm.submit()}
       >
-        <Form form={siteForm} layout="vertical" onFinish={handleAddSite}>
+        <Form form={siteForm} layout="vertical" onFinish={handleSaveSite}>
           <Form.Item name="site_name" label={labels.formSiteName} rules={[{ required: true }]}>
             <Input placeholder={labels.placeholderSiteName} />
           </Form.Item>

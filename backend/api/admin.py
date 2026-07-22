@@ -141,6 +141,33 @@ def add_delivery_site(customer_id: int, site_in: DeliverySiteCreate, db: Session
     db.refresh(site)
     return site
 
+@router.put("/customers/sites/{site_id}", response_model=DeliverySiteResponse)
+def update_delivery_site(site_id: int, site_in: DeliverySiteCreate, db: Session = Depends(get_db)):
+    site = db.query(DeliverySite).filter(DeliverySite.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="分点不存在")
+
+    site.site_name = site_in.site_name
+    site.address = site_in.address
+    if site_in.contact_person is not None:
+        site.contact_person = site_in.contact_person
+    if site_in.phone is not None:
+        site.phone = site_in.phone
+
+    db.commit()
+    db.refresh(site)
+    return site
+
+@router.delete("/customers/sites/{site_id}")
+def delete_delivery_site(site_id: int, db: Session = Depends(get_db)):
+    site = db.query(DeliverySite).filter(DeliverySite.id == site_id).first()
+    if not site:
+        raise HTTPException(status_code=404, detail="分点不存在")
+
+    db.delete(site)
+    db.commit()
+    return {"message": "分点已成功删除"}
+
 # --- 2. 内部员工账号管理 ---
 @router.post("/staff", response_model=StaffUserResponse)
 def create_staff(req: StaffUserCreate, db: Session = Depends(get_db)):
