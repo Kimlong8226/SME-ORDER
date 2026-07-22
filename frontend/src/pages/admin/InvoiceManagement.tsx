@@ -338,6 +338,7 @@ export const InvoiceManagement: React.FC = () => {
           children: (
           <Table columns={columns} dataSource={invoices} rowKey="id" loading={loading} style={{ width: '100%' }} scroll={{ x: 'max-content' }} />
           )
+        }
       ]} />
     </Card>
 
