@@ -11,8 +11,6 @@ from model.models import (
 from api import auth, admin, order
 from api.auth import get_password_hash
 
-Base.metadata.create_all(bind=engine)
-
 app = FastAPI(
     title="金龙中央厨房伙食下单系统 API",
     description="KIM LONG CATERING MEAL SUPPLY ORDERING SYSTEM API",
@@ -415,6 +413,10 @@ def seed_data():
 
 @app.on_event("startup")
 def startup_event():
+    try:
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        print(f"Startup Table Creation Warning: {e}")
     try:
         seed_data()
     except Exception as e:
