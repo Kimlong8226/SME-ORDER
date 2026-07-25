@@ -1,8 +1,17 @@
 import os
+import socket
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+
+# 强制在 Vercel Serverless 环境下优先使用 IPv4，防止 IPv6 直连报 Cannot assign requested address 错误
+orig_getaddrinfo = socket.getaddrinfo
+def patched_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+    if family == 0 or family == socket.AF_UNSPEC:
+        family = socket.AF_INET
+    return orig_getaddrinfo(host, port, family, type, proto, flags)
+socket.getaddrinfo = patched_getaddrinfo
 
 # 加载环境变量
 load_dotenv()
