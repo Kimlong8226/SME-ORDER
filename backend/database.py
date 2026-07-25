@@ -12,7 +12,11 @@ SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./central_kitchen
 
 # 如果是 postgresql 数据库，不需要 check_same_thread 参数
 if SQLALCHEMY_DATABASE_URL.startswith("postgresql"):
-    engine = create_engine(SQLALCHEMY_DATABASE_URL)
+    engine = create_engine(
+        SQLALCHEMY_DATABASE_URL,
+        pool_pre_ping=True,
+        pool_recycle=300
+    )
 else:
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
