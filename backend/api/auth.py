@@ -38,51 +38,59 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     """
     统一登录接口：支持超级管理员、员工以及客户订餐员登录
     """
-    # 1. 尝试匹配内部员工 (StaffUser)
-    staff = db.query(StaffUser).filter(StaffUser.username == req.username).first()
-    if staff and verify_password(req.password, staff.password_hash):
-        if not staff.is_active:
-            raise HTTPException(status_code=400, detail="账号已被禁用")
-        token = create_access_token({
-            "sub": staff.username,
-            "user_type": "staff",
-            "role": staff.role,
-            "name": staff.full_name
-        })
-        return TokenSchema(
-            access_token=token,
-            user_type="staff",
-            role=staff.role,
-            username=staff.username,
-            name=staff.full_name
-        )
+    try:
+        # 1. 尝试匹配内部员工 (StaffUser)
+        staff = db.query(StaffUser).filter(StaffUser.username == req.username).first()
+        if staff and verify_password(req.password, staff.password_hash):
+            if not staff.is_active:
+                raise HTTPException(status_code=400, detail="账号已被禁用")
+            token = create_access_token({
+                "sub": staff.username,
+                "user_type": "staff",
+                "role": staff.role,
+                "name": staff.full_name
+            })
+            return TokenSchema(
+                access_token=token,
+                user_type="staff",
+                role=staff.role,
+                username=staff.username,
+                name=staff.full_name
+            )
 
-    # 2. 尝试匹配客户订餐员 (CustomerUser)
-    c_user = db.query(CustomerUser).filter(CustomerUser.username == req.username).first()
-    if c_user and verify_password(req.password, c_user.password_hash):
-        if not c_user.is_active:
-            raise HTTPException(status_code=400, detail="账号已被禁用")
-        customer = db.query(Customer).filter(Customer.id == c_user.customer_id).first()
-        token = create_access_token({
-            "sub": c_user.username,
-            "user_type": "customer",
-            "role": "customer",
-            "name": c_user.contact_name,
-            "customer_id": c_user.customer_id,
-            "is_blocked": customer.is_blocked if customer else False
-        })
-        return TokenSchema(
-            access_token=token,
-            user_type="customer",
-            role="customer",
-            username=c_user.username,
-            name=f"{customer.company_name} ({c_user.contact_name})" if customer else c_user.contact_name,
-            customer_id=c_user.customer_id,
-            is_blocked=customer.is_blocked if customer else False
-        )
+        # 2. 尝试匹配客户订餐员 (CustomerUser)
+        c_user = db.query(CustomerUser).filter(CustomerUser.username == req.username).first()
+        if c_user and verify_password(req.password, c_user.password_hash):
+            if not c_user.is_active:
+                raise HTTPException(status_code=400, detail="账号已被禁用")
+            customer = db.query(Customer).filter(Customer.id == c_user.customer_id).first()
+            token = create_access_token({
+                "sub": c_user.username,
+                "user_type": "customer",
+                "role": "customer",
+                "name": c_user.contact_name,
+                "customer_id": c_user.customer_id,
+                "is_blocked": customer.is_blocked if customer else False
+            })
+            return TokenSchema(
+                access_token=token,
+                user_type="customer",
+                role="customer",
+                username=c_user.username,
+                name=f"{customer.company_name} ({c_user.contact_name})" if customer else c_user.contact_name,
+                customer_id=c_user.customer_id,
+                is_blocked=customer.is_blocked if customer else False
+            )
 
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="用户名或密码错误",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        err_msg = f"Login Exception: {str(e)}\n{traceback.format_exc()}"
+        print(err_msg)
+        raise HTTPException(status_code=500, detail=f"Login Error: {str(e)}")
