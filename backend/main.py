@@ -413,7 +413,12 @@ def seed_data():
     finally:
         db.close()
 
-seed_data()
+@app.on_event("startup")
+def startup_event():
+    try:
+        seed_data()
+    except Exception as e:
+        print(f"Startup Seed Error: {e}")
 
 @app.get("/")
 def read_root():
