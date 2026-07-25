@@ -21,6 +21,12 @@ SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./central_kitchen
 
 # 如果是 postgresql 数据库，不需要 check_same_thread 参数
 if SQLALCHEMY_DATABASE_URL.startswith("postgresql"):
+    # 自动将 Supabase 仅限 IPv6 的直连域名重写为支持 Vercel IPv4 Serverless 的 Pooler 域名
+    if "db.akbqzkiybznkqercyeue.supabase.co" in SQLALCHEMY_DATABASE_URL:
+        SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace(
+            "postgres:2MC4wHMAxD9iPqRx@db.akbqzkiybznkqercyeue.supabase.co:5432",
+            "postgres.akbqzkiybznkqercyeue:2MC4wHMAxD9iPqRx@aws-0-ap-southeast-1.pooler.supabase.com:6543"
+        )
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL,
         pool_pre_ping=True,
