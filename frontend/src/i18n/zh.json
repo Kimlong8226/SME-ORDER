@@ -22,20 +22,21 @@
     "language": "语言",
     "blockedMessage": "您的账号已被系统限制下单，请联系财务核对账款。"
   },
-  "nav": {
+    "nav": {
     "calendar": "订单日历",
-    "customers": "客户档案管理",
-    "staff": "员工协同管理",
-    "packages": "基础套餐模板库",
-    "clientMenuLibrary": "顾客专属菜单",
-    "matrixOrder": "下单页面",
+    "customers": "客户管理",
+    "staff": "员工管理",
+    "packages": "套餐模板库",
+    "clientMenuLibrary": "专属菜单",
+    "matrixOrder": "点餐下单",
     "weeklyOrder": "周历申报错单",
-    "orderHistory": "订单状态与修改",
-    "deliveryOrders": "送货单与账期看板",
-    "dashboard": "运营概览 Dashboard",
-    "orderStatus": "每日订单状态看板",
-    "invoices": "客户账期与发票",
-    "mealSections": "餐次排班管理"
+    "orderHistory": "订单记录",
+    "deliveryOrders": "送货单与账期",
+    "dashboard": "运营概览",
+    "orderStatus": "每日订单看板",
+    "invoices": "客户账单",
+    "mealSections": "餐次管理",
+    "auditLog": "审计日志"
   },
   "customer": {
     "companyName": "公司名称",

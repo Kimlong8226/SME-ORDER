@@ -35,7 +35,8 @@
     "dashboard": "Dashboard Overview",
     "orderStatus": "Daily Orders Status",
     "invoices": "Billing & Invoice",
-    "mealSections": "Meal Shifts & Scheduling"
+    "mealSections": "Meal Shifts & Scheduling",
+    "auditLog": "Audit Log"
   },
   "customer": {
     "companyName": "Company Name",

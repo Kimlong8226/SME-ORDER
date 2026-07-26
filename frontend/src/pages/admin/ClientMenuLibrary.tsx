@@ -564,7 +564,8 @@ export const ClientMenuLibrary: React.FC = () => {
           {labels.currentCustomer}
         </Text>
         <Select
-          style={{ minWidth: 220, flex: 1, maxWidth: 350 }}
+          style={{ minWidth: 320, flex: 1, maxWidth: 500 }}
+          popupMatchSelectWidth={false}
           size="large"
           value={selectedCustomerId}
           onChange={(val) => setSelectedCustomerId(val)}

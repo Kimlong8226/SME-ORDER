@@ -90,14 +90,11 @@ export const MatrixOrder: React.FC = () => {
   // 数据库定义的动态餐次列表
   const [dbMealSections, setDbMealSections] = useState<any[]>([]);
 
-  // 矩阵输入数据 (份数数量)
-  const [matrixData, setMatrixData] = useState<any>({});
+  // 矩阵输入数据: { [sectionName]: { [pkgId: number]: quantity: number } }
+  const [matrixData, setMatrixData] = useState<Record<string, Record<number, number>>>({});
 
-  // 每个餐次独立选定的套餐 ID (存 customer_package.id)
-  const [matrixPackages, setMatrixPackages] = useState<Record<string, number>>({});
-
-  // 加白饭数量数据
-  const [matrixAddons, setMatrixAddons] = useState<Record<string, number>>({});
+  // 加白饭数量数据: { [sectionName]: { [pkgId: number]: addonQty: number } }
+  const [matrixAddons, setMatrixAddons] = useState<Record<string, Record<number, number>>>({});
 
   const [remark, setRemark] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -128,19 +125,15 @@ export const MatrixOrder: React.FC = () => {
       setDbMealSections(sectionsList);
 
       // 初始化矩阵状态的结构
-      const initialData: Record<string, number> = {};
-      const initialAddons: Record<string, number> = {};
+      const initialData: Record<string, Record<number, number>> = {};
+      const initialAddons: Record<string, Record<number, number>> = {};
       sectionsList.forEach((s: any) => {
-        initialData[s.name] = 0;
-        initialAddons[s.name] = 0;
-      });
-
-      // 根据后台拉取到的公用套餐，初始化各餐次的默认套餐配置
-      const initialPkgs: Record<string, number> = {};
-      sectionsList.forEach((s: any) => {
-        if (s.packages && s.packages.length > 0) {
-          initialPkgs[s.name] = s.packages[0].id;
-        }
+        initialData[s.name] = {};
+        initialAddons[s.name] = {};
+        (s.packages || []).forEach((p: any) => {
+          initialData[s.name][p.id] = 0;
+          initialAddons[s.name][p.id] = 0;
+        });
       });
 
       // 3. 检查是否有要编辑的订单载入
@@ -152,35 +145,28 @@ export const MatrixOrder: React.FC = () => {
 
         const newQuantities = { ...initialData };
         const newAddons = { ...initialAddons };
-        const newPackages = { ...initialPkgs };
 
         order.details.forEach((d: any) => {
           const name = d.meal_section_name || d.meal_section;
-          if (newQuantities.hasOwnProperty(name)) {
-            newQuantities[name] = d.quantity;
-          }
-          if (d.customer_package_id) {
-            newPackages[name] = d.customer_package_id;
-          }
-          // 解析备注里的加白饭数量
-          if (d.remark) {
-            const match = d.remark.match(/加白饭\s*(\d+)\s*份/);
-            if (match) {
-              newAddons[name] = parseInt(match[1], 10);
+          if (newQuantities[name] && d.customer_package_id) {
+            newQuantities[name][d.customer_package_id] = d.quantity;
+            if (d.remark) {
+              const match = d.remark.match(/加白饭\s*(\d+)\s*份/);
+              if (match) {
+                newAddons[name][d.customer_package_id] = parseInt(match[1], 10);
+              }
             }
           }
         });
 
         setMatrixData(newQuantities);
         setMatrixAddons(newAddons);
-        setMatrixPackages(newPackages);
         setRemark(order.remark || '');
         localStorage.removeItem('editing_order');
         message.info(labels.msgLoadedEdit);
       } else {
         setMatrixData(initialData);
         setMatrixAddons(initialAddons);
-        setMatrixPackages(initialPkgs);
       }
 
       // NOTE: 使用客户专用接口获取自身资料和送货地址，避免不安全地加载所有客户列表
@@ -208,25 +194,36 @@ export const MatrixOrder: React.FC = () => {
 
   // 易联软件 快捷一键 2+2
   const handleQuickFillYilian = () => {
-    setMatrixData({
-      ...matrixData,
-      "早餐": 2,
-      "早班午餐": 2
-    });
+    const updatedData = { ...matrixData };
+    const bPkgs = getAvailablePackagesForSection("早餐");
+    const lPkgs = getAvailablePackagesForSection("早班午餐");
+    if (bPkgs.length > 0) {
+      if (!updatedData["早餐"]) updatedData["早餐"] = {};
+      updatedData["早餐"][bPkgs[0].id] = 2;
+    }
+    if (lPkgs.length > 0) {
+      if (!updatedData["早班午餐"]) updatedData["早班午餐"] = {};
+      updatedData["早班午餐"][lPkgs[0].id] = 2;
+    }
+    setMatrixData(updatedData);
     setRemark(isEn ? 'Yilian Standard: Breakfast Bento 2 + Lunch Bento 2' : '易联软件标准：早餐餐盒 2份 + 午餐餐盒 2份');
     message.success(labels.msgQuickFillYilian);
   };
 
   // 清空选择
   const handleClearOrder = () => {
-    const cleared = { ...matrixData };
-    Object.keys(cleared).forEach(key => cleared[key] = 0);
+    const cleared: Record<string, Record<number, number>> = {};
+    const clearedAddons: Record<string, Record<number, number>> = {};
+    Object.keys(matrixData).forEach(sec => {
+      cleared[sec] = {};
+      clearedAddons[sec] = {};
+      Object.keys(matrixData[sec] || {}).forEach(pkgId => {
+        cleared[sec][Number(pkgId)] = 0;
+        clearedAddons[sec][Number(pkgId)] = 0;
+      });
+    });
     setMatrixData(cleared);
-
-    const clearedAddons = { ...matrixAddons };
-    Object.keys(clearedAddons).forEach(key => clearedAddons[key] = 0);
     setMatrixAddons(clearedAddons);
-
     message.info(labels.msgCleared);
   };
 
@@ -244,34 +241,30 @@ export const MatrixOrder: React.FC = () => {
       return;
     }
 
-    const items = Object.entries(matrixData)
-      .filter(([sectionName, qty]) => {
-        const sectionPkgs = getAvailablePackagesForSection(sectionName);
-        return (qty as number) > 0 && sectionPkgs.length > 0;
-      })
-      .map(([sectionName, qty]) => {
-        const sectionPkgs = getAvailablePackagesForSection(sectionName);
-        const chosenPkgId = matrixPackages[sectionName] || (sectionPkgs.length > 0 ? sectionPkgs[0].id : null);
-        
-        // 自动将加白饭拼装写入备注
-        const extraRiceQty = matrixAddons[sectionName] || 0;
-        const itemRemark = [
-          extraRiceQty > 0 ? `加白饭 ${extraRiceQty} 份` : '',
-          remark ? remark : ''
-        ].filter(Boolean).join(' | ');
+    const items: any[] = [];
+    Object.entries(matrixData).forEach(([sectionName, pkgMap]) => {
+      const matchedSection = dbMealSections.find(s => s.name === sectionName);
+      const actualSectionId = matchedSection ? matchedSection.id : 1;
 
-        // 动态根据名称查找数据库餐次 ID
-        const matchedSection = dbMealSections.find(s => s.name === sectionName);
-        const actualSectionId = matchedSection ? matchedSection.id : 1;
+      Object.entries(pkgMap || {}).forEach(([pkgIdStr, qty]) => {
+        const pkgId = Number(pkgIdStr);
+        if ((qty as number) > 0) {
+          const extraRiceQty = matrixAddons[sectionName]?.[pkgId] || 0;
+          const itemRemark = [
+            extraRiceQty > 0 ? `加白饭 ${extraRiceQty} 份` : '',
+            remark ? remark : ''
+          ].filter(Boolean).join(' | ');
 
-        return {
-          delivery_site_id: selectedSiteId!,
-          meal_section_id: actualSectionId,
-          customer_package_id: chosenPkgId,
-          quantity: qty as number,
-          remark: itemRemark
-        };
+          items.push({
+            delivery_site_id: selectedSiteId!,
+            meal_section_id: actualSectionId,
+            customer_package_id: pkgId,
+            quantity: qty as number,
+            remark: itemRemark
+          });
+        }
       });
+    });
 
     if (items.length === 0) {
       message.error(labels.msgSelectAtLeastOne);
@@ -285,14 +278,7 @@ export const MatrixOrder: React.FC = () => {
         items: items
       });
       message.success(labels.msgSuccess);
-      const resetData = { ...matrixData };
-      Object.keys(resetData).forEach(key => resetData[key] = 0);
-      setMatrixData(resetData);
-
-      const resetAddons = { ...matrixAddons };
-      Object.keys(resetAddons).forEach(key => resetAddons[key] = 0);
-      setMatrixAddons(resetAddons);
-
+      handleClearOrder();
       setRemark('');
     } catch (err: any) {
       message.error(err.response?.data?.detail || 'Error');
@@ -301,21 +287,32 @@ export const MatrixOrder: React.FC = () => {
     }
   };
 
-  const totalPortions = Object.entries(matrixData).reduce((sum, [sectionName, qty]) => {
-    const sectionPkgs = getAvailablePackagesForSection(sectionName);
-    return sum + (sectionPkgs.length > 0 ? (qty as number) : 0);
+  // 计算总份数
+  const totalPortions = Object.values(matrixData).reduce((sum, pkgMap) => {
+    const sectionSum = Object.values(pkgMap || {}).reduce((s, q) => s + (q || 0), 0);
+    return sum + sectionSum;
   }, 0);
 
-  const activeItemsCount = Object.entries(matrixData).filter(([sectionName, qty]) => {
-    const sectionPkgs = getAvailablePackagesForSection(sectionName);
-    return (qty as number) > 0 && sectionPkgs.length > 0;
-  }).length;
+  // 获取购物车已选中的明细列表
+  const activeCartItems: Array<{ sectionName: string; pkg: any; qty: number; extraRice: number }> = [];
+  dbMealSections.forEach((sec: any) => {
+    (sec.packages || []).forEach((pkg: any) => {
+      const qty = matrixData[sec.name]?.[pkg.id] || 0;
+      if (qty > 0) {
+        activeCartItems.push({
+          sectionName: sec.name,
+          pkg: pkg,
+          qty: qty,
+          extraRice: matrixAddons[sec.name]?.[pkg.id] || 0
+        });
+      }
+    });
+  });
+
+  const activeItemsCount = activeCartItems.length;
 
   // 过滤得到在后台配置了套餐、允许显示在前端的餐次列表
-  const visibleSections = Object.keys(matrixData).filter(sectionName => {
-    const sectionPkgs = getAvailablePackagesForSection(sectionName);
-    return sectionPkgs.length > 0;
-  });
+  const visibleSections = dbMealSections.filter(sec => (sec.packages || []).length > 0).map(sec => sec.name);
 
   return (
     <div style={{ maxWidth: 1280, margin: '0 auto' }}>
@@ -398,7 +395,7 @@ export const MatrixOrder: React.FC = () => {
         }}
       >
         <Row gutter={[24, 24]}>
-          <Col xs={24} sm={12}>
+          <Col xs={24} sm={12} md={8} lg={6}>
             <Space orientation="vertical" style={{ width: '100%' }} size={6}>
               <Text strong style={{ fontSize: 14, color: '#334155' }}>{labels.deliveryDate}</Text>
               <DatePicker
@@ -411,7 +408,7 @@ export const MatrixOrder: React.FC = () => {
             </Space>
           </Col>
           
-          <Col xs={24} sm={12}>
+          <Col xs={24} sm={12} md={12} lg={8}>
             <Space orientation="vertical" style={{ width: '100%' }} size={6}>
               <Text strong style={{ fontSize: 14, color: '#334155' }}>{labels.deliverySite}</Text>
               <Select
@@ -447,20 +444,18 @@ export const MatrixOrder: React.FC = () => {
           ) : (
             <Row gutter={[16, 16]}>
               {visibleSections.map((sectionName) => {
-                const qty = matrixData[sectionName];
-                const addonQty = matrixAddons[sectionName] || 0;
-                const isSelected = qty > 0;
                 const sectionPkgs = getAvailablePackagesForSection(sectionName);
-                const currentPkgId = matrixPackages[sectionName] || (sectionPkgs.length > 0 ? sectionPkgs[0].id : undefined);
+                const sectionPkgMap = matrixData[sectionName] || {};
+                const sectionTotalQty = Object.values(sectionPkgMap).reduce((a, b) => a + (b || 0), 0);
+                const isSelected = sectionTotalQty > 0;
                 
                 const matchedSecObj = dbMealSections.find(s => s.name === sectionName);
-                const allowedCategories = matchedSecObj ? (matchedSecObj.allowed_categories || []) : [];
+                const allowedCategories = matchedSecObj ? (matchedSecObj.allowed_categories || "") : "";
                 const supportsExtraRice = allowedCategories.includes("饭盒") || allowedCategories.includes("大型供餐");
 
                 return (
                   <Col xs={24} sm={12} key={sectionName}>
                     <Card
-                      hoverable
                       style={{
                         borderRadius: 16,
                         border: isSelected ? '2px solid #10b981' : '1px solid #e2e8f0',
@@ -470,16 +465,11 @@ export const MatrixOrder: React.FC = () => {
                         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)'
                       }}
                       styles={{ body: { padding: 20 } }}
-                      onClick={() => {
-                        if (!isSelected && !isBlocked && !(isYilian && isSunday)) {
-                          setMatrixData({ ...matrixData, [sectionName]: 1 });
-                        }
-                      }}
                     >
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, borderBottom: '1px solid #e2e8f0', paddingBottom: 10 }}>
                         <div>
                           <Text strong style={{ fontSize: 16, color: '#0f172a', display: 'block' }}>{translateMealSection(sectionName)}</Text>
-                          <Text type="secondary" style={{ fontSize: 12 }}>{qty > 0 ? `${labels.orderedCount} ${qty} ${labels.portions}` : labels.noOrder}</Text>
+                          <Text type="secondary" style={{ fontSize: 12 }}>{sectionTotalQty > 0 ? `${labels.orderedCount} ${sectionTotalQty} ${labels.portions}` : labels.noOrder}</Text>
                         </div>
                         
                         {isSelected && (
@@ -487,100 +477,125 @@ export const MatrixOrder: React.FC = () => {
                         )}
                       </div>
 
-                      <div style={{ marginBottom: 16 }} onClick={(e) => e.stopPropagation()}>
-                        <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 6, color: '#64748b', fontWeight: 'bold' }}>
-                          {labels.selectTemplate}
-                        </Text>
-                        <Select
-                          size="middle"
-                          style={{ width: '100%' }}
-                          styles={{ popup: { root: { borderRadius: 10 } } }}
-                          value={currentPkgId}
-                          onChange={(val) => setMatrixPackages({ ...matrixPackages, [sectionName]: val })}
-                          disabled={isBlocked || (isYilian && isSunday)}
-                        >
-                          {sectionPkgs.map((p) => (
-                            <Option key={p.id} value={p.id}>{translatePackageTemplateName(p.name)}</Option>
-                          ))}
-                        </Select>
-                      </div>
-
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} onClick={(e) => e.stopPropagation()}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <Text style={{ fontSize: 13, color: '#475569' }}>{labels.orderPax}</Text>
+                      {/* 展示该餐次下允许的所有套餐供客人分别独立加减数量 */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                        {sectionPkgs.map((pkg: any) => {
+                          const qty = matrixData[sectionName]?.[pkg.id] || 0;
+                          const addonQty = matrixAddons[sectionName]?.[pkg.id] || 0;
                           
-                          <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '3px 6px', borderRadius: 20 }}>
-                            <Button
-                              type="text"
-                              shape="circle"
-                              size="small"
-                              disabled={qty <= 0 || isBlocked || (isYilian && isSunday)}
-                              icon={<MinusOutlined style={{ fontSize: 12, color: qty > 0 ? '#0f172a' : '#94a3b8' }} />}
-                              onClick={() => setMatrixData({ ...matrixData, [sectionName]: Math.max(0, qty - 1) })}
-                              style={{ width: 28, height: 28, background: qty > 0 ? '#ffffff' : 'transparent', boxShadow: qty > 0 ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
-                            />
-                            
-                            <InputNumber
-                              min={0}
-                              max={9999}
-                              variant="borderless"
-                              controls={false}
-                              value={qty}
-                              onChange={(val) => setMatrixData({ ...matrixData, [sectionName]: val || 0 })}
-                              disabled={isBlocked || (isYilian && isSunday)}
-                              style={{ width: 48, textAlign: 'center', fontWeight: 'bold', fontSize: 15, background: 'transparent' }}
-                            />
-                            
-                            <Button
-                              type="text"
-                              shape="circle"
-                              size="small"
-                              disabled={isBlocked || (isYilian && isSunday)}
-                              icon={<PlusOutlined style={{ fontSize: 12, color: '#0f172a' }} />}
-                              onClick={() => setMatrixData({ ...matrixData, [sectionName]: qty + 1 })}
-                              style={{ width: 28, height: 28, background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                            />
-                          </div>
-                        </div>
+                          const updatePkgQty = (newVal: number) => {
+                            setMatrixData(prev => ({
+                              ...prev,
+                              [sectionName]: {
+                                ...(prev[sectionName] || {}),
+                                [pkg.id]: Math.max(0, newVal)
+                              }
+                            }));
+                          };
 
-                        {supportsExtraRice && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 8 }}>
-                            <Text style={{ fontSize: 13, color: '#475569' }}>{labels.extraRice}</Text>
-                            
-                            <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
-                              <Button
-                                type="text"
-                                shape="circle"
-                                size="small"
-                                disabled={addonQty <= 0 || isBlocked || (isYilian && isSunday)}
-                                icon={<MinusOutlined style={{ fontSize: 10, color: addonQty > 0 ? '#0f172a' : '#94a3b8' }} />}
-                                onClick={() => setMatrixAddons({ ...matrixAddons, [sectionName]: Math.max(0, addonQty - 1) })}
-                                style={{ width: 24, height: 24, background: addonQty > 0 ? '#ffffff' : 'transparent', boxShadow: addonQty > 0 ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
-                              />
-                              
-                              <InputNumber
-                                min={0}
-                                max={999}
-                                variant="borderless"
-                                controls={false}
-                                value={addonQty}
-                                onChange={(val) => setMatrixAddons({ ...matrixAddons, [sectionName]: val || 0 })}
-                                disabled={isBlocked || (isYilian && isSunday)}
-                                style={{ width: 36, textAlign: 'center', fontWeight: 'bold', fontSize: 13, background: 'transparent' }}
-                              />
-                              
-                              <Button
-                                type="text"
-                                shape="circle"
-                                size="small"
-                                disabled={isBlocked || (isYilian && isSunday)}
-                                icon={<PlusOutlined style={{ fontSize: 10, color: '#0f172a' }} />}
-                                onClick={() => setMatrixAddons({ ...matrixAddons, [sectionName]: addonQty + 1 })}
-                                style={{ width: 24, height: 24, background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
-                              />
+                          const updateAddonQty = (newVal: number) => {
+                            setMatrixAddons(prev => ({
+                              ...prev,
+                              [sectionName]: {
+                                ...(prev[sectionName] || {}),
+                                [pkg.id]: Math.max(0, newVal)
+                              }
+                            }));
+                          };
+
+                          return (
+                            <div 
+                              key={pkg.id} 
+                              style={{ 
+                                background: qty > 0 ? '#ffffff' : '#f8fafc', 
+                                border: qty > 0 ? '1px solid #10b981' : '1px solid #e2e8f0', 
+                                borderRadius: 12, 
+                                padding: 12 
+                              }}
+                            >
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                                <div style={{ minWidth: 0, flex: 1, paddingRight: 8 }}>
+                                  <Text strong style={{ fontSize: 14, color: '#1e293b', display: 'block' }}>
+                                    {translatePackageTemplateName(pkg.name)}
+                                  </Text>
+                                  <Tag color="blue" style={{ fontSize: 11, marginTop: 2 }}>{pkg.category}</Tag>
+                                </div>
+
+                                <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
+                                  <Button
+                                    type="text"
+                                    shape="circle"
+                                    size="small"
+                                    disabled={qty <= 0 || isBlocked || (isYilian && isSunday)}
+                                    icon={<MinusOutlined style={{ fontSize: 11, color: qty > 0 ? '#0f172a' : '#94a3b8' }} />}
+                                    onClick={() => updatePkgQty(qty - 1)}
+                                    style={{ width: 26, height: 26, background: qty > 0 ? '#ffffff' : 'transparent', boxShadow: qty > 0 ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
+                                  />
+                                  
+                                  <InputNumber
+                                    min={0}
+                                    max={9999}
+                                    variant="borderless"
+                                    controls={false}
+                                    value={qty}
+                                    onChange={(val) => updatePkgQty(val || 0)}
+                                    disabled={isBlocked || (isYilian && isSunday)}
+                                    style={{ width: 44, textAlign: 'center', fontWeight: 'bold', fontSize: 14, background: 'transparent' }}
+                                  />
+                                  
+                                  <Button
+                                    type="text"
+                                    shape="circle"
+                                    size="small"
+                                    disabled={isBlocked || (isYilian && isSunday)}
+                                    icon={<PlusOutlined style={{ fontSize: 11, color: '#0f172a' }} />}
+                                    onClick={() => updatePkgQty(qty + 1)}
+                                    style={{ width: 26, height: 26, background: '#ffffff', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }}
+                                  />
+                                </div>
+                              </div>
+
+                              {supportsExtraRice && (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 6, marginTop: 6 }}>
+                                  <Text style={{ fontSize: 12, color: '#64748b' }}>{labels.extraRice}</Text>
+                                  
+                                  <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
+                                    <Button
+                                      type="text"
+                                      shape="circle"
+                                      size="small"
+                                      disabled={addonQty <= 0 || isBlocked || (isYilian && isSunday)}
+                                      icon={<MinusOutlined style={{ fontSize: 9, color: addonQty > 0 ? '#0f172a' : '#94a3b8' }} />}
+                                      onClick={() => updateAddonQty(addonQty - 1)}
+                                      style={{ width: 22, height: 22, background: addonQty > 0 ? '#ffffff' : 'transparent' }}
+                                    />
+                                    
+                                    <InputNumber
+                                      min={0}
+                                      max={999}
+                                      variant="borderless"
+                                      controls={false}
+                                      value={addonQty}
+                                      onChange={(val) => updateAddonQty(val || 0)}
+                                      disabled={isBlocked || (isYilian && isSunday)}
+                                      style={{ width: 32, textAlign: 'center', fontWeight: 'bold', fontSize: 12, background: 'transparent' }}
+                                    />
+                                    
+                                    <Button
+                                      type="text"
+                                      shape="circle"
+                                      size="small"
+                                      disabled={isBlocked || (isYilian && isSunday)}
+                                      icon={<PlusOutlined style={{ fontSize: 9, color: '#0f172a' }} />}
+                                      onClick={() => updateAddonQty(addonQty + 1)}
+                                      style={{ width: 22, height: 22, background: '#ffffff' }}
+                                    />
+                                  </div>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
                     </Card>
                   </Col>
@@ -623,53 +638,41 @@ export const MatrixOrder: React.FC = () => {
               </div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20, maxHeight: 280, overflowY: 'auto', paddingRight: 4 }}>
-                {Object.entries(matrixData)
-                  .filter(([sectionName, qty]) => {
-                    const sectionPkgs = getAvailablePackagesForSection(sectionName);
-                    return (qty as number) > 0 && sectionPkgs.length > 0;
-                  })
-                  .map(([sectionName, qty]) => {
-                    const sectionPkgs = getAvailablePackagesForSection(sectionName);
-                    const pkgId = matrixPackages[sectionName] || (sectionPkgs.length > 0 ? sectionPkgs[0].id : undefined);
-                    const pkg = sectionPkgs.find((p: any) => p.id === pkgId);
-                    const extraRiceQty = matrixAddons[sectionName] || 0;
-                    
-                    return (
-                      <div 
-                        key={sectionName} 
-                        style={{ 
-                          display: 'flex', 
-                          flexDirection: 'column',
-                          gap: 6,
-                          background: '#f8fafc', 
-                          padding: '12px 14px', 
-                          borderRadius: 12, 
-                          border: '1px solid #f1f5f9' 
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ minWidth: 0, flex: 1 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
-                              <Text strong style={{ fontSize: 14, color: '#1e293b' }}>{translateMealSection(sectionName)}</Text>
-                            </div>
-                            <Text type="secondary" style={{ fontSize: 11, display: 'block', color: '#64748b', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                              {pkg ? translatePackageTemplateName(pkg.template_name) : labels.defaultPkg}
-                            </Text>
-                          </div>
-                          <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: 20, fontSize: 13, fontWeight: 'bold', minWidth: 60, textAlign: 'center' }}>
-                            {qty as number} {labels.pax}
-                          </span>
+                {activeCartItems.map((item, idx) => (
+                  <div 
+                    key={idx} 
+                    style={{ 
+                      display: 'flex', 
+                      flexDirection: 'column',
+                      gap: 6,
+                      background: '#f8fafc', 
+                      padding: '12px 14px', 
+                      borderRadius: 12, 
+                      border: '1px solid #f1f5f9' 
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                          <Text strong style={{ fontSize: 14, color: '#1e293b' }}>{translateMealSection(item.sectionName)}</Text>
                         </div>
-
-                        {extraRiceQty > 0 && (
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>
-                            <Text style={{ fontSize: 12, color: '#b45309' }}>{labels.extraRiceShort}</Text>
-                            <Text strong style={{ fontSize: 12, color: '#b45309' }}>+{extraRiceQty} {labels.portions}</Text>
-                          </div>
-                        )}
+                        <Text type="secondary" style={{ fontSize: 12, display: 'block', color: '#64748b', textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                          {translatePackageTemplateName(item.pkg.name)}
+                        </Text>
                       </div>
-                    );
-                  })}
+                      <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: 20, fontSize: 13, fontWeight: 'bold', minWidth: 60, textAlign: 'center' }}>
+                        {item.qty} {labels.pax}
+                      </span>
+                    </div>
+
+                    {item.extraRice > 0 && (
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>
+                        <Text style={{ fontSize: 12, color: '#b45309' }}>{labels.extraRiceShort}</Text>
+                        <Text strong style={{ fontSize: 12, color: '#b45309' }}>+{item.extraRice} {labels.portions}</Text>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
             )}
 

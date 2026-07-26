@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp } from 'antd';
+import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp, Result } from 'antd';
+
 import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
   FormOutlined, GlobalOutlined, LogoutOutlined, DashboardOutlined,
   FileTextOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined
+  MenuFoldOutlined, MenuUnfoldOutlined, AuditOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import './i18n';
@@ -23,6 +24,7 @@ import { MatrixOrder } from './pages/customer/MatrixOrder';
 import { OrderHistory } from './pages/customer/WeeklyOrder';
 import { DeliveryOrders } from './pages/customer/DeliveryOrders';
 import { MealSectionsManagement } from './pages/admin/MealSectionsManagement';
+import { AuditLog } from './pages/admin/AuditLog';
 
 const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
@@ -87,6 +89,7 @@ export const App: React.FC = () => {
     { key: 'mealSections', icon: <OrderedListOutlined />, label: t('nav.mealSections') },
     { key: 'invoices', icon: <FileTextOutlined />, label: t('nav.invoices') },
     ...(isSuperadmin ? [{ key: 'staff', icon: <TeamOutlined />, label: t('nav.staff') }] : []),
+    ...(isSuperadmin ? [{ key: 'auditLog', icon: <AuditOutlined />, label: t('nav.auditLog') }] : []),
   ];
 
   const customerMenuItems = [
@@ -185,10 +188,22 @@ export const App: React.FC = () => {
                 {activeMenu === 'clientMenuLibrary' && <ClientMenuLibrary />}
                 {activeMenu === 'mealSections' && <MealSectionsManagement />}
                 {activeMenu === 'invoices' && <InvoiceManagement />}
-                {activeMenu === 'staff' && <StaffManagement />}
+                {activeMenu === 'staff' && (
+                  isSuperadmin ? <StaffManagement /> : (
+                    <Card style={{ borderRadius: 12, marginTop: 24, textAlign: 'center' }}>
+                      <Result
+                        status="403"
+                        title="403"
+                        subTitle={i18n.language === 'en' ? 'Access Denied: Only Superadmin can access Staff Management.' : '权限不足：只有超级管理员 (superadmin) 才有权进入与管理员工后台。'}
+                      />
+                    </Card>
+                  )
+                )}
                 {activeMenu === 'matrixOrder' && <MatrixOrder />}
+
                 {activeMenu === 'orderHistory' && <OrderHistory onEditOrder={handleEditOrder} />}
                 {activeMenu === 'deliveryOrders' && <DeliveryOrders />}
+                {activeMenu === 'auditLog' && isSuperadmin && <AuditLog />}
               </div>
             </Content>
             <Footer style={{ textAlign: 'left', color: '#64748b', fontSize: 11, background: 'transparent', padding: '16px 24px', letterSpacing: '0.5px' }}>

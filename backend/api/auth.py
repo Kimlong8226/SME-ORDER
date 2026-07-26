@@ -1,8 +1,10 @@
 import hashlib
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
-from jose import jwt
+from typing import Optional
+from jose import jwt, JWTError
 
 from database import get_db
 from model.models import StaffUser, CustomerUser, Customer
@@ -14,7 +16,35 @@ SECRET_KEY = "central_kitchen_secret_key_antigravity_2026"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24小时
 
+security = HTTPBearer(auto_error=False)
+
+def get_current_user_payload(credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="未提供身份认证 Token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    try:
+        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
+        return payload
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="无效或过期的 Token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+def require_superadmin(payload: dict = Depends(get_current_user_payload)):
+    if payload.get("user_type") != "staff" or payload.get("role") != "superadmin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="权限不足：只有超级管理员 (superadmin) 才有权访问员工管理后台"
+        )
+    return payload
+
 def get_password_hash(password: str) -> str:
+
     """
     使用 SHA256 算法生成稳健密码哈希
     """

@@ -82,7 +82,10 @@ export const CustomerManagement: React.FC = () => {
     setLoading(true);
     try {
       const res = await axiosInstance.get('/admin/customers');
-      setCustomers(res.data || []);
+      const sortedData = (res.data || []).sort((a: any, b: any) => 
+        (a.company_name || '').localeCompare(b.company_name || '')
+      );
+      setCustomers(sortedData);
     } catch (err) {
       message.error(labels.loadFailed);
     } finally {

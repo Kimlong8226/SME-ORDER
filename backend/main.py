@@ -6,7 +6,7 @@ from datetime import date, timedelta
 from database import engine, Base, SessionLocal
 from model.models import (
     StaffUser, Customer, CustomerUser, DeliverySite, PackageTemplate,
-    MealSection, Order, OrderDetail, CustomerPackage, Invoice
+    MealSection, Order, OrderDetail, CustomerPackage, Invoice, AuditLog
 )
 from api import auth, admin, order
 from api.auth import get_password_hash
@@ -17,11 +17,13 @@ app = FastAPI(
     version="2.0.0"
 )
 
+Base.metadata.create_all(bind=engine)
+
 from fastapi.responses import JSONResponse
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,6 +49,15 @@ app.include_router(admin.router)
 app.include_router(order.router)
 
 def seed_data():
+    # 自动自愈补全数据库字段
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text('ALTER TABLE payment_records ADD COLUMN IF NOT EXISTS allocated_dos_text TEXT;'))
+            conn.commit()
+    except Exception as e:
+        print("PaymentRecord schema migration note:", e)
+
     db = SessionLocal()
     try:
         sections = [
@@ -171,8 +182,8 @@ def seed_data():
                     contact_name=cdata["contact"],
                     billing_cycle=cdata["billing_cycle"],
                     company_address=f"Johor Bahru, Malaysia ({cdata['company_name']} Headquarters)",
-                    bank_name="Maybank",
-                    bank_account_no="8009182736"
+                    bank_name="CIMB BANK BERHAD",
+                    bank_account_no="8606211195"
                 )
                 db.add(cust)
                 db.commit()

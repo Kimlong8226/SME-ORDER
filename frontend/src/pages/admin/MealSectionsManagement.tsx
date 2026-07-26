@@ -46,11 +46,11 @@ const { Title, Text, Paragraph } = Typography;
 
 // 常用餐次预设模版，方便用户一键极速快捷创建
 const PRESET_TEMPLATES = [
-  { name: '早班早餐', sort_order: 10, categories: ['饭盒', '早点'], icon: '🌅', color: '#f59e0b' },
-  { name: '早班午餐', sort_order: 20, categories: ['饭盒', '大型供餐', 'Buffet'], icon: '☀️', color: '#10b981' },
-  { name: '下午茶点', sort_order: 30, categories: ['茶点', 'Buffet'], icon: '☕', color: '#8b5cf6' },
-  { name: '晚班晚餐', sort_order: 40, categories: ['饭盒', 'Buffet'], icon: '🌆', color: '#ec4899' },
-  { name: '深夜宵夜', sort_order: 50, categories: ['饭盒', '宵夜'], icon: '🌙', color: '#6366f1' }
+  { name: '早班早餐', sort_order: 10, categories: ['饭盒', '早点'] },
+  { name: '早班午餐', sort_order: 20, categories: ['饭盒', '大型供餐', 'Buffet'] },
+  { name: '下午茶点', sort_order: 30, categories: ['茶点', 'Buffet'] },
+  { name: '晚班晚餐', sort_order: 40, categories: ['饭盒', 'Buffet'] },
+  { name: '深夜宵夜', sort_order: 50, categories: ['饭盒', '宵夜'] }
 ];
 
 // 常用套餐分类推荐标签
@@ -69,16 +69,16 @@ export const MealSectionsManagement: React.FC = () => {
     colCategories: isEn ? 'Bound Categories' : '关联分类',
     colAction: isEn ? 'Actions' : '操作',
     btnAdd: isEn ? 'Add Meal Shift' : '新增餐次',
-    btnPresets: isEn ? 'Quick Add Presets' : '一键预设餐次',
+    btnPresets: isEn ? 'Quick Add Presets' : '快捷预设',
     btnEdit: isEn ? 'Edit' : '编辑',
     btnDelete: isEn ? 'Delete' : '删除',
-    modalAddTitle: isEn ? 'Add New Meal Shift' : '✨ 添加餐次定义',
-    modalEditTitle: isEn ? 'Edit Meal Shift' : '✏️ 修改餐次配置',
+    modalAddTitle: isEn ? 'Add New Meal Shift' : '新增餐次',
+    modalEditTitle: isEn ? 'Edit Meal Shift' : '修改餐次',
     formName: isEn ? 'Shift Name' : '餐次名称',
-    formSort: isEn ? 'Display Order' : '排序权重 (数字越小越靠前)',
-    formCategories: isEn ? 'Allowed Categories' : '关联套餐分类',
-    searchPlaceholder: isEn ? 'Search shift name or category...' : '搜索餐次名称、分类关键字...',
-    confirmDelete: isEn ? 'Are you sure you want to delete this shift?' : '确定要删除该餐次定义吗？已绑定的历史订单不受影响。',
+    formSort: isEn ? 'Display Order' : '排序',
+    formCategories: isEn ? 'Allowed Categories' : '套餐分类',
+    searchPlaceholder: isEn ? 'Search shift name or category...' : '搜索餐次或分类...',
+    confirmDelete: isEn ? 'Are you sure you want to delete this shift?' : '确定删除该餐次？',
     saveSuccess: isEn ? 'Saved successfully!' : '餐次配置已成功保存！',
     deleteSuccess: isEn ? 'Deleted successfully!' : '已成功删除该餐次！',
     loadFailed: isEn ? 'Failed to load meal shifts' : '获取餐次列表失败',
@@ -94,9 +94,7 @@ export const MealSectionsManagement: React.FC = () => {
   
   const [form] = Form.useForm();
   
-  // 监听 Form 中的表单值，用于模态框内的实时预览
   const formCategoriesValue = Form.useWatch('allowed_categories', form);
-  const formNameValue = Form.useWatch('name', form);
 
   // 获取餐次列表数据
   const fetchSections = async () => {
@@ -254,16 +252,6 @@ export const MealSectionsManagement: React.FC = () => {
     } catch (err) {
       message.error('调整排序失败');
     }
-  };
-
-  // 智能识别餐次图标与调色盘
-  const getShiftTheme = (name: string) => {
-    if (/早/i.test(name)) return { icon: '🌅', tagColor: 'gold', badgeBg: '#fef3c7', textColor: '#b45309' };
-    if (/午/i.test(name)) return { icon: '☀️', tagColor: 'green', badgeBg: '#dcfce7', textColor: '#15803d' };
-    if (/茶|下午/i.test(name)) return { icon: '☕', tagColor: 'purple', badgeBg: '#f3e8ff', textColor: '#7e22ce' };
-    if (/晚/i.test(name)) return { icon: '🌆', tagColor: 'volcano', badgeBg: '#ffedd5', textColor: '#c2410c' };
-    if (/夜|宵/i.test(name)) return { icon: '🌙', tagColor: 'geekblue', badgeBg: '#e0e7ff', textColor: '#4338ca' };
-    return { icon: '🍽️', tagColor: 'blue', badgeBg: '#e0f2fe', textColor: '#0369a1' };
   };
 
   // 统计面板指标计算
@@ -669,46 +657,6 @@ export const MealSectionsManagement: React.FC = () => {
               })}
             </Space>
           </div>
-
-          {/* 实时下单效果预览卡片 */}
-          <Card
-            variant="borderless"
-            style={{
-              background: '#f8fafc',
-              borderRadius: 12,
-              border: '1px dashed #cbd5e1',
-              padding: 0
-            }}
-            styles={{ body: { padding: 12 } }}
-          >
-            <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 8 }}>
-              👀 前台订餐页面效果预览：
-            </Text>
-            <div style={{ background: '#ffffff', padding: '10px 14px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-              <Space align="center" style={{ width: '100%', justifyContent: 'space-between' }}>
-                <Space>
-                  <span style={{ fontSize: 18 }}>{getShiftTheme(formNameValue || '').icon}</span>
-                  <Text strong style={{ fontSize: 14 }}>{formNameValue || '餐次名称预览'}</Text>
-                </Space>
-                <Tag color="orange" style={{ borderRadius: 10 }}>#{form.getFieldValue('sort_order') || 10}</Tag>
-              </Space>
-
-              <div style={{ marginTop: 8 }}>
-                {formCategoriesValue && formCategoriesValue.length > 0 ? (
-                  <Space size={[4, 4]} wrap>
-                    <Text type="secondary" style={{ fontSize: 11 }}>可选套餐:</Text>
-                    {formCategoriesValue.map((c: string, idx: number) => (
-                      <Tag key={idx} color="blue" style={{ fontSize: 11, borderRadius: 10 }}>{c}</Tag>
-                    ))}
-                  </Space>
-                ) : (
-                  <Text type="danger" style={{ fontSize: 11 }}>
-                    ⚠️ 未关联任何套餐分类，前台下单页将隐去该餐次选项。
-                  </Text>
-                )}
-              </div>
-            </div>
-          </Card>
         </Form>
       </Modal>
     </div>

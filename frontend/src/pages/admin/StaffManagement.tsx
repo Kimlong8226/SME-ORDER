@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { App, Card, Table, Button, Modal, Form, Input, Select, Tag, Typography } from 'antd';
-import { PlusOutlined, UserOutlined, DeleteOutlined } from '@ant-design/icons';
+import { App, Card, Table, Button, Modal, Form, Input, Select, Tag, Typography, Result } from 'antd';
+import { PlusOutlined, UserOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
 
@@ -11,6 +11,11 @@ export const StaffManagement: React.FC = () => {
   const { message } = App.useApp();
   const { t, i18n } = useTranslation();
   const isEn = i18n.language === 'en';
+
+  // 校验当前用户角色权限 (仅限 Superadmin)
+  const userRaw = localStorage.getItem('user_info');
+  const currentUser = userRaw ? JSON.parse(userRaw) : null;
+  const isSuperadmin = currentUser?.role === 'superadmin';
 
   const labels = {
     title: isEn ? 'Staff Management' : '员工管理后台',
@@ -54,12 +59,13 @@ export const StaffManagement: React.FC = () => {
   const [form] = Form.useForm();
 
   const fetchStaff = async () => {
+    if (!isSuperadmin) return;
     setLoading(true);
     try {
       const res = await axiosInstance.get('/admin/staff');
       setStaffList(res.data || []);
-    } catch (err) {
-      message.error(labels.loadFailed);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.loadFailed);
     } finally {
       setLoading(false);
     }
@@ -68,6 +74,19 @@ export const StaffManagement: React.FC = () => {
   useEffect(() => {
     fetchStaff();
   }, []);
+
+  if (!isSuperadmin) {
+    return (
+      <Card style={{ borderRadius: 12, marginTop: 24, textAlign: 'center', padding: '24px 0' }}>
+        <Result
+          status="403"
+          title="403"
+          subTitle={isEn ? 'Access Denied: Only Superadmin can access Staff Management.' : '权限不足：只有超级管理员 (superadmin) 才有权进入与管理员工后台。'}
+        />
+      </Card>
+    );
+  }
+
 
   const handleCreateStaff = async (values: any) => {
     try {

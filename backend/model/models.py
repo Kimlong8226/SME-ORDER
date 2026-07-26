@@ -3,6 +3,13 @@ from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
 
+# NOTE: 审计日志操作类型常量
+AUDIT_ACTION_ORDER_CREATE = "ORDER_CREATE"
+AUDIT_ACTION_ORDER_UPDATE = "ORDER_UPDATE"
+AUDIT_ACTION_ORDER_DELETE = "ORDER_DELETE"
+AUDIT_ACTION_ORDER_STATUS_CHANGE = "ORDER_STATUS_CHANGE"
+AUDIT_ACTION_CUSTOMER_UPDATE = "CUSTOMER_UPDATE"
+
 class StaffUser(Base):
     """
     内部工作账号（包含超级管理员 Superadmin 和普通员工 Staff）
@@ -44,6 +51,8 @@ class Customer(Base):
     packages = relationship("CustomerPackage", back_populates="customer", cascade="all, delete-orphan")
     addons = relationship("CustomerAddon", back_populates="customer", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="customer")
+    payments = relationship("PaymentRecord", back_populates="customer", cascade="all, delete-orphan")
+
 
 class CustomerUser(Base):
     """
@@ -210,3 +219,55 @@ class Invoice(Base):
     total_amount = Column(Float, nullable=False, default=0.0)
     payment_status = Column(String(20), default="unpaid")  # unpaid | paid | overdue
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class AuditLog(Base):
+    """
+    系统审计日志
+    记录所有关键业务操作：订单创建/修改/删除/状态变更、客户信息修改等
+    """
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    # 操作类型：ORDER_CREATE / ORDER_UPDATE / ORDER_DELETE / ORDER_STATUS_CHANGE / CUSTOMER_UPDATE
+    action_type = Column(String(50), nullable=False, index=True)
+
+    # 目标对象（订单 ID 或客户 ID 等）
+    target_id = Column(Integer, nullable=True, index=True)
+
+    # 人类可读的目标标签，如 "KM-26/07/26/002" 或客户公司名称
+    target_label = Column(String(200), nullable=True)
+
+    # 操作描述（供前端直接展示）
+    description = Column(Text, nullable=False)
+
+    # 操作人信息
+    operator_name = Column(String(100), nullable=False)
+    operator_role = Column(String(20), nullable=False)  # superadmin | staff | customer
+
+    # 可选：序列化 JSON 字符串存储变更快照（如旧状态 -> 新状态）
+    extra_data = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+
+class PaymentRecord(Base):
+    """
+    客户还款/打款记录
+    用于核销客户的 DO 应付金额，计算实际未结清欠款 (Outstanding Balance)
+    """
+    __tablename__ = "payment_records"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
+    payment_date = Column(Date, nullable=False, index=True)
+    amount = Column(Float, nullable=False, default=0.0)
+    payment_method = Column(String(50), default="Bank Transfer")  # Bank Transfer | Cheque | Cash | Other
+    reference_no = Column(String(100), nullable=True)  # 汇款参考号/支票号
+    allocated_dos_text = Column(Text, nullable=True)  # 存储关联核销的 DO 编号字符串，例如 "DO-20260726-0001, DO-20260726-0002"
+    remark = Column(Text, nullable=True)  # 备注说明
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    customer = relationship("Customer", back_populates="payments")
+

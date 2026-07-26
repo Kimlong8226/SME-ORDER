@@ -38,11 +38,11 @@ export const OrderCalendar: React.FC = () => {
     btnClose: isEn ? 'Close' : '关闭',
     btnPrintAction: isEn ? 'Print Order Delivery Voucher' : '一键调用打印机 (Print Order Delivery Voucher)',
     colCustomer: isEn ? 'Customer Company' : '客户公司',
-    colSite: isEn ? 'Delivery Site' : '送餐分点 / 地点 (Delivery Site)',
-    colMeal: isEn ? 'Meal' : '餐次 (Meal)',
-    colPkg: isEn ? 'Package' : '套餐内容 (Package)',
-    colQty: isEn ? 'Quantity (Qty)' : '预订数量 (Qty)',
-    colRemark: isEn ? 'Remarks (Remark)' : '单项备注 (Remark)',
+    colSite: isEn ? 'Delivery Site' : '送餐分点 / 地点',
+    colMeal: isEn ? 'Meal' : '餐次',
+    colPkg: isEn ? 'Package' : '套餐内容',
+    colQty: isEn ? 'Quantity (Qty)' : '预订数量',
+    colRemark: isEn ? 'Remarks (Remark)' : '单项备注',
   };
 
   const [calendarData, setCalendarData] = useState<any>({});
@@ -215,42 +215,42 @@ export const OrderCalendar: React.FC = () => {
     ...(!selectedFilterCustomer ? [{
       title: labels.colCustomer,
       dataIndex: 'company_name',
-      width: 150,
+      width: 200,
       render: (text: any) => <Text strong style={{ whiteSpace: 'nowrap', fontSize: 14 }}>{text}</Text>
     }] : []),
     {
       title: labels.colSite,
       dataIndex: 'site_name',
-      width: 220,
+      width: 200,
       render: (text: any, record: any) => (
-        <div style={{ minWidth: 180 }}>
+        <div style={{ minWidth: 160 }}>
           <Text strong style={{ fontSize: 15, whiteSpace: 'nowrap', display: 'block' }}>{text}</Text>
-          <Text type="secondary" style={{ fontSize: 12 }}><EnvironmentOutlined /> {record.address}</Text>
+          <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}><EnvironmentOutlined /> {record.address}</Text>
         </div>
       )
     },
     {
       title: labels.colMeal,
       dataIndex: 'meal_section',
-      width: 140,
+      width: 160,
       render: (text: any) => <Tag color="blue" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{translateMealSection(text)}</Tag>
     },
     {
       title: labels.colPkg,
       dataIndex: 'package_name',
-      width: 180,
-      render: (text: any) => <Text strong style={{ fontSize: 14 }}>{translatePackageTemplateName(text)}</Text>
+      width: 200,
+      render: (text: any) => <Text strong style={{ fontSize: 14, whiteSpace: 'nowrap' }}>{translatePackageTemplateName(text)}</Text>
     },
     {
       title: labels.colQty,
       dataIndex: 'quantity',
-      width: 110,
+      width: 120,
       render: (val: any) => <Text strong style={{ color: '#dc2626', fontSize: 17, whiteSpace: 'nowrap' }}>{val} {isEn ? 'pax' : '份'}</Text>
     },
     {
       title: labels.colRemark,
       dataIndex: 'remark',
-      render: (text: any) => <Text style={{ fontSize: 13 }}>{text || '-'}</Text>
+      render: (text: any) => <Text style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{text || '-'}</Text>
     },
   ];
 
@@ -271,8 +271,8 @@ export const OrderCalendar: React.FC = () => {
         title={null}
         open={printModalVisible}
         onCancel={() => setPrintModalVisible(false)}
-        width={980}
-        style={{ top: 20 }}
+        width="90vw"
+        style={{ top: 10, maxWidth: 1400 }}
         styles={{ body: { padding: 0 } }}
         footer={[
           <Button key="close" onClick={() => setPrintModalVisible(false)}>{labels.btnClose}</Button>,
@@ -287,7 +287,8 @@ export const OrderCalendar: React.FC = () => {
             <FilterOutlined style={{ fontSize: 16, color: '#dc2626' }} />
             <Text strong style={{ fontSize: 15 }}>{labels.selectCustomerPrompt}</Text>
             <Select
-              style={{ width: 320 }}
+              style={{ minWidth: 380, maxWidth: '100%' }}
+              popupMatchSelectWidth={false}
               size="large"
               placeholder={labels.selectPlaceholder}
               value={selectedFilterCustomer}
@@ -348,6 +349,7 @@ export const OrderCalendar: React.FC = () => {
               size="middle"
               columns={tableColumns}
               style={{ width: '100%' }}
+              scroll={{ x: 'max-content' }}
             />
 
             <div style={{ marginTop: 20, textAlign: 'right', paddingRight: 12 }}>

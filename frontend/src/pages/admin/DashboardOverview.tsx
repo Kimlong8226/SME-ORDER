@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { Card, Row, Col, Statistic, Typography, Button, Alert, Tag } from 'antd';
+import { Card, Row, Col, Statistic, Typography, Alert, Tag } from 'antd';
 import {
-  CalendarOutlined, UsergroupAddOutlined, AppstoreOutlined, FileTextOutlined,
-  WarningOutlined, ArrowUpOutlined, UnorderedListOutlined
+  CalendarOutlined, UsergroupAddOutlined, FileTextOutlined,
+  WarningOutlined, ArrowUpOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined
 } from '@ant-design/icons';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
@@ -34,10 +34,17 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     metricBlockedDesc: isEn ? 'Outstanding payment block active' : '欠款自动拦截已生效',
     quickNavTitle: isEn ? 'Quick Management Hub' : '快捷管理中枢',
     btnDailyOrders: isEn ? 'Daily Orders Status' : '每日订单状态看板',
+    descDailyOrders: isEn ? 'Real-time order & delivery monitor' : '订单提报与配送实时监控看板',
     btnCalendar: isEn ? 'Calendar & DO Slips' : '排单日历与送货单',
+    descCalendar: isEn ? 'Schedule view & DO exports' : '日历化排单与 DO 送货单导出',
     btnCustomers: isEn ? 'Profiles & Freeze Switch' : '客户档案与冻结开关',
-    btnPackages: isEn ? 'Custom Menus Database' : '顾客专属菜单',
-    btnBilling: isEn ? 'Billing & Invoice Statement' : '客户账单',
+    descCustomers: isEn ? 'Customer records & credit risk control' : '客户资料与风控冻结开关设置',
+    btnClientMenu: isEn ? 'Client Menu Library' : '顾客专属菜单',
+    descClientMenu: isEn ? 'Custom customer menu setup' : '客户专属菜谱与套餐搭配库',
+    btnMealSections: isEn ? 'Meal Shifts & Sections' : '餐次排班管理',
+    descMealSections: isEn ? 'Meal timing & batch options' : '餐次时段与排班批次配置',
+    btnBilling: isEn ? 'Billing & Invoice' : '客户账单与发票',
+    descBilling: isEn ? 'Billing statement & invoices' : '账单汇总明细与发票开具对账',
     riskTitle: isEn ? 'Risk Control & Alerts' : '风控与提醒',
     alertBlockedTitle: isEn ? 'Payment Outstanding Block' : '欠款拦截提示',
     alertBlockedDesc: isEn ? 'If a client exceeds their billing terms, enable [Block Ordering] in profiles to block their submissions.' : '如客户逾期未结款，请在客户档案管理中开启【冻结下单】，系统将拦截其订餐员提报。',
@@ -165,44 +172,146 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
 
       {/* 快捷导航与运营风险预警 */}
       <Row gutter={[20, 20]}>
-        <Col xs={24} lg={16}>
-          <Card title={<Title level={4} style={{ margin: 0 }}>⚡ {labels.quickNavTitle}</Title>} style={{ borderRadius: 12 }}>
+        <Col xs={24} lg={24}>
+          <Card 
+            title={
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 20 }}>⚡</span>
+                <Title level={4} style={{ margin: 0, fontWeight: 700 }}>{labels.quickNavTitle}</Title>
+              </div>
+            } 
+            style={{ borderRadius: 12, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.03)' }}
+          >
             <Row gutter={[16, 16]}>
-              <Col xs={24} sm={12} md={8}>
-                <Button type="primary" size="large" block icon={<UnorderedListOutlined />} onClick={() => onNavigate('orderStatus')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold', background: '#dc2626', borderColor: '#dc2626' }}>
-                  {labels.btnDailyOrders}
-                </Button>
+              {/* 1. 每日订单状态看板 (重点高亮) */}
+              <Col xs={12} sm={8} md={8} lg={8} xl={4}>
+                <div 
+                  className="quick-nav-item primary-card"
+                  onClick={() => onNavigate('orderStatus')}
+                >
+                  <div className="quick-nav-icon-wrapper" style={{ background: 'rgba(255, 255, 255, 0.22)', color: '#ffffff' }}>
+                    <UnorderedListOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 14, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {labels.btnDailyOrders}
+                    </div>
+                    <div style={{ fontSize: 11, opacity: 0.88, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+                      {labels.descDailyOrders}
+                    </div>
+                  </div>
+                </div>
               </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Button type="primary" ghost size="large" block icon={<CalendarOutlined />} onClick={() => onNavigate('calendar')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
-                  {labels.btnCalendar}
-                </Button>
+
+              {/* 2. 排单日历与送货单 */}
+              <Col xs={12} sm={8} md={8} lg={8} xl={4}>
+                <div 
+                  className="quick-nav-item"
+                  onClick={() => onNavigate('calendar')}
+                >
+                  <div className="quick-nav-icon-wrapper" style={{ background: '#f0fdf4', color: '#16a34a' }}>
+                    <CalendarOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {labels.btnCalendar}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+                      {labels.descCalendar}
+                    </div>
+                  </div>
+                </div>
               </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Button type="primary" ghost size="large" block icon={<UsergroupAddOutlined />} onClick={() => onNavigate('customers')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
-                  {labels.btnCustomers}
-                </Button>
+
+              {/* 3. 客户档案与冻结开关 */}
+              <Col xs={12} sm={8} md={8} lg={8} xl={4}>
+                <div 
+                  className="quick-nav-item"
+                  onClick={() => onNavigate('customers')}
+                >
+                  <div className="quick-nav-icon-wrapper" style={{ background: '#f0f9ff', color: '#0284c7' }}>
+                    <UsergroupAddOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {labels.btnCustomers}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+                      {labels.descCustomers}
+                    </div>
+                  </div>
+                </div>
               </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Button type="primary" ghost size="large" block icon={<AppstoreOutlined />} onClick={() => onNavigate('packages')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
-                  {labels.btnPackages}
-                </Button>
+
+              {/* 4. 顾客专属菜单库 */}
+              <Col xs={12} sm={8} md={8} lg={8} xl={4}>
+                <div 
+                  className="quick-nav-item"
+                  onClick={() => onNavigate('clientMenuLibrary')}
+                >
+                  <div className="quick-nav-icon-wrapper" style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
+                    <BookOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {labels.btnClientMenu}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+                      {labels.descClientMenu}
+                    </div>
+                  </div>
+                </div>
               </Col>
-              <Col xs={24} sm={12} md={8}>
-                <Button type="primary" ghost size="large" block icon={<FileTextOutlined />} onClick={() => onNavigate('invoices')} style={{ height: 'auto', minHeight: 60, whiteSpace: 'normal', fontSize: 15, fontWeight: 'bold' }}>
-                  {labels.btnBilling}
-                </Button>
+
+              {/* 5. 餐次排班管理 */}
+              <Col xs={12} sm={8} md={8} lg={8} xl={4}>
+                <div 
+                  className="quick-nav-item"
+                  onClick={() => onNavigate('mealSections')}
+                >
+                  <div className="quick-nav-icon-wrapper" style={{ background: '#fffbeb', color: '#d97706' }}>
+                    <OrderedListOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {labels.btnMealSections}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+                      {labels.descMealSections}
+                    </div>
+                  </div>
+                </div>
+              </Col>
+
+              {/* 6. 客户账单与发票 */}
+              <Col xs={12} sm={8} md={8} lg={8} xl={4}>
+                <div 
+                  className="quick-nav-item"
+                  onClick={() => onNavigate('invoices')}
+                >
+                  <div className="quick-nav-icon-wrapper" style={{ background: '#ecfdf5', color: '#059669' }}>
+                    <FileTextOutlined />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 'bold', fontSize: 14, color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {labels.btnBilling}
+                    </div>
+                    <div style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginTop: 2 }}>
+                      {labels.descBilling}
+                    </div>
+                  </div>
+                </div>
               </Col>
             </Row>
           </Card>
         </Col>
 
         <Col xs={24} lg={24}>
-          <Card title={<Title level={4} style={{ margin: 0 }}>{labels.riskTitle}</Title>} style={{ borderRadius: 12 }}>
+          <Card title={<Title level={4} style={{ margin: 0, fontWeight: 700 }}>{labels.riskTitle}</Title>} style={{ borderRadius: 12, boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.03)' }}>
             <Row gutter={[12, 12]}>
-              <Col xs={12}>
+              <Col xs={24} md={12}>
                 <Alert
-                  message={
+                  title={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <strong style={{ fontSize: 13 }}>{labels.alertBlockedTitle}</strong>
                       <span style={{ fontSize: 11, lineHeight: 1.4, color: '#854d0e' }}>{labels.alertBlockedDesc}</span>
@@ -211,12 +320,12 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                   type="warning"
                   showIcon
                   icon={<WarningOutlined />}
-                  style={{ height: '100%', padding: '8px 10px', alignItems: 'flex-start' }}
+                  style={{ height: '100%', padding: '10px 12px', alignItems: 'flex-start' }}
                 />
               </Col>
-              <Col xs={12}>
+              <Col xs={24} md={12}>
                 <Alert
-                  message={
+                  title={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <strong style={{ fontSize: 13 }}>{labels.alertPrivacyTitle}</strong>
                       <span style={{ fontSize: 11, lineHeight: 1.4, color: '#0369a1' }}>{labels.alertPrivacyDesc}</span>
@@ -224,7 +333,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
                   }
                   type="info"
                   showIcon
-                  style={{ height: '100%', padding: '8px 10px', alignItems: 'flex-start' }}
+                  style={{ height: '100%', padding: '10px 12px', alignItems: 'flex-start' }}
                 />
               </Col>
             </Row>
@@ -234,3 +343,4 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
     </div>
   );
 };
+

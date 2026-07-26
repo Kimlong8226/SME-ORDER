@@ -1,11 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime
 
 from database import get_db
-from model.models import Order, OrderDetail, Customer, CustomerUser, CustomerPackage, MealSection, DeliverySite, CustomerMealSection, PackageTemplate
+from model.models import (
+    Order, OrderDetail, Customer, CustomerUser, CustomerPackage,
+    MealSection, DeliverySite, CustomerMealSection, PackageTemplate,
+    AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE
+)
 from schema.schemas import OrderCreateMatrix, OrderResponse, OrderDetailResponse
+from api.audit_utils import write_audit_log
 
 router = APIRouter(prefix="/orders", tags=["Customer Orders"])
 
@@ -40,6 +45,7 @@ def get_customer_profile(customer_id: int, db: Session = Depends(get_db)):
 def submit_matrix_orders(
     customer_id: int,
     req: OrderCreateMatrix,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -67,76 +73,117 @@ def submit_matrix_orders(
 
     created_orders = []
 
-    for site_id, items in site_group.items():
-        # 查找当天的现有订单（如果已存在则进行更新或覆盖）
-        existing_order = db.query(Order).filter(
-            Order.customer_id == customer_id,
-            Order.delivery_site_id == site_id,
-            Order.delivery_date == req.delivery_date
-        ).first()
+    try:
+        for site_id, items in site_group.items():
+            # 校验站点归属
+            site = db.query(DeliverySite).filter(DeliverySite.id == site_id, DeliverySite.customer_id == customer_id).first()
+            if not site:
+                raise HTTPException(status_code=400, detail=f"配送站点 ID {site_id} 不存在或不属于该客户")
 
-        if existing_order:
-            # 删除旧明细重新写入（覆盖修改模式）
-            db.query(OrderDetail).filter(OrderDetail.order_id == existing_order.id).delete()
-            order = existing_order
-            order.status = "submitted"
-        else:
-            order = Order(
-                customer_id=customer_id,
-                delivery_site_id=site_id,
-                delivery_date=req.delivery_date,
-                status="submitted"
-            )
-            db.add(order)
+            # 查找当天的现有订单（如果已存在则进行更新或覆盖）
+            existing_order = db.query(Order).filter(
+                Order.customer_id == customer_id,
+                Order.delivery_site_id == site_id,
+                Order.delivery_date == req.delivery_date
+            ).first()
+
+            if existing_order:
+                # 删除旧明细重新写入（覆盖修改模式）
+                db.query(OrderDetail).filter(OrderDetail.order_id == existing_order.id).delete()
+                order = existing_order
+                order.status = "submitted"
+                is_new_order = False
+            else:
+                order = Order(
+                    customer_id=customer_id,
+                    delivery_site_id=site_id,
+                    delivery_date=req.delivery_date,
+                    status="submitted"
+                )
+                db.add(order)
+                db.commit()
+                db.refresh(order)
+                is_new_order = True
+
+            for item in items:
+                # 校验餐次存在性
+                msec = db.query(MealSection).filter(MealSection.id == item.meal_section_id).first()
+                if not msec:
+                    raise HTTPException(status_code=400, detail=f"餐次分类 ID {item.meal_section_id} 不存在")
+
+                unit_price = 0.0
+                chosen_cp_id = None
+                
+                if item.customer_package_id:
+                    # 传入的 item.customer_package_id 实际上是公共 PackageTemplate.id
+                    # 1. 查找是否存在已指派的专属协议套餐
+                    cp = db.query(CustomerPackage).filter(
+                        CustomerPackage.customer_id == customer_id,
+                        CustomerPackage.package_template_id == item.customer_package_id,
+                        CustomerPackage.is_active == True
+                    ).first()
+                    
+                    if cp:
+                        chosen_cp_id = cp.id
+                        unit_price = cp.agreement_price
+                    else:
+                        # 2. 如果之前没有开通指派，为了外键约束，我们自动开通一条默认价格的专属记录
+                        template = db.query(PackageTemplate).filter(PackageTemplate.id == item.customer_package_id).first()
+                        if template:
+                            new_cp = CustomerPackage(
+                                customer_id=customer_id,
+                                package_template_id=template.id,
+                                agreement_price=template.default_price,
+                                is_active=True,
+                                is_shown_to_customer=True
+                            )
+                            db.add(new_cp)
+                            db.commit()
+                            db.refresh(new_cp)
+                            chosen_cp_id = new_cp.id
+                            unit_price = new_cp.agreement_price
+
+                detail = OrderDetail(
+                    order_id=order.id,
+                    meal_section_id=item.meal_section_id,
+                    customer_package_id=chosen_cp_id,
+                    quantity=item.quantity,
+                    final_unit_price=unit_price,
+                    remark=item.remark
+                )
+                db.add(detail)
+
             db.commit()
             db.refresh(order)
+            created_orders.append(order)
 
-        for item in items:
-            unit_price = 0.0
-            chosen_cp_id = None
-            
-            if item.customer_package_id:
-                # 传入的 item.customer_package_id 实际上是公共 PackageTemplate.id
-                # 1. 查找是否存在已指派的专属协议套餐
-                cp = db.query(CustomerPackage).filter(
-                    CustomerPackage.customer_id == customer_id,
-                    CustomerPackage.package_template_id == item.customer_package_id,
-                    CustomerPackage.is_active == True
-                ).first()
-                
-                if cp:
-                    chosen_cp_id = cp.id
-                    unit_price = cp.agreement_price
-                else:
-                    # 2. 如果之前没有开通指派，为了外键约束，我们自动开通一条默认价格的专属记录
-                    template = db.query(PackageTemplate).filter(PackageTemplate.id == item.customer_package_id).first()
-                    if template:
-                        new_cp = CustomerPackage(
-                            customer_id=customer_id,
-                            package_template_id=template.id,
-                            agreement_price=template.default_price,
-                            is_active=True,
-                            is_shown_to_customer=True
-                        )
-                        db.add(new_cp)
-                        db.commit()
-                        db.refresh(new_cp)
-                        chosen_cp_id = new_cp.id
-                        unit_price = new_cp.agreement_price
-
-            detail = OrderDetail(
-                order_id=order.id,
-                meal_section_id=item.meal_section_id,
-                customer_package_id=chosen_cp_id,
-                quantity=item.quantity,
-                final_unit_price=unit_price,
-                remark=item.remark
-            )
-            db.add(detail)
-
+        # NOTE: 写入审计日志，记录客户下单或修改操作
+        operator_name = request.headers.get("X-Operator-Name", customer.company_name)
+        operator_role = "customer"
+        # NOTE: 新建订单无 diff；修改订单记录菜品明细已变更
+        changes = [] if is_new_order else [{"field": "菜品明细", "old": "details_changed", "new": "details_changed"}]
+        write_audit_log(
+            db=db,
+            action_type=AUDIT_ACTION_ORDER_CREATE if is_new_order else AUDIT_ACTION_ORDER_UPDATE,
+            description=(
+                f"客户创建了新订单 #{order.id}"
+                if is_new_order
+                else f"客户修改了订单 #{order.id} 的信息"
+            ),
+            operator_name=operator_name,
+            operator_role=operator_role,
+            target_id=order.id,
+            target_label=f"{customer.company_name} | {req.delivery_date}",
+            extra_data={"changes": changes}
+        )
         db.commit()
-        db.refresh(order)
-        created_orders.append(order)
+
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"订单提报失败: {str(e)}")
 
     # 转换响应格式
     response_list = []

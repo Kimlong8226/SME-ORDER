@@ -1,7 +1,12 @@
 import os
+import sys
+import io
 import random
 from datetime import datetime, timedelta
 from fastapi.testclient import TestClient
+
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8')
 
 from main import app
 from database import SessionLocal
