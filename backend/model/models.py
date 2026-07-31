@@ -9,6 +9,12 @@ AUDIT_ACTION_ORDER_UPDATE = "ORDER_UPDATE"
 AUDIT_ACTION_ORDER_DELETE = "ORDER_DELETE"
 AUDIT_ACTION_ORDER_STATUS_CHANGE = "ORDER_STATUS_CHANGE"
 AUDIT_ACTION_CUSTOMER_UPDATE = "CUSTOMER_UPDATE"
+AUDIT_ACTION_CUSTOMER_BLOCK = "CUSTOMER_BLOCK"
+AUDIT_ACTION_CUSTOMER_UNBLOCK = "CUSTOMER_UNBLOCK"
+AUDIT_ACTION_CUSTOMER_TEMP_ACCESS = "CUSTOMER_TEMP_ACCESS"
+AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END = "CUSTOMER_TEMP_ACCESS_END"
+AUDIT_ACTION_PAYMENT_CREATE = "PAYMENT_CREATE"
+AUDIT_ACTION_PAYMENT_DELETE = "PAYMENT_DELETE"
 
 class StaffUser(Base):
     """
@@ -43,6 +49,13 @@ class Customer(Base):
     tax_number = Column(String(50), nullable=True)  # 公司税号
     billing_cycle = Column(String(20), default="30")  # 7, 14, 30, 45, 60 天
     is_blocked = Column(Boolean, default=False)  # 欠款屏蔽/暂停下单开关
+    block_source = Column(String(20), nullable=True)  # manual | overdue
+    block_reason = Column(Text, nullable=True)
+    blocked_at = Column(DateTime(timezone=True), nullable=True)
+    temporary_access_started_at = Column(DateTime(timezone=True), nullable=True)
+    temporary_access_until = Column(DateTime(timezone=True), nullable=True)
+    temporary_access_reason = Column(Text, nullable=True)
+    restriction_updated_by = Column(String(100), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关联
@@ -180,6 +193,9 @@ class Order(Base):
     remark = Column(Text, nullable=True)
     invoice_id = Column(Integer, ForeignKey("invoices.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    version = Column(Integer, nullable=False, default=1)
+    is_late_override = Column(Boolean, nullable=False, default=False)
 
     customer = relationship("Customer", back_populates="orders")
     site = relationship("DeliverySite", back_populates="orders")
@@ -270,4 +286,17 @@ class PaymentRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     customer = relationship("Customer", back_populates="payments")
+
+
+class OrderEditSession(Base):
+    """一次性的顾客下单/修改资格，用于证明顾客在下午 6 点前已开始操作。"""
+    __tablename__ = "order_edit_sessions"
+
+    id = Column(String(36), primary_key=True)
+    customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False, index=True)
+    delivery_date = Column(Date, nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
 

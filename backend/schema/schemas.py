@@ -86,6 +86,19 @@ class CustomerResponse(CustomerBase):
     created_at: datetime
     username: Optional[str] = None
     sites: List[DeliverySiteResponse] = []
+    block_source: Optional[str] = None
+    block_reason: Optional[str] = None
+    blocked_at: Optional[datetime] = None
+    temporary_access_started_at: Optional[datetime] = None
+    temporary_access_until: Optional[datetime] = None
+    temporary_access_reason: Optional[str] = None
+    restriction_updated_by: Optional[str] = None
+    effective_is_blocked: bool = False
+    temporary_access_active: bool = False
+    overdue_amount: float = 0.0
+    outstanding_balance: float = 0.0
+    oldest_overdue_due_date: Optional[date] = None
+    max_order_delivery_date: Optional[date] = None
 
     class Config:
         from_attributes = True
@@ -174,6 +187,8 @@ class MatrixItem(BaseModel):
 class OrderCreateMatrix(BaseModel):
     delivery_date: date
     items: List[MatrixItem]
+    edit_session_id: Optional[str] = None
+    expected_order_version: Optional[int] = None
 
 class OrderDetailResponse(BaseModel):
     id: int
