@@ -4,7 +4,8 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000
 
 export const axiosInstance = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 10000,
+  // Serverless cold starts and the regional database pool can occasionally exceed 10s.
+  timeout: 30000,
 });
 
 axiosInstance.interceptors.request.use((config) => {
