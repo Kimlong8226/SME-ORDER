@@ -9,7 +9,7 @@ const { Option } = Select;
 
 export const StaffManagement: React.FC = () => {
   const { message } = App.useApp();
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
   // 校验当前用户角色权限 (仅限 Superadmin)

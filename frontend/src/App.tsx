@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp, Result } from 'antd';
+import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp, Result, Card } from 'antd';
 
 import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,

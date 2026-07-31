@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
 from datetime import date, datetime, timedelta
 from pydantic import BaseModel
@@ -19,10 +19,10 @@ from schema.schemas import (
     AddonTemplateCreate, AddonTemplateResponse, CustomerAddonAssign, CustomerAddonResponse,
     MealSectionCreate, MealSectionResponse, CustomerMealSectionsUpdate, CustomerUpdate
 )
-from api.auth import get_password_hash, require_superadmin
+from api.auth import get_password_hash, require_staff, require_superadmin
 from api.audit_utils import write_audit_log
 
-router = APIRouter(prefix="/admin", tags=["Admin Management"])
+router = APIRouter(prefix="/admin", tags=["Admin Management"], dependencies=[Depends(require_staff)])
 
 
 class OrderItemEdit(BaseModel):
@@ -763,6 +763,15 @@ class PaymentCreateRequest(BaseModel):
     do_ids: Optional[List[int]] = None
     remark: Optional[str] = ""
 
+def get_order_eager_options():
+    return [
+        joinedload(Order.customer),
+        joinedload(Order.site),
+        selectinload(Order.details).joinedload(OrderDetail.meal_section),
+        selectinload(Order.details).joinedload(OrderDetail.customer_package).joinedload(CustomerPackage.template),
+        selectinload(Order.details).joinedload(OrderDetail.customer_addon).joinedload(CustomerAddon.template),
+    ]
+
 @router.api_route("/customers/{customer_id}/unpaid-dos", methods=["GET", "OPTIONS"])
 def get_customer_dos_for_payment(customer_id: int, db: Session = Depends(get_db)):
     """获取指定客户的所有送货单 DO 列表（包含金额和到期状态），用于打款核销选择"""
@@ -778,7 +787,7 @@ def get_customer_dos_for_payment(customer_id: int, db: Session = Depends(get_db)
     except (ValueError, TypeError):
         billing_cycle_days = 14
 
-    dos = db.query(Order).filter(
+    dos = db.query(Order).options(*get_order_eager_options()).filter(
         Order.customer_id == customer_id,
         Order.status != 'cancelled'
     ).order_by(Order.delivery_date.desc(), Order.id.desc()).all()
@@ -918,27 +927,36 @@ class InvoiceStatusUpdate(BaseModel):
 @router.get("/invoices")
 def list_invoices(db: Session = Depends(get_db)):
     invoices = db.query(Invoice).order_by(Invoice.id.desc()).all()
+    if not invoices:
+        return []
+
+    cust_map = {c.id: c for c in db.query(Customer).all()}
+    invoice_ids = [inv.id for inv in invoices]
+    orders = db.query(Order).options(*get_order_eager_options()).filter(Order.invoice_id.in_(invoice_ids)).all()
+
+    orders_by_invoice = {}
+    for o in orders:
+        orders_by_invoice.setdefault(o.invoice_id, []).append(o)
+
     results = []
     for inv in invoices:
-        cust = db.query(Customer).filter(Customer.id == inv.customer_id).first()
+        cust = cust_map.get(inv.customer_id)
         if not cust:
             continue
         
-        orders = db.query(Order).filter(Order.invoice_id == inv.id).all()
-        
-        # Build orders_detail for preview
+        inv_orders = orders_by_invoice.get(inv.id, [])
         orders_detail = []
-        for o in orders:
+        for o in inv_orders:
             meal_details = []
             total_portions = 0
             for d in o.details:
-                pkg_name = d.customer_package.template.name if d.customer_package else (
-                    d.customer_addon.template.name if d.customer_addon else "未知"
+                pkg_name = d.customer_package.template.name if (d.customer_package and d.customer_package.template) else (
+                    d.customer_addon.template.name if (d.customer_addon and d.customer_addon.template) else "未知"
                 )
                 subtotal = d.quantity * d.final_unit_price
                 total_portions += d.quantity
                 meal_details.append({
-                    "meal_section": d.meal_section.name,
+                    "meal_section": d.meal_section.name if d.meal_section else "普通餐项",
                     "package_name": pkg_name,
                     "quantity": d.quantity,
                     "unit_price": d.final_unit_price,
@@ -966,7 +984,7 @@ def list_invoices(db: Session = Depends(get_db)):
             "billing_cycle": f"{cust.billing_cycle} 天一结",
             "start_date": inv.start_date.strftime("%Y-%m-%d"),
             "end_date": inv.end_date.strftime("%Y-%m-%d"),
-            "total_orders": len(orders),
+            "total_orders": len(inv_orders),
             "total_amount": inv.total_amount,
             "status": inv.payment_status.upper(),
             "orders_detail": orders_detail
@@ -1140,7 +1158,7 @@ def get_daily_dos(
     按日整合客户 DO 列表 API
     支持查看每一天整合后的 DO 明细、开票状态、份数及总金额
     """
-    query = db.query(Order).filter(Order.status != "cancelled")
+    query = db.query(Order).options(*get_order_eager_options()).filter(Order.status != "cancelled")
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
     if start_date:
@@ -1155,23 +1173,20 @@ def get_daily_dos(
 
     orders = query.order_by(Order.delivery_date.desc(), Order.id.desc()).all()
     
+    inv_map = {inv.id: inv.invoice_number for inv in db.query(Invoice).all()}
+
     results = []
     for o in orders:
-        cust = db.query(Customer).filter(Customer.id == o.customer_id).first()
+        cust = o.customer
         cust_name = cust.company_name if cust else "未知客户"
-        
-        invoice_number = None
-        if o.invoice_id:
-            inv = db.query(Invoice).filter(Invoice.id == o.invoice_id).first()
-            if inv:
-                invoice_number = inv.invoice_number
+        invoice_number = inv_map.get(o.invoice_id) if o.invoice_id else None
 
         meal_details = []
         total_portions = 0
         total_amount = 0.0
         for d in o.details:
-            pkg_name = d.customer_package.template.name if d.customer_package else (
-                d.customer_addon.template.name if d.customer_addon else "自定义餐食"
+            pkg_name = d.customer_package.template.name if (d.customer_package and d.customer_package.template) else (
+                d.customer_addon.template.name if (d.customer_addon and d.customer_addon.template) else "自定义餐食"
             )
             unit_price = calc_detail_price(d)
             subtotal = d.quantity * unit_price
@@ -1221,7 +1236,7 @@ def get_customer_statement(
         raise HTTPException(status_code=404, detail="客户不存在")
         
     inv_query = db.query(Invoice).filter(Invoice.customer_id == customer_id)
-    do_query = db.query(Order).filter(Order.customer_id == customer_id, Order.status != "cancelled")
+    do_query = db.query(Order).options(*get_order_eager_options()).filter(Order.customer_id == customer_id, Order.status != "cancelled")
     payment_query = db.query(PaymentRecord).filter(PaymentRecord.customer_id == customer_id)
 
     if start_date:
@@ -1238,7 +1253,7 @@ def get_customer_statement(
     payments = payment_query.order_by(PaymentRecord.payment_date.desc(), PaymentRecord.id.desc()).all()
 
     # 计算历史总 DO 金额与总还款额，得出当前真实尚欠余额 (Outstanding Balance)
-    all_dos = db.query(Order).filter(Order.customer_id == customer_id, Order.status != "cancelled").all()
+    all_dos = db.query(Order).options(*get_order_eager_options()).filter(Order.customer_id == customer_id, Order.status != "cancelled").all()
     total_all_dos_amount = sum(sum(d.quantity * calc_detail_price(d) for d in o.details) for o in all_dos)
     
     all_payments = db.query(PaymentRecord).filter(PaymentRecord.customer_id == customer_id).all()
@@ -1253,7 +1268,7 @@ def get_customer_statement(
     # 计算期初余额与余额流水
     balance_bf = 0.0
     if start_date:
-        bf_dos = db.query(Order).filter(
+        bf_dos = db.query(Order).options(*get_order_eager_options()).filter(
             Order.customer_id == customer_id,
             Order.status != "cancelled",
             Order.delivery_date < start_date
@@ -1499,7 +1514,7 @@ def get_meal_volume_records(
     客户订餐数量统计与记录 API
     按日期、餐次、套餐分类汇总订餐份数
     """
-    query = db.query(Order).filter(Order.status != "cancelled")
+    query = db.query(Order).options(*get_order_eager_options()).filter(Order.status != "cancelled")
     if customer_id:
         query = query.filter(Order.customer_id == customer_id)
     if start_date:
@@ -1518,7 +1533,7 @@ def get_meal_volume_records(
     item_stats = {}
 
     for o in orders:
-        cust = db.query(Customer).filter(Customer.id == o.customer_id).first()
+        cust = o.customer
         cust_name = cust.company_name if cust else "未知客户"
         
         site_name = o.site.site_name if getattr(o, "site", None) else "默认分点"

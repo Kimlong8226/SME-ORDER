@@ -1,3 +1,4 @@
+import os
 import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,13 +18,15 @@ app = FastAPI(
     version="2.0.0"
 )
 
-Base.metadata.create_all(bind=engine)
-
 from fastapi.responses import JSONResponse
+
+cors_origins = [origin.strip() for origin in os.getenv("CORS_ORIGINS", "").split(",") if origin.strip()]
+if not cors_origins:
+    cors_origins = ["http://localhost:5173"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=".*",
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,13 +38,7 @@ async def global_exception_handler(request, exc):
     print("Unhandled Exception:", traceback.format_exc())
     return JSONResponse(
         status_code=500,
-        content={"detail": f"Internal Server Error: {str(exc)}"},
-        headers={
-            "Access-Control-Allow-Origin": "*",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Allow-Methods": "*",
-            "Access-Control-Allow-Headers": "*",
-        }
+        content={"detail": "Internal Server Error"},
     )
 
 app.include_router(auth.router)
@@ -442,11 +439,13 @@ def seed_data():
 @app.on_event("startup")
 def startup_event():
     try:
-        Base.metadata.create_all(bind=engine)
+        if os.getenv("AUTO_CREATE_SCHEMA", "false").lower() == "true":
+            Base.metadata.create_all(bind=engine)
     except Exception as e:
         print(f"Startup Table Creation Warning: {e}")
     try:
-        seed_data()
+        if os.getenv("SEED_DEMO_DATA", "false").lower() == "true":
+            seed_data()
     except Exception as e:
         print(f"Startup Seed Error: {e}")
 

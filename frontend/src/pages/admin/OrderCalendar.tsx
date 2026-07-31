@@ -46,7 +46,6 @@ export const OrderCalendar: React.FC = () => {
   };
 
   const [calendarData, setCalendarData] = useState<any>({});
-  const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().format('YYYY-MM-DD'));
   const [printModalVisible, setPrintModalVisible] = useState(false);
   const [printSummaryData, setPrintSummaryData] = useState<any>(null);
@@ -73,7 +72,6 @@ export const OrderCalendar: React.FC = () => {
   };
 
   const fetchCalendarSummary = async () => {
-    setLoading(true);
     try {
       const start = dayjs().startOf('month').format('YYYY-MM-DD');
       const end = dayjs().endOf('month').add(7, 'day').format('YYYY-MM-DD');
@@ -82,7 +80,6 @@ export const OrderCalendar: React.FC = () => {
     } catch (err) {
       message.error(labels.loadCalendarFailed);
     } finally {
-      setLoading(false);
     }
   };
 

@@ -16,8 +16,6 @@ import {
   Tag,
   Select,
   Tooltip,
-  Badge,
-  Alert,
   Divider,
   Empty
 } from 'antd';
@@ -30,19 +28,14 @@ import {
   ThunderboltOutlined,
   SearchOutlined,
   TagsOutlined,
-  ClockCircleOutlined,
   CheckCircleOutlined,
   ExclamationCircleOutlined,
   ReloadOutlined,
-  SunOutlined,
-  MoonOutlined,
-  CoffeeOutlined,
-  ClearOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
 
-const { Title, Text, Paragraph } = Typography;
+const { Title, Text } = Typography;
 
 // 常用餐次预设模版，方便用户一键极速快捷创建
 const PRESET_TEMPLATES = [

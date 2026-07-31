@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { App, Card, InputNumber, Button, Select, DatePicker, Tag, Typography, Alert, Space, Row, Col, Divider, Modal, Input, Badge, Empty } from 'antd';
-import { SendOutlined, ThunderboltOutlined, PlusOutlined, MinusOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, MinusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';

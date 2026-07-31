@@ -155,7 +155,7 @@ const OrderAuditDrawer: React.FC<{
           maxHeight: '62vh',
           overflowY: 'auto',
         },
-        content: {
+        root: {
           borderRadius: 12,
           overflow: 'hidden',
           padding: 0,

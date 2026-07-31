@@ -1,10 +1,12 @@
 import hashlib
+import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import jwt, JWTError
+from passlib.context import CryptContext
 
 from database import get_db
 from model.models import StaffUser, CustomerUser, Customer
@@ -12,8 +14,11 @@ from schema.schemas import LoginRequest, TokenSchema
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-SECRET_KEY = "central_kitchen_secret_key_antigravity_2026"
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise RuntimeError("JWT_SECRET_KEY must be configured")
 ALGORITHM = "HS256"
+pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24小时
 
 security = HTTPBearer(auto_error=False)
@@ -43,18 +48,39 @@ def require_superadmin(payload: dict = Depends(get_current_user_payload)):
         )
     return payload
 
+def require_staff(payload: dict = Depends(get_current_user_payload)):
+    if payload.get("user_type") != "staff":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Staff access required")
+    return payload
+
+def require_customer_access(customer_id: int, payload: dict = Depends(get_current_user_payload)):
+    if payload.get("user_type") == "staff":
+        return payload
+    if payload.get("user_type") == "customer" and payload.get("customer_id") == customer_id:
+        return payload
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Customer access denied")
+
 def get_password_hash(password: str) -> str:
 
     """
     使用 SHA256 算法生成稳健密码哈希
     """
-    return hashlib.sha256((password + "central_kitchen_salt_2026").encode('utf-8')).hexdigest()
+    return pwd_context.hash(password)
+
+def _legacy_password_hash(password: str) -> str:
+    return hashlib.sha256((password + "central_kitchen_salt_2026").encode("utf-8")).hexdigest()
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
     验证密码
     """
-    return get_password_hash(plain_password) == hashed_password
+    if hashed_password.startswith("$"):
+        return pwd_context.verify(plain_password, hashed_password)
+    return _legacy_password_hash(plain_password) == hashed_password
+
+def upgrade_password_hash_if_needed(user, plain_password: str) -> None:
+    if not user.password_hash.startswith("$"):
+        user.password_hash = get_password_hash(plain_password)
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -74,6 +100,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         if staff and verify_password(req.password, staff.password_hash):
             if not staff.is_active:
                 raise HTTPException(status_code=400, detail="账号已被禁用")
+            upgrade_password_hash_if_needed(staff, req.password)
+            db.commit()
             token = create_access_token({
                 "sub": staff.username,
                 "user_type": "staff",
@@ -93,6 +121,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
         if c_user and verify_password(req.password, c_user.password_hash):
             if not c_user.is_active:
                 raise HTTPException(status_code=400, detail="账号已被禁用")
+            upgrade_password_hash_if_needed(c_user, req.password)
+            db.commit()
             customer = db.query(Customer).filter(Customer.id == c_user.customer_id).first()
             token = create_access_token({
                 "sub": c_user.username,

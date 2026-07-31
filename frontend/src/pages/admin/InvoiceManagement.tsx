@@ -5,8 +5,7 @@ import {
 } from 'antd';
 import { 
   PrinterOutlined, FileTextOutlined, DeleteOutlined, 
-  EyeOutlined, ContainerOutlined, SafetyCertificateOutlined, 
-  DiffOutlined, NumberOutlined, FilterOutlined, BankOutlined, QrcodeOutlined, AlertOutlined
+  EyeOutlined, ContainerOutlined, NumberOutlined, FilterOutlined, BankOutlined, AlertOutlined
 } from '@ant-design/icons';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
@@ -157,7 +156,6 @@ export const InvoiceManagement: React.FC = () => {
   const [customers, setCustomers] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]); // Consolidated DOs
   const [dailyDos, setDailyDos] = useState<any[]>([]);
-  const [reconciliationDos, setReconciliationDos] = useState<any[]>([]);
   const [mealVolumeData, setMealVolumeData] = useState<any>({ summary: {}, section_summary: [], records: [] });
   const [statementData, setStatementData] = useState<any>(null);
   const [payments, setPayments] = useState<any[]>([]);
@@ -166,7 +164,7 @@ export const InvoiceManagement: React.FC = () => {
   const [selectedCustomer, setSelectedCustomer] = useState<number | null>(null);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs | null, dayjs.Dayjs | null] | null>(null);
   const [doStatusFilter, setDoStatusFilter] = useState<string>('unbilled'); // unbilled, billed, all
-  const [reconcileStatusFilter, setReconcileStatusFilter] = useState<string>('all');
+  const [reconcileStatusFilter] = useState<string>('all');
   const [activeTab, setActiveTab] = useState<string>('1');
 
   // 还款 Modal 状态与 DO 核销关联
@@ -296,8 +294,7 @@ export const InvoiceManagement: React.FC = () => {
         params.start_date = dateRange[0].format('YYYY-MM-DD');
         params.end_date = dateRange[1].format('YYYY-MM-DD');
       }
-      const res = await axiosInstance.get('/admin/invoices/daily-dos', { params });
-      setReconciliationDos(res.data || []);
+      await axiosInstance.get('/admin/invoices/daily-dos', { params });
     } catch (err) {
       console.error(err);
     }
@@ -389,6 +386,7 @@ export const InvoiceManagement: React.FC = () => {
         amount: '',
         payment_method: 'Bank Transfer',
         reference_no: '',
+        allocated_dos_text: '',
         remark: ''
       });
       fetchPayments(selectedCustomer);
@@ -1147,7 +1145,7 @@ export const InvoiceManagement: React.FC = () => {
               scroll={{ x: 'max-content' }}
               columns={[
                 { title: labels.colInvNo, dataIndex: 'invoice_number', key: 'invoice_number', render: (t: string) => <Text strong style={{ color: '#1e40af' }}>{t}</Text> },
-                { title: labels.colCompany, dataIndex: 'company_name', key: 'company_name', render: (t: string, r: any) => <div><Text strong>{t}</Text></div> },
+                { title: labels.colCompany, dataIndex: 'company_name', key: 'company_name', render: (t: string) => <div><Text strong>{t}</Text></div> },
                 { title: labels.colBillingPeriod, key: 'billing_period', render: (r: any) => <Text style={{ fontSize: 13 }}>{r.start_date} ~ {r.end_date}</Text> },
                 { 
                   title: labels.colDoList, 
@@ -1461,10 +1459,10 @@ export const InvoiceManagement: React.FC = () => {
               size="small"
               bordered
               dataSource={sortMealDetails(selectedDoDetail.meal_details)}
-              rowKey={(r, i) => `${i}`}
+              rowKey={(_r, i) => `${i}`}
               columns={[
                 { title: labels.colShift, dataIndex: 'meal_section', width: 140, render: (t) => translateMealSection(t) },
-                { title: labels.colDetails, dataIndex: 'package_name', render: (t, r: any) => <div><Text strong>{t}</Text>{r.remark && <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{labels.remarkLabel}{r.remark}</Text>}</div> },
+                { title: labels.colDetails, dataIndex: 'package_name', render: (t, record: any) => <div><Text strong>{t}</Text>{record.remark && <Text type="secondary" style={{ display: 'block', fontSize: 12 }}>{labels.remarkLabel}{record.remark}</Text>}</div> },
                 { title: labels.colQty, dataIndex: 'quantity', width: 90, render: (v) => <Text strong style={{ color: '#2563eb' }}>{v} 份</Text> },
                 { title: labels.colPrice, dataIndex: 'unit_price', width: 100, render: (v) => `RM ${v.toFixed(2)}` },
                 { title: labels.colSubtotal, dataIndex: 'subtotal', width: 110, render: (v) => <Text strong>RM {v.toFixed(2)}</Text> },
@@ -1752,7 +1750,7 @@ export const InvoiceManagement: React.FC = () => {
                     <Tag color="green" style={{ fontWeight: 'bold' }}>{isEn ? '🟢 Healthy Aging' : '🟢 均在账期内'}</Tag>
                   )}
                 </div>
-                <Row textAlign="center" gutter={16}>
+                <Row style={{ textAlign: 'center' }} gutter={16}>
                   <Col span={6} style={{ textAlign: 'center' }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>账期内 (未到期)</Text>
                     <div style={{ fontWeight: 'bold', color: '#16a34a', fontSize: 15 }}>RM {(statementData.terms_aging.within_terms?.amount || 0).toFixed(2)}</div>
@@ -1793,7 +1791,7 @@ export const InvoiceManagement: React.FC = () => {
                     <Tag color="success" style={{ fontWeight: 'bold' }}>{isEn ? '🟢 Healthy Aging' : '🟢 账龄结构健康'}</Tag>
                   )}
                 </div>
-                <Row textAlign="center" gutter={16}>
+                <Row style={{ textAlign: 'center' }} gutter={16}>
                   <Col span={6} style={{ textAlign: 'center' }}>
                     <Text type="secondary" style={{ fontSize: 12 }}>0 - 30 天</Text>
                     <div style={{ fontWeight: 'bold', color: '#16a34a', fontSize: 15 }}>RM {(statementData.aging.current?.amount || 0).toFixed(2)}</div>

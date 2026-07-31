@@ -11,10 +11,11 @@ from model.models import (
 )
 from schema.schemas import OrderCreateMatrix, OrderResponse, OrderDetailResponse
 from api.audit_utils import write_audit_log
+from api.auth import require_customer_access
 
 router = APIRouter(prefix="/orders", tags=["Customer Orders"])
 
-@router.get("/customer-profile/{customer_id}")
+@router.get("/customer-profile/{customer_id}", dependencies=[Depends(require_customer_access)])
 def get_customer_profile(customer_id: int, db: Session = Depends(get_db)):
     """
     客户专用：查询自身公司资料（账期、联系信息等），
@@ -46,7 +47,8 @@ def submit_matrix_orders(
     customer_id: int,
     req: OrderCreateMatrix,
     request: Request,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _auth: dict = Depends(require_customer_access)
 ):
     """
     订餐员矩阵提报 API (兼容 GSP 多工厂早9点报数、pro3c 当日微调、EPG 日常报数)
@@ -216,7 +218,7 @@ def submit_matrix_orders(
 
     return response_list
 
-@router.get("/customer-history/{customer_id}")
+@router.get("/customer-history/{customer_id}", dependencies=[Depends(require_customer_access)])
 def get_customer_order_history(customer_id: int, db: Session = Depends(get_db)):
     """
     订餐员查看自己的历史订单（不展示价格）
@@ -244,7 +246,7 @@ def get_customer_order_history(customer_id: int, db: Session = Depends(get_db)):
     return results
 
 
-@router.get("/meal-sections")
+@router.get("/meal-sections", dependencies=[Depends(require_customer_access)])
 def get_meal_sections_public(customer_id: int, db: Session = Depends(get_db)):
     """
     客户端专用：获取当前客户开通的下单餐次，并返回每个餐次允许的公共/专属套餐及对应单价

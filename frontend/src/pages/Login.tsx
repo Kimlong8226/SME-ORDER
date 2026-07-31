@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Card, Form, Input, Button, App, Space, Tag, Typography, Row, Col } from 'antd';
+import { Card, Form, Input, Button, App, Typography, Row, Col } from 'antd';
 import { UserOutlined, LockOutlined, GlobalOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../api/axiosInstance';
@@ -22,7 +22,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     brandBullet3: isEn ? 'Daily catering list export & smart credit billing cycle management' : '每日配餐清单导出与智能信用账期管理',
     copyright: isEn ? '© 2026 Kim Long Catering. All Rights Reserved.' : '© 2026 金龙中央厨房 版权所有',
     welcomeLogin: isEn ? 'Welcome Login' : '欢迎登录',
-    superadmin: isEn ? 'Superadmin (Administrator)' : 'Superadmin (超级管理员)',
   };
 
   const toggleLanguage = () => {
@@ -46,10 +45,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillAccount = (u: string, p: string) => {
-    form.setFieldsValue({ username: u, password: p });
   };
 
   const [form] = Form.useForm();
@@ -135,14 +130,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
                 {t('common.login')}
               </Button>
             </Form>
-
-            <div style={{ marginTop: 24, paddingTop: 16, borderTop: '1px solid #f1f5f9' }}>
-              <Space wrap size={[8, 8]}>
-                <Tag color="green" style={{ cursor: 'pointer', padding: '4px 10px', fontSize: 12 }} onClick={() => fillAccount('admin', 'admin123')}>
-                  {labels.superadmin}
-                </Tag>
-              </Space>
-            </div>
           </Col>
         </Row>
       </Card>

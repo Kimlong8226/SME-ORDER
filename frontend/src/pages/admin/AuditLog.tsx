@@ -130,6 +130,7 @@ export const AuditLog: React.FC = () => {
     if (role === 'customer') return isEn ? 'Customer' : '客户';
     return role;
   };
+  void getRoleLabel;
 
   return (
     <div style={{ padding: '0 4px' }}>
@@ -258,7 +259,7 @@ export const AuditLog: React.FC = () => {
         </div>
       ) : logs.length === 0 ? (
         <Empty
-          icon={<HistoryOutlined style={{ fontSize: 48, color: '#94a3b8' }} />}
+          image={<HistoryOutlined style={{ fontSize: 48, color: '#94a3b8' }} />}
           description={isEn ? 'No audit logs found' : '暂无审计日志记录'}
           style={{ marginTop: 80 }}
         />

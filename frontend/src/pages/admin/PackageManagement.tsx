@@ -4,7 +4,7 @@ import {
   Tag, Typography, Space, Popconfirm, Divider
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, AppstoreOutlined, PlusSquareOutlined, DeleteOutlined
+  PlusOutlined, EditOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -13,7 +13,7 @@ const { Title, Text } = Typography;
 const { Option } = Select;
 
 export const PackageManagement: React.FC = () => {
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
   // NOTE: 文案集中管理，便于维护

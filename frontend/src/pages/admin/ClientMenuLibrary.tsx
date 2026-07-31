@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, EyeOutlined, EyeInvisibleOutlined,
-  LockOutlined, UnlockOutlined, BookOutlined, StopOutlined,
+  LockOutlined, UnlockOutlined,
   PlusSquareOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -17,7 +17,7 @@ const { Option } = Select;
 
 export const ClientMenuLibrary: React.FC = () => {
   const { message } = App.useApp();
-  const { t, i18n } = useTranslation();
+  const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
 
   // NOTE: 所有文案集中在此，方便后续语言切换维护

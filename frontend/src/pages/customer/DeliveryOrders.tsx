@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { App, Card, Table, Tag, Button, Typography, Space, Modal, Divider, Row, Col } from 'antd';
+import { App, Card, Table, Tag, Button, Typography, Modal, Divider, Row, Col } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -52,7 +52,6 @@ export const DeliveryOrders: React.FC = () => {
     loading: isEn ? 'Loading...' : '加载中...',
   };
 
-  const [userInfo, setUserInfo] = useState<any>(null);
   const [customerProfile, setCustomerProfile] = useState<any>(null);
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(false);
@@ -63,7 +62,6 @@ export const DeliveryOrders: React.FC = () => {
     const raw = localStorage.getItem('user_info');
     if (raw) {
       const u = JSON.parse(raw);
-      setUserInfo(u);
       fetchOrdersAndProfile(u.customer_id);
     }
   }, []);

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { App, Card, Table, Tag, Button, Space, Typography, Modal, Alert, Tooltip } from 'antd';
-import { EditOutlined, DeleteOutlined, InfoCircleOutlined } from '@ant-design/icons';
+import { EditOutlined, DeleteOutlined } from '@ant-design/icons';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
 

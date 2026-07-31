@@ -19,6 +19,8 @@ from model.models import (
 )
 
 def run_migration():
+    if os.getenv("ALLOW_DESTRUCTIVE_MIGRATION") != "yes":
+        raise RuntimeError("Destructive migration blocked. Set ALLOW_DESTRUCTIVE_MIGRATION=yes only after a verified backup.")
     sqlite_url = "sqlite:///./central_kitchen.db"
     supabase_url = os.getenv("DATABASE_URL")
     
