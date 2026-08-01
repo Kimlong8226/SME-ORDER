@@ -56,14 +56,28 @@ const OrderAuditDrawer: React.FC<{
   /**
    * 解析 extra_data JSON 中的 changes 数组
    */
-  const parseChanges = (extraDataStr: string | null): Array<{ field: string; old: string; new: string }> => {
-    if (!extraDataStr) return [];
+  const parseExtraData = (extraDataStr: string | null): Record<string, any> => {
+    if (!extraDataStr) return {};
     try {
-      const data = JSON.parse(extraDataStr);
-      return Array.isArray(data.changes) ? data.changes : [];
+      return JSON.parse(extraDataStr) || {};
     } catch {
-      return [];
+      return {};
     }
+  };
+
+  const formatChangeValue = (field: string, value: unknown): string => {
+    const text = String(value ?? '');
+    if (!field.includes('状态') && !field.toLowerCase().includes('status')) return text;
+    const statusLabels: Record<string, { zh: string; en: string }> = {
+      submitted: { zh: '已提交', en: 'Submitted' },
+      confirmed: { zh: '已确认', en: 'Confirmed' },
+      in_production: { zh: '生产中', en: 'In Production' },
+      delivered: { zh: '已送达', en: 'Delivered' },
+      billed: { zh: '已核账', en: 'Billed' },
+      paid: { zh: '已付款', en: 'Paid' },
+      cancelled: { zh: '已取消', en: 'Cancelled' },
+    };
+    return isEn ? (statusLabels[text]?.en || text) : (statusLabels[text]?.zh || text);
   };
 
   /**
@@ -201,7 +215,8 @@ const OrderAuditDrawer: React.FC<{
       ) : (
         <div>
           {logs.map((log, index) => {
-            const changes = parseChanges(log.extra_data);
+            const extraData = parseExtraData(log.extra_data);
+            const changes = Array.isArray(extraData.changes) ? extraData.changes : [];
             const actionTitle = getActionTitle(log.action_type);
             // NOTE: 根据操作类型决定时间线圆点颜色
             const dotColor = log.action_type === 'ORDER_CREATE'
@@ -261,14 +276,20 @@ const OrderAuditDrawer: React.FC<{
                         <div key={i} style={{ fontSize: 12, color: '#475569', lineHeight: 1.7, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4 }}>
                           <span style={{ color: '#94a3b8' }}>{change.field}:</span>
                           <span style={{ color: '#f87171', textDecoration: 'line-through' }}>
-                            {String(change.old ?? '')}
+                            {formatChangeValue(change.field, change.old)}
                           </span>
                           <span style={{ color: '#cbd5e1' }}>→</span>
                           <span style={{ color: '#22c55e', fontWeight: 600 }}>
-                            {String(change.new ?? '')}
+                            {formatChangeValue(change.field, change.new)}
                           </span>
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {extraData.reason && (
+                    <div style={{ marginTop: 8, padding: '7px 10px', borderRadius: 6, background: '#f8fafc', color: '#64748b', fontSize: 12 }}>
+                      <Text type="secondary">{isEn ? 'Reason: ' : '操作原因：'}</Text>
+                      <Text>{extraData.reason}</Text>
                     </div>
                   )}
                 </div>
@@ -703,22 +724,33 @@ export const DailyOrderStatus: React.FC = () => {
       title: labels.colStatus,
       dataIndex: 'status',
       key: 'status',
-      width: 150,
+      width: 190,
       // NOTE: 加了 dataIndex='status'，render 第一参数为 status 值，第二参数为整行 record
       render: (_: string, record: any) => (
-        <Select
-          value={record.status}
-          style={{ width: 130 }}
-          onChange={(val) => handleStatusChange(record.id, val)}
-        >
-          <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
-          <Option value="confirmed"><Tag color="orange">{labels.statusConfirmed}</Tag></Option>
-          <Option value="in_production"><Tag color="purple">{labels.statusInProduction}</Tag></Option>
-          <Option value="delivered"><Tag color="green">{labels.statusDelivered}</Tag></Option>
-          <Option value="billed"><Tag color="purple">{labels.statusBilled}</Tag></Option>
-          <Option value="paid"><Tag color="gold">{labels.statusPaid}</Tag></Option>
-          <Option value="cancelled"><Tag color="red">{labels.statusCancelled}</Tag></Option>
-        </Select>
+        <Space size={6}>
+          <Select
+            value={record.status}
+            style={{ width: 130 }}
+            onChange={(val) => handleStatusChange(record.id, val)}
+          >
+            <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
+            <Option value="confirmed"><Tag color="orange">{labels.statusConfirmed}</Tag></Option>
+            <Option value="in_production"><Tag color="purple">{labels.statusInProduction}</Tag></Option>
+            <Option value="delivered"><Tag color="green">{labels.statusDelivered}</Tag></Option>
+            <Option value="billed"><Tag color="purple">{labels.statusBilled}</Tag></Option>
+            <Option value="paid"><Tag color="gold">{labels.statusPaid}</Tag></Option>
+            <Option value="cancelled"><Tag color="red">{labels.statusCancelled}</Tag></Option>
+          </Select>
+          <Tooltip title={isEn ? 'View status and operation history' : '查看状态与操作历史'}>
+            <Button
+              size="small"
+              shape="circle"
+              icon={<HistoryOutlined />}
+              onClick={() => handleOpenAuditDrawer(record)}
+              aria-label={isEn ? 'View status and operation history' : '查看状态与操作历史'}
+            />
+          </Tooltip>
+        </Space>
       )
     },
     {
