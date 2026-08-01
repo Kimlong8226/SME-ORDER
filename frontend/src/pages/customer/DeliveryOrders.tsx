@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { App, Card, Table, Tag, Button, Typography, Modal, Divider, Row, Col } from 'antd';
+import { App, Alert, Card, Table, Tag, Button, Typography, Modal, Divider, Row, Col } from 'antd';
 import { EyeOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -27,6 +27,7 @@ export const DeliveryOrders: React.FC = () => {
     statusPending: isEn ? 'Pending Delivery' : '待送货',
     statusPaid: isEn ? 'Paid' : '已付款',
     statusUnpaid: isEn ? 'Unpaid' : '未付款',
+    statusCancelled: isEn ? 'Cancelled' : '已取消',
     dueNotDelivered: isEn ? 'Not Delivered' : '尚未配送',
     dueSettled: isEn ? 'Settled' : '已结清',
     dueRemaining: isEn ? 'Remaining' : '距离到期剩',
@@ -70,13 +71,15 @@ export const DeliveryOrders: React.FC = () => {
     setLoading(true);
     try {
       // NOTE: 使用客户专用接口获取自身资料，避免调用需要管理员权限的 /admin/customers
-      const resCust = await axiosInstance.get(`/orders/customer-profile/${customerId}`);
+      const [resCust, resOrders] = await Promise.all([
+        axiosInstance.get(`/orders/customer-profile/${customerId}`),
+        axiosInstance.get(`/orders/customer-history/${customerId}`),
+      ]);
       if (resCust.data) {
         setCustomerProfile(resCust.data);
       }
 
       // NOTE: 使用客户专用历史接口，避免调用需要管理员权限的 /admin/all-orders
-      const resOrders = await axiosInstance.get(`/orders/customer-history/${customerId}`);
       setOrders(resOrders.data || []);
     } catch (err) {
       message.error(isEn ? 'Failed to load delivery orders' : '加载送货单与账期数据失败');
@@ -86,15 +89,16 @@ export const DeliveryOrders: React.FC = () => {
   };
 
   // 根据送餐日期和账期计算到期状态与天数
-  const calculatePaymentStatus = (deliveryDateStr: string) => {
+  const calculatePaymentStatus = (record: any) => {
+    const deliveryDateStr = record?.delivery_date;
     if (!deliveryDateStr) {
       return { statusText: labels.unknown, color: 'default', dueText: labels.unknown, isOverdue: false, paidStatus: labels.unknown };
     }
-    const billingDays = parseInt(customerProfile?.billing_cycle || '30', 10);
     const deliveryDate = dayjs(deliveryDateStr);
     const today = dayjs(); // 实际日期
-
-    const dueDate = deliveryDate.add(billingDays, 'day');
+    const financial = record?.financial_status;
+    const billingDays = parseInt(customerProfile?.billing_cycle || '30', 10);
+    const dueDate = dayjs(financial?.due_date || deliveryDate.add(billingDays, 'day'));
     const daysDiff = dueDate.diff(today, 'day');
 
     const isFuture = deliveryDate.isAfter(today, 'day');
@@ -109,10 +113,11 @@ export const DeliveryOrders: React.FC = () => {
       };
     }
 
-    // 模拟付款状态：如果是10天前的DO，模拟为已付款，否则未付款
-    const isPaid = today.diff(deliveryDate, 'day') > 10;
+    if (record?.status === 'cancelled') {
+      return { statusText: labels.statusCancelled, color: 'default', dueText: labels.statusCancelled, isOverdue: false, paidStatus: labels.statusCancelled };
+    }
 
-    if (isPaid) {
+    if (financial?.is_paid) {
       return {
         statusText: labels.statusPaid,
         color: 'green',
@@ -122,7 +127,7 @@ export const DeliveryOrders: React.FC = () => {
       };
     }
 
-    if (daysDiff < 0) {
+    if (financial?.is_overdue || daysDiff < 0) {
       return {
         statusText: labels.statusUnpaid,
         color: 'red',
@@ -206,7 +211,7 @@ export const DeliveryOrders: React.FC = () => {
       key: 'payment_status',
       width: 120,
       render: (_: any, record: any) => {
-        const info = calculatePaymentStatus(record.delivery_date);
+        const info = calculatePaymentStatus(record);
         return <Tag color={info.color} style={{ fontSize: 12, padding: '2px 8px', borderRadius: 4 }}>{info.statusText}</Tag>;
       }
     },
@@ -215,7 +220,7 @@ export const DeliveryOrders: React.FC = () => {
       key: 'due_countdown',
       width: 150,
       render: (_: any, record: any) => {
-        const info = calculatePaymentStatus(record.delivery_date);
+        const info = calculatePaymentStatus(record);
         return (
           <Text 
             strong={info.isOverdue} 
@@ -299,6 +304,30 @@ export const DeliveryOrders: React.FC = () => {
         }
       `}</style>
 
+      {customerProfile?.access_status?.effective_is_blocked && (
+        <Alert
+          type="error"
+          showIcon
+          title={isEn ? 'Ordering is frozen due to overdue payment' : '账户因到期欠款暂停下单'}
+          description={isEn
+            ? `Overdue: RM ${Number(customerProfile.access_status.overdue_amount || 0).toFixed(2)}. Please settle the overdue balance or contact customer service for temporary access.`
+            : `到期欠款：RM ${Number(customerProfile.access_status.overdue_amount || 0).toFixed(2)}。请清还到期欠款，或联系客服申请临时开放。`}
+          style={{ marginBottom: 16, borderRadius: 8 }}
+        />
+      )}
+
+      {customerProfile?.access_status?.temporary_access_active && (
+        <Alert
+          type="warning"
+          showIcon
+          title={isEn ? 'Temporary ordering access is active' : '临时下单权限生效中'}
+          description={isEn
+            ? `Access expires at ${customerProfile.access_status.temporary_access_until}.`
+            : `权限将在 ${customerProfile.access_status.temporary_access_until} 到期。`}
+          style={{ marginBottom: 16, borderRadius: 8 }}
+        />
+      )}
+
       <Table
         dataSource={orders}
         columns={columns}
@@ -353,11 +382,11 @@ export const DeliveryOrders: React.FC = () => {
                     <Text strong>{labels.colPaymentStatus}:</Text>{' '}
                     <span 
                       style={{ 
-                        color: calculatePaymentStatus(selectedDo.delivery_date).statusText === labels.statusPaid ? '#10b981' : (calculatePaymentStatus(selectedDo.delivery_date).isOverdue ? '#ef4444' : '#e67e22'), 
+                        color: calculatePaymentStatus(selectedDo).statusText === labels.statusPaid ? '#10b981' : (calculatePaymentStatus(selectedDo).isOverdue ? '#ef4444' : '#e67e22'),
                         fontWeight: 'bold' 
                       }}
                     >
-                      {calculatePaymentStatus(selectedDo.delivery_date).statusText} ({calculatePaymentStatus(selectedDo.delivery_date).dueText})
+                      {calculatePaymentStatus(selectedDo).statusText} ({calculatePaymentStatus(selectedDo).dueText})
                     </span>
                   </Text>
                 </div>

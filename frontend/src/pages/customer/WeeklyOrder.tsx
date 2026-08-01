@@ -20,7 +20,7 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
     btnRefresh: isEn ? 'Refresh Orders' : '刷新',
     loadFailed: isEn ? 'Failed to load order history' : '加载订单历史失败',
     cancelConfirmTitle: isEn ? 'Confirm Cancellation?' : '确认取消订单吗？',
-    cancelConfirmContent: isEn ? 'Once cancelled, the order will be permanently deleted and the central kitchen will stop preparation.' : '取消后订单将被永久删除，中央厨房将停止该批伙食的配餐准备。',
+    cancelConfirmContent: isEn ? 'The order will be marked cancelled and retained in the audit history. The kitchen will stop preparation.' : '订单将标记为已取消并保留操作记录，中央厨房将停止该批伙食的配餐准备。',
     btnConfirmCancel: isEn ? 'Confirm Cancel' : '确认取消',
     btnThinkAgain: isEn ? 'Cancel' : '我再想想',
     msgCancelled: isEn ? 'Order cancelled successfully!' : '订单已成功取消！',
@@ -44,10 +44,10 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
     btnCancel: isEn ? 'Cancel' : '取消',
     tooltipModify: isEn ? 'Modify portions or packages' : '修改订单份数或套餐',
     tooltipNoModify: isEn ? 'Order in process, cannot modify' : '订单已在处理中，不可修改',
-    tooltipCancel: isEn ? 'Cancel and delete order' : '取消并删除该订单',
+    tooltipCancel: isEn ? 'Cancel order and retain its record' : '取消订单并保留记录',
     tooltipNoCancel: isEn ? 'Order in process, cannot cancel' : '订单已在处理中，不可取消',
     policyTitle: isEn ? 'Ordering Policy' : '温馨订餐提示',
-    policyDesc: isEn ? 'Only orders in "Submitted" status can be modified or cancelled. For orders in "Confirmed", "In Production", or "Delivered" status, please contact customer service for urgent adjustments.' : '系统仅支持对状态为【已提交 (submitted)】的订单进行直接修改或自主取消。若订单状态变更为【已确认】、【生产中】或【已配送】，表示中央厨房已备餐或处于装车派送中，如需紧急微调，请致电客服热线进行人工干预。',
+    policyDesc: isEn ? 'Next-day orders close at 6:00 PM on the previous day. Start before 6:00 PM to receive a one-time submission window until 6:10 PM. Same-day or processed orders require customer service. Frozen accounts may reduce or cancel existing orders before cutoff, but cannot increase quantities.' : '次日配送订单须在前一天下午 6:00 前处理；在 6:00 前开始操作，可于 6:10 前完成一次提交。当天订单或已进入处理流程的订单须联系客服。冻结账户可在截止前减少或取消现有订单，但不能增加数量。',
   };
 
   const [userInfo, setUserInfo] = useState<any>(null);
@@ -76,7 +76,31 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
     }
   };
 
-  const handleCancelOrder = (orderId: number) => {
+  const beginSession = async (record: any) => {
+    if (!userInfo) throw new Error(labels.loadFailed);
+    const res = await axiosInstance.post(`/orders/start-session?customer_id=${userInfo.customer_id}`, {
+      delivery_date: record.delivery_date,
+    });
+    return res.data.edit_session_id as string;
+  };
+
+  const handleEditOrder = async (record: any) => {
+    try {
+      const editSessionId = await beginSession(record);
+      onEditOrder({ ...record, edit_session_id: editSessionId });
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.tooltipNoModify);
+    }
+  };
+
+  const handleCancelOrder = async (record: any) => {
+    let editSessionId: string;
+    try {
+      editSessionId = await beginSession(record);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.tooltipNoCancel);
+      return;
+    }
     Modal.confirm({
       title: labels.cancelConfirmTitle,
       content: labels.cancelConfirmContent,
@@ -85,13 +109,17 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
       cancelText: labels.btnThinkAgain,
       onOk: async () => {
         try {
-          await axiosInstance.delete(`/admin/orders/${orderId}`);
+          await axiosInstance.post(`/orders/${record.id}/cancel?customer_id=${userInfo.customer_id}`, {
+            edit_session_id: editSessionId,
+            expected_order_version: record.version,
+            reason: isEn ? 'Customer cancelled before cutoff' : '顾客在截止前自行取消',
+          });
           message.success(labels.msgCancelled);
           if (userInfo) {
             fetchOrders(userInfo.customer_id);
           }
-        } catch (err) {
-          message.error(labels.msgCancelFailed);
+        } catch (err: any) {
+          message.error(err.response?.data?.detail || labels.msgCancelFailed);
         }
       }
     });
@@ -197,7 +225,8 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
       key: 'action',
       width: 160,
       render: (_: any, record: any) => {
-        const canModify = record.status === 'submitted';
+        const canModify = Boolean(record.customer_actions?.can_modify);
+        const canCancel = Boolean(record.customer_actions?.can_cancel);
         return (
           <Space size="middle">
             <Tooltip title={canModify ? labels.tooltipModify : labels.tooltipNoModify}>
@@ -206,19 +235,19 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
                 icon={<EditOutlined />}
                 size="small"
                 disabled={!canModify}
-                onClick={() => onEditOrder(record)}
+                onClick={() => handleEditOrder(record)}
                 style={{ borderRadius: 6 }}
               >
                 {labels.btnEdit}
               </Button>
             </Tooltip>
-            <Tooltip title={canModify ? labels.tooltipCancel : labels.tooltipNoCancel}>
+            <Tooltip title={canCancel ? labels.tooltipCancel : labels.tooltipNoCancel}>
               <Button
                 danger
                 icon={<DeleteOutlined />}
                 size="small"
-                disabled={!canModify}
-                onClick={() => handleCancelOrder(record.id)}
+                disabled={!canCancel}
+                onClick={() => handleCancelOrder(record)}
                 style={{ borderRadius: 6 }}
               >
                 {labels.btnCancel}

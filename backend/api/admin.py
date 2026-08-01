@@ -1,16 +1,21 @@
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
-from datetime import date, datetime, timedelta
-from pydantic import BaseModel
+from datetime import date, datetime, timedelta, timezone
+from pydantic import BaseModel, Field
 
 from database import get_db
 from model.models import (
     Customer, CustomerUser, DeliverySite, PackageTemplate, AddonTemplate,
     CustomerPackage, CustomerAddon, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection,
     AuditLog, PaymentRecord,
-    AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_DELETE,
-    AUDIT_ACTION_ORDER_STATUS_CHANGE, AUDIT_ACTION_CUSTOMER_UPDATE
+    AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_DELETE, AUDIT_ACTION_ORDER_CANCEL,
+    AUDIT_ACTION_ORDER_STATUS_CHANGE, AUDIT_ACTION_CUSTOMER_UPDATE,
+    AUDIT_ACTION_CUSTOMER_BLOCK, AUDIT_ACTION_CUSTOMER_UNBLOCK,
+    AUDIT_ACTION_CUSTOMER_TEMP_ACCESS, AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END,
+    AUDIT_ACTION_PAYMENT_CREATE, AUDIT_ACTION_PAYMENT_DELETE
 )
 from schema.schemas import (
     CustomerCreate, CustomerResponse, CustomerBase, DeliverySiteCreate, DeliverySiteResponse,
@@ -21,6 +26,15 @@ from schema.schemas import (
 )
 from api.auth import get_password_hash, require_staff, require_superadmin
 from api.audit_utils import write_audit_log
+from api.order_rules import (
+    MALAYSIA_TZ,
+    MONEY_EPSILON,
+    ensure_aware_utc,
+    malaysia_now,
+    order_cutoff_window,
+    sync_customer_access,
+    temporary_access_expiry,
+)
 
 router = APIRouter(prefix="/admin", tags=["Admin Management"], dependencies=[Depends(require_staff)])
 
@@ -36,6 +50,57 @@ class OrderEditRequest(BaseModel):
     site_id: int
     delivery_date: date
     items: List[OrderItemEdit]
+    reason: str = Field(min_length=3, max_length=500)
+    expected_order_version: Optional[int] = None
+
+
+class AdminOrderCreateRequest(BaseModel):
+    customer_id: int
+    site_id: int
+    delivery_date: date
+    items: List[OrderItemEdit]
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class OrderStatusChangeRequest(BaseModel):
+    status: str
+    reason: str = Field(min_length=3, max_length=500)
+    expected_order_version: Optional[int] = None
+
+
+class AdminCancelOrderRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+    expected_order_version: Optional[int] = None
+
+
+class CustomerAccessRequest(BaseModel):
+    action: str  # block | unblock | temporary_open | end_temporary
+    reason: str = Field(min_length=3, max_length=500)
+
+
+def _operator(auth: dict) -> tuple[str, str]:
+    return auth.get("name") or auth.get("sub") or "后台管理员", auth.get("role") or "staff"
+
+
+def _required_reason(value: str) -> str:
+    reason = value.strip()
+    if len(reason) < 3:
+        raise HTTPException(status_code=400, detail="操作原因至少需要 3 个非空白字符")
+    return reason
+
+
+def _format_audit_time(value: datetime | None) -> str | None:
+    aware = ensure_aware_utc(value)
+    return aware.astimezone(MALAYSIA_TZ).strftime("%Y-%m-%d %H:%M:%S") if aware else None
+
+
+def _decorate_customer_access(customer: Customer, access: dict) -> None:
+    customer.effective_is_blocked = access["effective_is_blocked"]
+    customer.temporary_access_active = access["temporary_access_active"]
+    customer.overdue_amount = access["overdue_amount"]
+    customer.outstanding_balance = access["outstanding_balance"]
+    customer.oldest_overdue_due_date = access["oldest_overdue_due_date"]
+    customer.max_order_delivery_date = access["max_order_delivery_date"]
 
 # --- 1. 客户档案管理 ---
 @router.post("/customers", response_model=CustomerResponse)
@@ -43,6 +108,8 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
     existing_user = db.query(CustomerUser).filter(CustomerUser.username == req.username).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="订餐员用户名已存在")
+    if req.is_blocked:
+        raise HTTPException(status_code=400, detail="请先创建客户，再通过账户限制操作冻结并填写原因")
 
     customer = Customer(
         company_name=req.company_name,
@@ -55,7 +122,7 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
         email=req.email,
         tax_number=req.tax_number,
         billing_cycle=req.billing_cycle,
-        is_blocked=req.is_blocked
+        is_blocked=False
     )
     db.add(customer)
     db.commit()
@@ -87,7 +154,10 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
 def list_customers(db: Session = Depends(get_db)):
     customers = db.query(Customer).order_by(Customer.id.desc()).all()
     for c in customers:
+        access = sync_customer_access(db, c)
+        _decorate_customer_access(c, access)
         c.username = c.users[0].username if c.users else None
+    db.commit()
     return customers
 
 @router.put("/customers/{customer_id}", response_model=CustomerResponse)
@@ -99,6 +169,9 @@ def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends
     update_data = req.dict(exclude_unset=True)
     username = update_data.pop("username", None)
     password = update_data.pop("password", None)
+    if "is_blocked" in update_data and bool(update_data["is_blocked"]) != bool(customer.is_blocked):
+        raise HTTPException(status_code=400, detail="请使用账户限制操作并填写原因，不能在普通资料编辑中更改冻结状态")
+    update_data.pop("is_blocked", None)
 
     if username or password:
         c_user = db.query(CustomerUser).filter(CustomerUser.customer_id == customer_id).first()
@@ -126,7 +199,152 @@ def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends
     db.commit()
     db.refresh(customer)
     customer.username = customer.users[0].username if customer.users else None
+    access = sync_customer_access(db, customer)
+    _decorate_customer_access(customer, access)
+    db.commit()
     return customer
+
+
+@router.put("/customers/{customer_id}/order-access")
+def update_customer_order_access(
+    customer_id: int,
+    req: CustomerAccessRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    customer = db.query(Customer).filter(Customer.id == customer_id).with_for_update().first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+
+    access = sync_customer_access(db, customer)
+    operator_name, operator_role = _operator(auth)
+    action = req.action.strip().lower()
+    reason = _required_reason(req.reason)
+    now_local = malaysia_now()
+    now_utc = now_local.astimezone(timezone.utc)
+    before = {
+        "is_blocked": bool(customer.is_blocked),
+        "block_source": customer.block_source,
+        "block_reason": customer.block_reason,
+        "temporary_access_until": customer.temporary_access_until.isoformat() if customer.temporary_access_until else None,
+    }
+
+    if action == "block":
+        customer.is_blocked = True
+        customer.block_source = "manual"
+        customer.block_reason = reason
+        customer.blocked_at = now_utc
+        customer.temporary_access_started_at = None
+        customer.temporary_access_until = None
+        customer.temporary_access_reason = None
+        audit_action = AUDIT_ACTION_CUSTOMER_BLOCK
+        description = f"手动冻结客户 {customer.company_name} 的下单权限"
+    elif action == "unblock":
+        if access["overdue_amount"] > MONEY_EPSILON:
+            raise HTTPException(status_code=409, detail="客户仍有到期欠款，不能永久解冻；请使用临时开通两天")
+        customer.is_blocked = False
+        customer.block_source = None
+        customer.block_reason = None
+        customer.temporary_access_started_at = None
+        customer.temporary_access_until = None
+        customer.temporary_access_reason = None
+        audit_action = AUDIT_ACTION_CUSTOMER_UNBLOCK
+        description = f"解除客户 {customer.company_name} 的下单冻结"
+    elif action == "temporary_open":
+        if not customer.is_blocked and access["overdue_amount"] <= MONEY_EPSILON:
+            raise HTTPException(status_code=409, detail="客户当前没有冻结，无需临时开通")
+        if not customer.is_blocked:
+            customer.is_blocked = True
+            customer.block_source = "overdue"
+            customer.blocked_at = now_utc
+        customer.temporary_access_started_at = now_utc
+        customer.temporary_access_until = temporary_access_expiry(now_local).astimezone(timezone.utc)
+        customer.temporary_access_reason = reason
+        audit_action = AUDIT_ACTION_CUSTOMER_TEMP_ACCESS
+        description = f"为客户 {customer.company_name} 临时开放两个日历日的下单权限"
+    elif action == "end_temporary":
+        if not access["temporary_access_active"]:
+            raise HTTPException(status_code=409, detail="客户当前没有生效中的临时权限")
+        customer.temporary_access_until = now_utc - timedelta(seconds=1)
+        audit_action = AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END
+        description = f"提前结束客户 {customer.company_name} 的临时下单权限"
+    else:
+        raise HTTPException(status_code=400, detail="不支持的账户限制操作")
+
+    customer.restriction_updated_by = operator_name
+    after = {
+        "is_blocked": bool(customer.is_blocked),
+        "block_source": customer.block_source,
+        "block_reason": customer.block_reason,
+        "temporary_access_started_at": customer.temporary_access_started_at.isoformat() if customer.temporary_access_started_at else None,
+        "temporary_access_until": customer.temporary_access_until.isoformat() if customer.temporary_access_until else None,
+        "temporary_access_reason": customer.temporary_access_reason,
+    }
+    write_audit_log(
+        db=db,
+        action_type=audit_action,
+        description=description,
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=customer.id,
+        target_label=customer.company_name,
+        extra_data={
+            "reason": reason,
+            "before": before,
+            "after": after,
+            "overdue_amount": access["overdue_amount"],
+            "outstanding_balance": access["outstanding_balance"],
+        },
+    )
+    db.commit()
+    db.refresh(customer)
+    current_access = sync_customer_access(db, customer)
+    db.commit()
+    return {
+        "message": description,
+        "customer_id": customer.id,
+        "effective_is_blocked": current_access["effective_is_blocked"],
+        "temporary_access_active": current_access["temporary_access_active"],
+        "temporary_access_until": current_access["temporary_access_until"],
+        "overdue_amount": current_access["overdue_amount"],
+    }
+
+
+@router.get("/customers/{customer_id}/restriction-history")
+def get_customer_restriction_history(customer_id: int, db: Session = Depends(get_db)):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    action_types = [
+        AUDIT_ACTION_CUSTOMER_BLOCK,
+        AUDIT_ACTION_CUSTOMER_UNBLOCK,
+        AUDIT_ACTION_CUSTOMER_TEMP_ACCESS,
+        AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END,
+    ]
+    logs = (
+        db.query(AuditLog)
+        .filter(AuditLog.target_id == customer_id, AuditLog.action_type.in_(action_types))
+        .order_by(AuditLog.created_at.desc())
+        .all()
+    )
+    results = []
+    for log in logs:
+        try:
+            extra = json.loads(log.extra_data) if log.extra_data else {}
+        except (TypeError, json.JSONDecodeError):
+            extra = {}
+        results.append({
+            "id": log.id,
+            "action_type": log.action_type,
+            "description": log.description,
+            "operator_name": log.operator_name,
+            "operator_role": log.operator_role,
+            "reason": extra.get("reason") or extra.get("previous_reason") or "",
+            "temporary_access_until": (extra.get("after") or {}).get("temporary_access_until"),
+            "extra_data": log.extra_data,
+            "created_at": _format_audit_time(log.created_at),
+        })
+    return results
 
 @router.post("/customers/{customer_id}/sites", response_model=DeliverySiteResponse)
 def add_delivery_site(customer_id: int, site_in: DeliverySiteCreate, db: Session = Depends(get_db)):
@@ -366,6 +584,106 @@ def toggle_package_visibility(customer_id: int, cp_id: int, db: Session = Depend
     )
 
 # --- 4. 每日订单状态与后台数据编辑 API ---
+@router.post("/orders")
+def create_order_by_admin(
+    req: AdminOrderCreateRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    reason = _required_reason(req.reason)
+    customer = db.query(Customer).filter(Customer.id == req.customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    site = db.query(DeliverySite).filter(
+        DeliverySite.id == req.site_id,
+        DeliverySite.customer_id == req.customer_id,
+    ).first()
+    if not site:
+        raise HTTPException(status_code=400, detail="配送地点不存在或不属于该客户")
+    if not any(item.quantity > 0 for item in req.items):
+        raise HTTPException(status_code=400, detail="请至少加入一项数量大于 0 的餐品")
+    existing = db.query(Order).filter(
+        Order.customer_id == req.customer_id,
+        Order.delivery_site_id == req.site_id,
+        Order.delivery_date == req.delivery_date,
+        Order.status != "cancelled",
+    ).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="该客户、地点及配送日期已有订单，请改用编辑功能")
+
+    assigned_rows = db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == req.customer_id).all()
+    assigned_sections = {row.meal_section_id: row.meal_section for row in assigned_rows}
+    package_ids = {item.customer_package_id for item in req.items if item.quantity > 0}
+    packages = db.query(CustomerPackage).filter(
+        CustomerPackage.id.in_(package_ids),
+        CustomerPackage.customer_id == req.customer_id,
+        CustomerPackage.is_active == True,
+    ).all()
+    package_map = {row.id: row for row in packages}
+    if len(package_map) != len(package_ids):
+        raise HTTPException(status_code=400, detail="订单包含未分配给该客户的套餐")
+
+    window = order_cutoff_window(req.delivery_date)
+    late_override = window["phase"] != "open" or window["is_delivery_day_or_past"]
+    order = Order(
+        customer_id=req.customer_id,
+        delivery_site_id=req.site_id,
+        delivery_date=req.delivery_date,
+        status="submitted",
+        version=1,
+        updated_at=datetime.now(timezone.utc),
+        is_late_override=late_override,
+    )
+    db.add(order)
+    db.flush()
+
+    snapshot = []
+    for item in req.items:
+        if item.quantity <= 0:
+            continue
+        section = assigned_sections.get(item.meal_section_id)
+        if not section:
+            raise HTTPException(status_code=400, detail=f"餐次 ID {item.meal_section_id} 未向该客户开放")
+        cp = package_map[item.customer_package_id]
+        allowed_categories = {value.strip() for value in (section.allowed_categories or "").split(",") if value.strip()}
+        if allowed_categories and cp.template.category not in allowed_categories:
+            raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
+        db.add(OrderDetail(
+            order_id=order.id,
+            meal_section_id=item.meal_section_id,
+            customer_package_id=cp.id,
+            quantity=item.quantity,
+            final_unit_price=cp.agreement_price,
+            remark=item.remark or "",
+        ))
+        snapshot.append({
+            "meal_section_id": item.meal_section_id,
+            "customer_package_id": cp.id,
+            "quantity": item.quantity,
+            "remark": item.remark or "",
+        })
+
+    operator_name, operator_role = _operator(auth)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_ORDER_CREATE,
+        description=f"后台代客户创建订单 #{order.id}",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=order.id,
+        target_label=f"{customer.company_name} | {req.delivery_date}",
+        extra_data={
+            "reason": reason,
+            "after": snapshot,
+            "admin_override": True,
+            "late_override": late_override,
+            "cutoff_at": window["cutoff_at"],
+        },
+    )
+    db.commit()
+    return {"message": "后台代客下单成功", "order_id": order.id, "late_override": late_override, "version": order.version}
+
+
 @router.get("/all-orders")
 def get_all_orders(
     start_date: Optional[date] = None,
@@ -415,6 +733,8 @@ def get_all_orders(
             "site_name": o.site.site_name if o.site else "",
             "delivery_date": o.delivery_date.strftime("%Y-%m-%d"),
             "status": o.status,
+            "version": o.version or 1,
+            "is_late_override": bool(o.is_late_override),
             "total_portions": total_portions,
             "total_price": total_price,
             "details": details_list,
@@ -424,18 +744,43 @@ def get_all_orders(
     return results
 
 @router.put("/orders/{order_id}")
-def edit_order_by_admin(order_id: int, req: OrderEditRequest, request: Request, db: Session = Depends(get_db)):
-    order = db.query(Order).filter(Order.id == order_id).first()
+def edit_order_by_admin(
+    order_id: int,
+    req: OrderEditRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    reason = _required_reason(req.reason)
+    order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
+    if req.expected_order_version is not None and order.version != req.expected_order_version:
+        raise HTTPException(status_code=409, detail="订单已被其他人员修改，请刷新后重试")
+    if order.invoice_id is not None or order.status in {"billed", "paid"}:
+        raise HTTPException(status_code=409, detail="订单已经核账或付款，请先在账单管理中作废/解除关联后再修改")
+    if not any(item.quantity > 0 for item in req.items):
+        raise HTTPException(status_code=400, detail="订单至少保留一项数量大于 0 的餐品；整单取消请使用取消功能")
+    site = db.query(DeliverySite).filter(
+        DeliverySite.id == req.site_id,
+        DeliverySite.customer_id == order.customer_id,
+    ).first()
+    if not site:
+        raise HTTPException(status_code=400, detail="配送地点不存在或不属于该客户")
+    assigned_rows = db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == order.customer_id).all()
+    assigned_sections = {row.meal_section_id: row.meal_section for row in assigned_rows}
 
-    operator_name = getattr(request.state, "operator_name", None) or request.headers.get("X-Operator-Name", "后台管理员")
-    operator_role = getattr(request.state, "operator_role", None) or request.headers.get("X-Operator-Role", "staff")
+    operator_name, operator_role = _operator(auth)
 
     # NOTE: 在修改前捕获旧值，用于生成变更 diff
     old_delivery_date = str(order.delivery_date)
     old_site_id = order.delivery_site_id
     old_site = db.query(DeliverySite).filter(DeliverySite.id == old_site_id).first()
+    old_details = [{
+        "meal_section_id": detail.meal_section_id,
+        "customer_package_id": detail.customer_package_id,
+        "quantity": detail.quantity,
+        "remark": detail.remark or "",
+    } for detail in order.details]
 
     order_label = f"{order.customer.company_name} | {order.delivery_date}"
 
@@ -444,19 +789,37 @@ def edit_order_by_admin(order_id: int, req: OrderEditRequest, request: Request, 
 
     db.query(OrderDetail).filter(OrderDetail.order_id == order_id).delete()
 
+    new_details = []
     for item in req.items:
         if item.quantity > 0:
-            cp = db.query(CustomerPackage).filter(CustomerPackage.id == item.customer_package_id).first()
-            unit_price = cp.agreement_price if cp else 15.0
+            section = assigned_sections.get(item.meal_section_id)
+            if not section:
+                raise HTTPException(status_code=400, detail=f"餐次 ID {item.meal_section_id} 未向该客户开放")
+            cp = db.query(CustomerPackage).filter(
+                CustomerPackage.id == item.customer_package_id,
+                CustomerPackage.customer_id == order.customer_id,
+                CustomerPackage.is_active == True,
+            ).first()
+            if not cp:
+                raise HTTPException(status_code=400, detail="订单包含未分配给该客户的套餐")
+            allowed_categories = {value.strip() for value in (section.allowed_categories or "").split(",") if value.strip()}
+            if allowed_categories and cp.template.category not in allowed_categories:
+                raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
 
             db.add(OrderDetail(
                 order_id=order_id,
                 meal_section_id=item.meal_section_id,
                 customer_package_id=item.customer_package_id,
                 quantity=item.quantity,
-                final_unit_price=unit_price,
+                final_unit_price=cp.agreement_price,
                 remark=item.remark or ""
             ))
+            new_details.append({
+                "meal_section_id": item.meal_section_id,
+                "customer_package_id": item.customer_package_id,
+                "quantity": item.quantity,
+                "remark": item.remark or "",
+            })
 
     # NOTE: 构建变更 diff 列表，供前端以 "旧值 → 新值" 格式渲染
     changes = []
@@ -474,6 +837,11 @@ def edit_order_by_admin(order_id: int, req: OrderEditRequest, request: Request, 
 
     # 菜品明细始终记录为已变更（每次管理员编辑都会重建明细）
     changes.append({"field": "菜品明细", "old": "details_changed", "new": "details_changed"})
+    window = order_cutoff_window(req.delivery_date)
+    late_override = window["phase"] != "open" or window["is_delivery_day_or_past"]
+    order.is_late_override = bool(order.is_late_override or late_override)
+    order.version = (order.version or 1) + 1
+    order.updated_at = datetime.now(timezone.utc)
 
     write_audit_log(
         db=db,
@@ -483,69 +851,125 @@ def edit_order_by_admin(order_id: int, req: OrderEditRequest, request: Request, 
         operator_role=operator_role,
         target_id=order_id,
         target_label=order_label,
-        extra_data={"changes": changes}
+        extra_data={
+            "reason": reason,
+            "changes": changes,
+            "before": old_details,
+            "after": new_details,
+            "admin_override": True,
+            "late_override": late_override,
+            "cutoff_at": window["cutoff_at"],
+        }
     )
 
     db.commit()
+    return {"message": "订单修改成功", "order_id": order.id, "version": order.version, "late_override": late_override}
 
 @router.put("/orders/{order_id}/status")
-def update_order_status(order_id: int, status: str, request: Request, db: Session = Depends(get_db)):
-    order = db.query(Order).filter(Order.id == order_id).first()
+def update_order_status(
+    order_id: int,
+    req: OrderStatusChangeRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    reason = _required_reason(req.reason)
+    order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
-
-    operator_name = getattr(request.state, "operator_name", None) or request.headers.get("X-Operator-Name", "后台管理员")
-    operator_role = getattr(request.state, "operator_role", None) or request.headers.get("X-Operator-Role", "staff")
+    if req.expected_order_version is not None and order.version != req.expected_order_version:
+        raise HTTPException(status_code=409, detail="订单已被其他人员修改，请刷新后重试")
+    new_status = req.status.strip().lower()
+    allowed_statuses = {"submitted", "confirmed", "in_production", "delivered", "billed", "paid", "cancelled"}
+    if new_status not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="不支持的订单状态")
+    if order.invoice_id is not None and new_status not in {"billed", "paid"}:
+        raise HTTPException(status_code=409, detail="订单已关联账单，请先在账单管理中解除关联后再更改为其他状态")
+    operator_name, operator_role = _operator(auth)
 
     old_status = order.status
     order_label = f"{order.customer.company_name} | {order.delivery_date}"
 
-    order.status = status
+    order.status = new_status
+    order.version = (order.version or 1) + 1
+    order.updated_at = datetime.now(timezone.utc)
+    window = order_cutoff_window(order.delivery_date)
+    late_override = window["phase"] != "open" or window["is_delivery_day_or_past"]
+    order.is_late_override = bool(order.is_late_override or late_override)
 
     # NOTE: 写入状态变更审计日志（changes 格式与订单编辑统一）
     write_audit_log(
         db=db,
         action_type=AUDIT_ACTION_ORDER_STATUS_CHANGE,
-        description=f"将订单 #{order_id} 的状态从 \"{old_status}\" 变更为 \"{status}\"",
+        description=f"将订单 #{order_id} 的状态从 \"{old_status}\" 变更为 \"{new_status}\"",
         operator_name=operator_name,
         operator_role=operator_role,
         target_id=order_id,
         target_label=order_label,
-        extra_data={"changes": [{"field": "订单状态", "old": old_status, "new": status}]}
+        extra_data={
+            "reason": reason,
+            "changes": [{"field": "订单状态", "old": old_status, "new": new_status}],
+            "admin_override": True,
+            "late_override": late_override,
+            "cutoff_at": window["cutoff_at"],
+        }
     )
 
     db.commit()
-    return {"message": "状态修改成功", "order_id": order_id, "new_status": status}
+    return {"message": "状态修改成功", "order_id": order_id, "new_status": new_status, "version": order.version}
 
-@router.delete("/orders/{order_id}")
-def delete_order(order_id: int, request: Request, db: Session = Depends(get_db)):
-    order = db.query(Order).filter(Order.id == order_id).first()
+@router.post("/orders/{order_id}/cancel")
+def cancel_order_by_admin(
+    order_id: int,
+    req: AdminCancelOrderRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    reason = _required_reason(req.reason)
+    order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
     if not order:
         raise HTTPException(status_code=404, detail="订单不存在")
-
-    operator_name = getattr(request.state, "operator_name", None) or request.headers.get("X-Operator-Name", "后台管理员")
-    operator_role = getattr(request.state, "operator_role", None) or request.headers.get("X-Operator-Role", "staff")
+    if req.expected_order_version is not None and order.version != req.expected_order_version:
+        raise HTTPException(status_code=409, detail="订单已被其他人员修改，请刷新后重试")
+    if order.invoice_id is not None or order.status in {"billed", "paid"}:
+        raise HTTPException(status_code=409, detail="订单已经核账或付款，请先在账单管理中作废/解除关联后再取消")
+    operator_name, operator_role = _operator(auth)
 
     order_label = f"{order.customer.company_name} | {order.delivery_date}"
     order_id_snapshot = order.id
+    old_status = order.status
+    old_details = [{
+        "meal_section_id": detail.meal_section_id,
+        "customer_package_id": detail.customer_package_id,
+        "quantity": detail.quantity,
+        "remark": detail.remark or "",
+    } for detail in order.details]
+    order.status = "cancelled"
+    order.version = (order.version or 1) + 1
+    order.updated_at = datetime.now(timezone.utc)
+    window = order_cutoff_window(order.delivery_date)
+    late_override = window["phase"] != "open" or window["is_delivery_day_or_past"]
+    order.is_late_override = bool(order.is_late_override or late_override)
 
-    # NOTE: 先写入审计日志再删除，避免 target_id 指向已不存在的记录
-    # 使用独立的写入时机，此 log 在删除后 commit 时一并提交
+    # NOTE: 订单采用软取消，保留原记录及明细；审计日志与状态变更同一事务提交。
     write_audit_log(
         db=db,
-        action_type=AUDIT_ACTION_ORDER_DELETE,
-        description=f"删除了订单 #{order_id_snapshot}",
+        action_type=AUDIT_ACTION_ORDER_CANCEL,
+        description=f"后台取消了订单 #{order_id_snapshot}",
         operator_name=operator_name,
         operator_role=operator_role,
         target_id=order_id_snapshot,
         target_label=order_label,
-        extra_data={"deleted_at": datetime.utcnow().isoformat()}
+        extra_data={
+            "reason": reason,
+            "changes": [{"field": "订单状态", "old": old_status, "new": "cancelled"}],
+            "before": old_details,
+            "admin_override": True,
+            "late_override": late_override,
+            "cutoff_at": window["cutoff_at"],
+        }
     )
-
-    db.query(OrderDetail).filter(OrderDetail.order_id == order_id).delete()
-    db.delete(order)
     db.commit()
-    return {"message": "订单已成功删除", "order_id": order_id}
+    return {"message": "订单已取消并保留审计记录", "order_id": order_id, "version": order.version}
 
 # ============================================================
 # 5. 订单操作记录查询 API
@@ -563,6 +987,7 @@ def get_order_audit_logs(order_id: int, db: Session = Depends(get_db)):
             AUDIT_ACTION_ORDER_CREATE,
             AUDIT_ACTION_ORDER_UPDATE,
             AUDIT_ACTION_ORDER_DELETE,
+            AUDIT_ACTION_ORDER_CANCEL,
             AUDIT_ACTION_ORDER_STATUS_CHANGE,
         ]))
         .order_by(AuditLog.created_at.desc())
@@ -576,14 +1001,14 @@ def get_order_audit_logs(order_id: int, db: Session = Depends(get_db)):
             "operator_name": log.operator_name,
             "operator_role": log.operator_role,
             "extra_data": log.extra_data,
-            "created_at": log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else None,
+            "created_at": _format_audit_time(log.created_at),
         }
         for log in logs
     ]
 
 
 # --- 全局审计日志列表（供 superadmin 审计日志全页使用）---
-@router.get("/audit-logs")
+@router.get("/audit-logs", dependencies=[Depends(require_superadmin)])
 def list_audit_logs(
     action_type: Optional[str] = None,
     keyword: Optional[str] = None,
@@ -625,7 +1050,7 @@ def list_audit_logs(
             "operator_name": log.operator_name,
             "operator_role": log.operator_role,
             "extra_data": log.extra_data,
-            "created_at": log.created_at.strftime("%Y-%m-%d %H:%M:%S") if log.created_at else None,
+            "created_at": _format_audit_time(log.created_at),
         }
         for log in logs
     ]
@@ -734,7 +1159,11 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     today_orders = db.query(Order).filter(Order.delivery_date == today).all()
     today_portions = sum(sum(d.quantity for d in o.details) for o in today_orders)
 
-    total_customers = db.query(Customer).count()
+    all_customers = db.query(Customer).all()
+    for customer in all_customers:
+        sync_customer_access(db, customer)
+    db.commit()
+    total_customers = len(all_customers)
     blocked_customers = db.query(Customer).filter(Customer.is_blocked == True).count()
 
     all_orders = db.query(Order).all()
@@ -872,7 +1301,11 @@ def list_payments(
     return results
 
 @router.post("/payments")
-def create_payment(req: PaymentCreateRequest, db: Session = Depends(get_db)):
+def create_payment(
+    req: PaymentCreateRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
     cust = db.query(Customer).filter(Customer.id == req.customer_id).first()
     if not cust:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -895,6 +1328,30 @@ def create_payment(req: PaymentCreateRequest, db: Session = Depends(get_db)):
         remark=req.remark or ""
     )
     db.add(payment)
+    db.flush()
+    access = sync_customer_access(db, cust)
+    operator_name, operator_role = _operator(auth)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_PAYMENT_CREATE,
+        description=f"登记客户 {cust.company_name} 还款 RM {payment.amount:.2f}",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=cust.id,
+        target_label=cust.company_name,
+        extra_data={
+            "payment_id": payment.id,
+            "amount": payment.amount,
+            "payment_date": payment.payment_date.isoformat(),
+            "reference_no": payment.reference_no,
+            "allocated_dos_text": payment.allocated_dos_text,
+            "reason": payment.remark or "登记客户还款",
+            "access_after": {
+                "overdue_amount": access["overdue_amount"],
+                "effective_is_blocked": access["effective_is_blocked"],
+            },
+        },
+    )
     db.commit()
     db.refresh(payment)
     return {
@@ -906,11 +1363,47 @@ def create_payment(req: PaymentCreateRequest, db: Session = Depends(get_db)):
     }
 
 @router.delete("/payments/{payment_id}")
-def delete_payment(payment_id: int, db: Session = Depends(get_db)):
+def delete_payment(
+    payment_id: int,
+    reason: str = "后台删除还款记录",
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
     payment = db.query(PaymentRecord).filter(PaymentRecord.id == payment_id).first()
     if not payment:
         raise HTTPException(status_code=404, detail="还款记录不存在")
+    if len(reason.strip()) < 3:
+        raise HTTPException(status_code=400, detail="删除还款记录必须填写原因")
+    customer = db.query(Customer).filter(Customer.id == payment.customer_id).first()
+    snapshot = {
+        "payment_id": payment.id,
+        "amount": payment.amount,
+        "payment_date": payment.payment_date.isoformat(),
+        "reference_no": payment.reference_no,
+        "allocated_dos_text": payment.allocated_dos_text,
+        "remark": payment.remark,
+    }
     db.delete(payment)
+    db.flush()
+    access = sync_customer_access(db, customer) if customer else None
+    operator_name, operator_role = _operator(auth)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_PAYMENT_DELETE,
+        description=f"删除客户 {customer.company_name if customer else payment.customer_id} 的还款记录 #{payment_id}",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=payment.customer_id,
+        target_label=customer.company_name if customer else str(payment.customer_id),
+        extra_data={
+            "reason": reason.strip(),
+            "deleted_payment": snapshot,
+            "access_after": {
+                "overdue_amount": access["overdue_amount"],
+                "effective_is_blocked": access["effective_is_blocked"],
+            } if access else None,
+        },
+    )
     db.commit()
     return {"detail": "还款记录已删除"}
 

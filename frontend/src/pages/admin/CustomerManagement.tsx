@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { App, Table, Button, Modal, Form, Input, Select, Card, Tag, Space, Row, Col, Typography, Divider, Popconfirm } from 'antd';
-import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined, EditOutlined, DeleteOutlined } from '@ant-design/icons';
+import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
 
@@ -33,6 +33,12 @@ export const CustomerManagement: React.FC = () => {
     colStatus: isEn ? 'Ordering Status' : '下单权限状态',
     statusSuspended: isEn ? '🚫 Suspended' : '🚫 下单已冻结 (Suspended)',
     statusActive: isEn ? '🟢 Active' : '🟢 下单正常 (Active)',
+    statusTemporary: isEn ? '🟠 Temporary Access' : '🟠 临时开放中',
+    reasonRequired: isEn ? 'A reason of at least 3 characters is required.' : '必须填写至少 3 个字的操作原因。',
+    reasonPlaceholder: isEn ? 'Enter the operational reason for audit...' : '请输入操作原因，内容将写入 Audit Log…',
+    tempOpen: isEn ? 'Open 2 Days' : '临时开通2天',
+    endTemporary: isEn ? 'End Temporary Access' : '结束临时权限',
+    history: isEn ? 'Restriction History' : '冻结记录',
     unfreezeConfirmTitle: isEn ? 'Lift Suspension Confirmation' : '解除冻结确认',
     unfreezeConfirmDesc: isEn ? 'Are you sure you want to lift the suspension for this customer? Staff will be able to order again.' : '确定要【解除冻结】该客户的下单权限吗？解除后订餐员可恢复下单。',
     btnConfirmUnfreeze: isEn ? 'Confirm Lift' : '确认解封',
@@ -77,6 +83,9 @@ export const CustomerManagement: React.FC = () => {
 
   const [form] = Form.useForm();
   const [siteForm] = Form.useForm();
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [historyRecords, setHistoryRecords] = useState<any[]>([]);
+  const [historyCustomer, setHistoryCustomer] = useState<any | null>(null);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -124,21 +133,55 @@ export const CustomerManagement: React.FC = () => {
     }
   };
 
-  const handleToggleFreezeCustomer = async (customer: any) => {
-    const nextBlockedState = !customer.is_blocked;
+  const handleAccessAction = (customer: any, action: 'block' | 'unblock' | 'temporary_open' | 'end_temporary') => {
+    let reason = '';
+    const titles: Record<string, string> = {
+      block: labels.freezeConfirmTitle,
+      unblock: labels.unfreezeConfirmTitle,
+      temporary_open: labels.tempOpen,
+      end_temporary: labels.endTemporary,
+    };
+    Modal.confirm({
+      title: `${titles[action]} — ${customer.company_name}`,
+      content: (
+        <Input.TextArea
+          rows={3}
+          placeholder={labels.reasonPlaceholder}
+          onChange={(event) => { reason = event.target.value; }}
+        />
+      ),
+      okText: titles[action],
+      okType: action === 'block' || action === 'end_temporary' ? 'danger' : 'primary',
+      cancelText: labels.btnCancel,
+      onOk: async () => {
+        if (reason.trim().length < 3) {
+          message.error(labels.reasonRequired);
+          throw new Error('reason_required');
+        }
+        try {
+          await axiosInstance.put(`/admin/customers/${customer.id}/order-access`, {
+            action,
+            reason: reason.trim(),
+          });
+          message.success(action === 'block' ? labels.freezeSuccess : labels.unfreezeSuccess);
+          await fetchCustomers();
+        } catch (err: any) {
+          if (err.message === 'reason_required') throw err;
+          message.error(err.response?.data?.detail || labels.toggleFailed);
+          throw err;
+        }
+      },
+    });
+  };
+
+  const handleOpenHistory = async (customer: any) => {
     try {
-      await axiosInstance.put(`/admin/customers/${customer.id}`, {
-        ...customer,
-        is_blocked: nextBlockedState
-      });
-      if (nextBlockedState) {
-        message.warning(`${labels.freezeSuccess} [${customer.company_name}]`);
-      } else {
-        message.success(`${labels.unfreezeSuccess} [${customer.company_name}]`);
-      }
-      fetchCustomers();
-    } catch (err) {
-      message.error(labels.toggleFailed);
+      const res = await axiosInstance.get(`/admin/customers/${customer.id}/restriction-history`);
+      setHistoryCustomer(customer);
+      setHistoryRecords(res.data || []);
+      setHistoryVisible(true);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.loadFailed);
     }
   };
 
@@ -272,7 +315,12 @@ export const CustomerManagement: React.FC = () => {
       title: labels.colStatus,
       key: 'is_blocked',
       render: (record: any) => (
-        record.is_blocked ? (
+        record.temporary_access_active ? (
+          <div>
+            <Tag color="warning" style={{ fontSize: 13, padding: '2px 8px' }}>{labels.statusTemporary}</Tag>
+            <div><Text type="secondary" style={{ fontSize: 11 }}>{record.temporary_access_until}</Text></div>
+          </div>
+        ) : record.effective_is_blocked ? (
           <Tag color="error" style={{ fontSize: 13, padding: '2px 8px' }}>{labels.statusSuspended}</Tag>
         ) : (
           <Tag color="success" style={{ fontSize: 13, padding: '2px 8px' }}>{labels.statusActive}</Tag>
@@ -288,31 +336,25 @@ export const CustomerManagement: React.FC = () => {
             {t('common.edit')}
           </Button>
 
-          {record.is_blocked ? (
-            <Popconfirm
-              title={labels.unfreezeConfirmTitle}
-              description={labels.unfreezeConfirmDesc}
-              onConfirm={() => handleToggleFreezeCustomer(record)}
-              okText={labels.btnConfirmUnfreeze}
-              cancelText={labels.btnCancel}
-            >
-              <Button size="small" type="primary" icon={<UnlockOutlined />} style={{ background: '#22c55e', borderColor: '#22c55e' }}>
+          {record.temporary_access_active ? (
+            <Button size="small" danger icon={<ClockCircleOutlined />} onClick={() => handleAccessAction(record, 'end_temporary')}>
+              {labels.endTemporary}
+            </Button>
+          ) : record.effective_is_blocked ? (
+            <>
+              <Button size="small" type="primary" icon={<ClockCircleOutlined />} onClick={() => handleAccessAction(record, 'temporary_open')}>
+                {labels.tempOpen}
+              </Button>
+              <Button size="small" icon={<UnlockOutlined />} onClick={() => handleAccessAction(record, 'unblock')}>
                 {labels.btnActivate}
               </Button>
-            </Popconfirm>
+            </>
           ) : (
-            <Popconfirm
-              title={labels.freezeConfirmTitle}
-              description={labels.freezeConfirmDesc}
-              onConfirm={() => handleToggleFreezeCustomer(record)}
-              okText={labels.btnConfirmFreeze}
-              cancelText={labels.btnCancel}
-            >
-              <Button size="small" danger type="primary" icon={<LockOutlined />}>
-                {labels.btnSuspend}
-              </Button>
-            </Popconfirm>
+            <Button size="small" danger type="primary" icon={<LockOutlined />} onClick={() => handleAccessAction(record, 'block')}>
+              {labels.btnSuspend}
+            </Button>
           )}
+          <Button size="small" icon={<HistoryOutlined />} onClick={() => handleOpenHistory(record)}>{labels.history}</Button>
         </Space>
       ),
     },
@@ -327,6 +369,28 @@ export const CustomerManagement: React.FC = () => {
         </Button>
       </div>
       <Table columns={columns} dataSource={customers} rowKey="id" loading={loading} scroll={{ x: 'max-content' }} />
+
+      <Modal
+        title={`${labels.history}${historyCustomer ? ` — ${historyCustomer.company_name}` : ''}`}
+        open={historyVisible}
+        onCancel={() => setHistoryVisible(false)}
+        footer={<Button onClick={() => setHistoryVisible(false)}>{labels.btnCancel}</Button>}
+        width={760}
+      >
+        <Table
+          rowKey="id"
+          size="small"
+          pagination={{ pageSize: 8 }}
+          dataSource={historyRecords}
+          columns={[
+            { title: isEn ? 'Time' : '时间', dataIndex: 'created_at', width: 165 },
+            { title: isEn ? 'Action' : '操作', dataIndex: 'action_type', width: 190, render: (value: string) => <Tag>{value}</Tag> },
+            { title: isEn ? 'Operator' : '操作人', dataIndex: 'operator_name', width: 140 },
+            { title: isEn ? 'Reason' : '原因', dataIndex: 'reason', width: 180, render: (value: string) => value || '-' },
+            { title: isEn ? 'Details' : '说明', dataIndex: 'description' },
+          ]}
+        />
+      </Modal>
 
       {/* 创建/编辑客户 Modal */}
       <Modal

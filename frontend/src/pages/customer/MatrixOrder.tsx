@@ -19,9 +19,13 @@ export const MatrixOrder: React.FC = () => {
     fastMode: isEn ? 'Fast Ordering Mode' : '快速订餐模式',
     quickFillYilian: isEn ? 'Quick Fill Yilian' : '一键易联标准',
     blockedTitle: isEn ? 'Ordering Restricted' : '订餐服务受限',
-    blockedDesc: isEn ? 'Your account has been restricted from ordering due to outstanding payment. Please contact finance to verify invoice status.' : '您的账号目前存在未付账期款项，下单功能已被系统自动锁定，请联系财务核对对账单。',
-    weekendReminderTitle: isEn ? 'Weekend Overtime Order Deadline Reminder' : '专享周末加班截止提醒',
-    weekendReminderDesc: isEn ? 'Pro3C plant exclusive: Weekend order deadline extended to 18:00 PM. Please submit after headcount is finalized.' : 'pro3c 厂区专享：知道您周末员工排班统计较慢，您的截止订餐时间已延长至傍晚 18:00，请安心统计后提交。',
+    blockedDesc: isEn ? 'Your account has overdue payment and new orders or quantity increases are paused. Existing orders may still be reduced or cancelled before the cutoff.' : '您的账号存在已到期欠款，新增订单及增加数量已暂停；在截止时间前仍可减少或取消现有订单。',
+    rulesTitle: isEn ? 'Ordering & Amendment Rules' : '下单与修改规则',
+    rulesDesc: isEn ? 'Next-day orders close at 6:00 PM on the previous day. If you started before 6:00 PM, complete that one submission by 6:10 PM. Same-day changes or cancellations require customer service.' : '次日配送订单须在前一天下午 6:00 前提交；若已在 6:00 前开始操作，可在 6:10 前完成本次提交。配送当天如需修改或取消，请联系客服。',
+    tempAccessTitle: isEn ? 'Temporary Ordering Access' : '临时下单权限',
+    reduceOnly: isEn ? 'This account is frozen. You may only reduce quantities in this existing order.' : '账户目前被冻结，本张现有订单只允许减少数量。',
+    cutoffClosed: isEn ? 'This delivery date is closed. Please contact customer service.' : '该配送日期已经截止，请联系客服处理。',
+    graceActive: isEn ? 'Cutoff reached. Complete this submission before the grace period expires.' : '正常截止时间已到，请在宽限期结束前完成本次提交。',
     sundayReminderTitle: isEn ? 'Sunday Routine Rest Notice' : '星期日例行休息提示',
     sundayReminderDesc: isEn ? 'Note: Based on your delivery schedule, Sunday is a rest day and no delivery is scheduled.' : '温馨提示：根据您的送餐习惯，星期日工厂安排例休无需送餐。',
     deliveryDate: isEn ? 'Select Delivery Date' : '送餐日期',
@@ -83,6 +87,16 @@ export const MatrixOrder: React.FC = () => {
   };
 
   const [userInfo, setUserInfo] = useState<any>(null);
+  const [accessStatus, setAccessStatus] = useState<any>(null);
+  const [orderWindow, setOrderWindow] = useState<any>(null);
+  const [editSessionId, setEditSessionId] = useState<string | null>(null);
+  const [editingOrderVersion, setEditingOrderVersion] = useState<number | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [originalMatrixData, setOriginalMatrixData] = useState<Record<string, Record<number, number>>>({});
+  const [originalMatrixAddons, setOriginalMatrixAddons] = useState<Record<string, Record<number, number>>>({});
+  const [serverClockOffset, setServerClockOffset] = useState(0);
+  const [configurationLoaded, setConfigurationLoaded] = useState(false);
+  const [, setClockTick] = useState(0);
   const [sites, setSites] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState<string>(dayjs().add(1, 'day').format('YYYY-MM-DD'));
   const [selectedSiteId, setSelectedSiteId] = useState<number | null>(null);
@@ -117,10 +131,43 @@ export const MatrixOrder: React.FC = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setClockTick(v => v + 1), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!configurationLoaded || !userInfo?.customer_id || !selectedDate) return;
+    if (editSessionId) return;
+    startOrderSession(userInfo.customer_id, selectedDate);
+  }, [configurationLoaded, userInfo?.customer_id, selectedDate, isEditing, editSessionId]);
+
+  async function startOrderSession(customerId: number, deliveryDate: string) {
+    try {
+      const res = await axiosInstance.post(`/orders/start-session?customer_id=${customerId}`, {
+        delivery_date: deliveryDate,
+      });
+      setOrderWindow(res.data);
+      if (res.data.server_now) setServerClockOffset(new Date(res.data.server_now).getTime() - Date.now());
+      setEditSessionId(res.data.edit_session_id || null);
+    } catch {
+      try {
+        const res = await axiosInstance.get(`/orders/order-window?customer_id=${customerId}&delivery_date=${deliveryDate}`);
+        setOrderWindow(res.data);
+        if (res.data.server_now) setServerClockOffset(new Date(res.data.server_now).getTime() - Date.now());
+        if (!isEditing) setEditSessionId(null);
+      } catch {
+        setOrderWindow(null);
+      }
+    }
+  }
+
   const fetchCustomerProfile = async (cid: number) => {
     try {
       // 1. 获取为该顾客开通的动态餐次和对应的公共套餐
-      const resSections = await axiosInstance.get(`/orders/meal-sections?customer_id=${cid}`);
+      const sectionsRequest = axiosInstance.get(`/orders/meal-sections?customer_id=${cid}`);
+      const profileRequest = axiosInstance.get(`/orders/customer-profile/${cid}`);
+      const resSections = await sectionsRequest;
       const sectionsList = resSections.data || [];
       setDbMealSections(sectionsList);
 
@@ -161,6 +208,11 @@ export const MatrixOrder: React.FC = () => {
 
         setMatrixData(newQuantities);
         setMatrixAddons(newAddons);
+        setOriginalMatrixData(JSON.parse(JSON.stringify(newQuantities)));
+        setOriginalMatrixAddons(JSON.parse(JSON.stringify(newAddons)));
+        setEditSessionId(order.edit_session_id || null);
+        setEditingOrderVersion(order.version || null);
+        setIsEditing(true);
         setRemark(order.remark || '');
         localStorage.removeItem('editing_order');
         message.info(labels.msgLoadedEdit);
@@ -170,7 +222,8 @@ export const MatrixOrder: React.FC = () => {
       }
 
       // NOTE: 使用客户专用接口获取自身资料和送货地址，避免不安全地加载所有客户列表
-      const resCust = await axiosInstance.get(`/orders/customer-profile/${cid}`);
+      const resCust = await profileRequest;
+      setAccessStatus(resCust.data?.access_status || null);
       if (resCust.data?.sites) {
         setSites(resCust.data.sites);
         if (!editingRaw && resCust.data.sites.length > 0) {
@@ -180,17 +233,17 @@ export const MatrixOrder: React.FC = () => {
           setSelectedSiteId(order.site_id);
         }
       }
+      setConfigurationLoaded(true);
     } catch (err) {
       message.error(labels.msgLoadFailed);
     }
   };
 
-  const isBlocked = userInfo?.is_blocked;
-  const isPro3c = userInfo?.name?.toLowerCase().includes('pro3c') || userInfo?.username?.includes('pro3c');
+  const isBlocked = accessStatus?.effective_is_blocked ?? userInfo?.is_blocked;
+  const reduceOnly = Boolean(isBlocked && isEditing);
   const isYilian = userInfo?.name?.includes('易联') || userInfo?.username?.includes('yilian');
 
   const isSunday = dayjs(selectedDate).day() === 0;
-  const isWeekend = dayjs(selectedDate).day() === 0 || dayjs(selectedDate).day() === 6;
 
   // 易联软件 快捷一键 2+2
   const handleQuickFillYilian = () => {
@@ -228,7 +281,7 @@ export const MatrixOrder: React.FC = () => {
   };
 
   const handleSubmitOrder = async () => {
-    if (isBlocked) {
+    if (isBlocked && !isEditing) {
       Modal.error({
         title: labels.btnLocked,
         content: labels.blockedDesc
@@ -275,11 +328,19 @@ export const MatrixOrder: React.FC = () => {
     try {
       await axiosInstance.post(`/orders/matrix-submit?customer_id=${userInfo.customer_id}`, {
         delivery_date: selectedDate,
-        items: items
+        items: items,
+        edit_session_id: editSessionId,
+        expected_order_version: editingOrderVersion,
       });
       message.success(labels.msgSuccess);
       handleClearOrder();
       setRemark('');
+      setIsEditing(false);
+      setEditingOrderVersion(null);
+      setOriginalMatrixData({});
+      setOriginalMatrixAddons({});
+      setEditSessionId(null);
+      await fetchCustomerProfile(userInfo.customer_id);
     } catch (err: any) {
       message.error(err.response?.data?.detail || 'Error');
     } finally {
@@ -310,6 +371,23 @@ export const MatrixOrder: React.FC = () => {
   });
 
   const activeItemsCount = activeCartItems.length;
+
+  const liveWindowPhase = (() => {
+    if (!orderWindow?.cutoff_at || !orderWindow?.grace_deadline) return orderWindow?.phase;
+    const serverNow = Date.now() + serverClockOffset;
+    if (serverNow < new Date(orderWindow.cutoff_at).getTime()) return 'open';
+    if (serverNow <= new Date(orderWindow.grace_deadline).getTime()) return 'grace';
+    return 'closed';
+  })();
+
+  const graceRemainingSeconds = (() => {
+    if (!orderWindow?.grace_deadline) return 0;
+    return Math.max(0, Math.floor((new Date(orderWindow.grace_deadline).getTime() - (Date.now() + serverClockOffset)) / 1000));
+  })();
+
+  const selectedDateBlocked = liveWindowPhase === 'closed'
+    || (liveWindowPhase === 'grace' && !editSessionId)
+    || orderWindow?.is_delivery_day_or_past;
 
   // 过滤得到在后台配置了套餐、允许显示在前端的餐次列表
   const visibleSections = dbMealSections.filter(sec => (sec.packages || []).length > 0).map(sec => sec.name);
@@ -342,7 +420,7 @@ export const MatrixOrder: React.FC = () => {
           
           <Col xs={24} md={10} style={{ textAlign: 'right' }}>
             <Space>
-              {isYilian && !isSunday && (
+              {isYilian && !isSunday && !isBlocked && (
                 <Button type="primary" onClick={handleQuickFillYilian} style={{ background: '#38bdf8', borderColor: '#38bdf8', color: '#0f172a', borderRadius: 8, height: 40, fontWeight: 'bold' }}>
                   {labels.quickFillYilian}
                 </Button>
@@ -353,24 +431,52 @@ export const MatrixOrder: React.FC = () => {
       </div>
 
       {/* 警告拦截 Banner */}
+      <Alert
+        title={labels.rulesTitle}
+        description={labels.rulesDesc}
+        type="info"
+        showIcon
+        style={{ marginBottom: 16, borderRadius: 12 }}
+      />
+
+      {accessStatus?.temporary_access_active && (
+        <Alert
+          title={labels.tempAccessTitle}
+          description={isEn
+            ? `Ordering is temporarily open until ${accessStatus.temporary_access_until}. Delivery dates are limited to ${accessStatus.max_order_delivery_date}. Confirmed orders remain valid after access expires.`
+            : `下单权限临时开放至 ${accessStatus.temporary_access_until}；只可选择 ${accessStatus.max_order_delivery_date} 或之前的配送日期。权限到期后，已成功提交的订单仍然有效。`}
+          type="warning"
+          showIcon
+          style={{ marginBottom: 16, borderRadius: 12 }}
+        />
+      )}
+
       {isBlocked && (
         <Alert
           title={labels.blockedTitle}
-          description={labels.blockedDesc}
+          description={`${labels.blockedDesc}${accessStatus?.overdue_amount ? ` ${isEn ? 'Overdue' : '到期欠款'}: RM ${Number(accessStatus.overdue_amount).toFixed(2)}` : ''}`}
           type="error"
           showIcon
           style={{ marginBottom: 24, borderRadius: 12 }}
         />
       )}
 
-      {isPro3c && isWeekend && (
+      {reduceOnly && (
+        <Alert title={labels.reduceOnly} type="warning" showIcon style={{ marginBottom: 16, borderRadius: 12 }} />
+      )}
+
+      {liveWindowPhase === 'grace' && editSessionId && (
         <Alert
-          title={labels.weekendReminderTitle}
-          description={labels.weekendReminderDesc}
-          type="info"
+          title={labels.graceActive}
+          description={`${Math.floor(graceRemainingSeconds / 60)}:${String(graceRemainingSeconds % 60).padStart(2, '0')}`}
+          type="warning"
           showIcon
-          style={{ marginBottom: 24, borderRadius: 12 }}
+          style={{ marginBottom: 16, borderRadius: 12 }}
         />
+      )}
+
+      {selectedDateBlocked && (
+        <Alert title={labels.cutoffClosed} type="error" showIcon style={{ marginBottom: 16, borderRadius: 12 }} />
       )}
 
       {isYilian && isSunday && (
@@ -402,8 +508,22 @@ export const MatrixOrder: React.FC = () => {
                 size="large"
                 style={{ width: '100%', borderRadius: 10 }}
                 value={dayjs(selectedDate)}
-                onChange={(d) => d && setSelectedDate(d.format('YYYY-MM-DD'))}
+                onChange={(d) => {
+                  if (!d) return;
+                  setEditSessionId(null);
+                  setOrderWindow(null);
+                  setSelectedDate(d.format('YYYY-MM-DD'));
+                }}
                 allowClear={false}
+                disabled={isEditing}
+                disabledDate={(current) => {
+                  if (!current) return false;
+                  if (current.isSame(dayjs(), 'day') || current.isBefore(dayjs(), 'day')) return true;
+                  if (accessStatus?.temporary_access_active && accessStatus?.max_order_delivery_date) {
+                    return current.isAfter(dayjs(accessStatus.max_order_delivery_date), 'day');
+                  }
+                  return false;
+                }}
               />
             </Space>
           </Col>
@@ -484,21 +604,25 @@ export const MatrixOrder: React.FC = () => {
                           const addonQty = matrixAddons[sectionName]?.[pkg.id] || 0;
                           
                           const updatePkgQty = (newVal: number) => {
+                            const maximum = originalMatrixData[sectionName]?.[pkg.id] ?? 0;
+                            const safeValue = reduceOnly ? Math.min(maximum, newVal) : newVal;
                             setMatrixData(prev => ({
                               ...prev,
                               [sectionName]: {
                                 ...(prev[sectionName] || {}),
-                                [pkg.id]: Math.max(0, newVal)
+                                [pkg.id]: Math.max(0, safeValue)
                               }
                             }));
                           };
 
                           const updateAddonQty = (newVal: number) => {
+                            const maximum = originalMatrixAddons[sectionName]?.[pkg.id] ?? 0;
+                            const safeValue = reduceOnly ? Math.min(maximum, newVal) : newVal;
                             setMatrixAddons(prev => ({
                               ...prev,
                               [sectionName]: {
                                 ...(prev[sectionName] || {}),
-                                [pkg.id]: Math.max(0, newVal)
+                                [pkg.id]: Math.max(0, safeValue)
                               }
                             }));
                           };
@@ -526,7 +650,7 @@ export const MatrixOrder: React.FC = () => {
                                     type="text"
                                     shape="circle"
                                     size="small"
-                                    disabled={qty <= 0 || isBlocked || (isYilian && isSunday)}
+                                    disabled={qty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)}
                                     icon={<MinusOutlined style={{ fontSize: 11, color: qty > 0 ? '#0f172a' : '#94a3b8' }} />}
                                     onClick={() => updatePkgQty(qty - 1)}
                                     style={{ width: 26, height: 26, background: qty > 0 ? '#ffffff' : 'transparent', boxShadow: qty > 0 ? '0 2px 4px rgba(0,0,0,0.05)' : 'none' }}
@@ -534,12 +658,12 @@ export const MatrixOrder: React.FC = () => {
                                   
                                   <InputNumber
                                     min={0}
-                                    max={9999}
+                                    max={reduceOnly ? (originalMatrixData[sectionName]?.[pkg.id] ?? 0) : 9999}
                                     variant="borderless"
                                     controls={false}
                                     value={qty}
                                     onChange={(val) => updatePkgQty(val || 0)}
-                                    disabled={isBlocked || (isYilian && isSunday)}
+                                    disabled={(isBlocked && !isEditing) || (isYilian && isSunday)}
                                     style={{ width: 44, textAlign: 'center', fontWeight: 'bold', fontSize: 14, background: 'transparent' }}
                                   />
                                   
@@ -564,7 +688,7 @@ export const MatrixOrder: React.FC = () => {
                                       type="text"
                                       shape="circle"
                                       size="small"
-                                      disabled={addonQty <= 0 || isBlocked || (isYilian && isSunday)}
+                                      disabled={addonQty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)}
                                       icon={<MinusOutlined style={{ fontSize: 9, color: addonQty > 0 ? '#0f172a' : '#94a3b8' }} />}
                                       onClick={() => updateAddonQty(addonQty - 1)}
                                       style={{ width: 22, height: 22, background: addonQty > 0 ? '#ffffff' : 'transparent' }}
@@ -572,12 +696,12 @@ export const MatrixOrder: React.FC = () => {
                                     
                                     <InputNumber
                                       min={0}
-                                      max={999}
+                                      max={reduceOnly ? (originalMatrixAddons[sectionName]?.[pkg.id] ?? 0) : 999}
                                       variant="borderless"
                                       controls={false}
                                       value={addonQty}
                                       onChange={(val) => updateAddonQty(val || 0)}
-                                      disabled={isBlocked || (isYilian && isSunday)}
+                                      disabled={(isBlocked && !isEditing) || (isYilian && isSunday)}
                                       style={{ width: 32, textAlign: 'center', fontWeight: 'bold', fontSize: 12, background: 'transparent' }}
                                     />
                                     
@@ -622,7 +746,7 @@ export const MatrixOrder: React.FC = () => {
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <Text strong style={{ fontSize: 16, color: '#0f172a' }}>{labels.orderSummary}</Text>
               </div>
-              {activeItemsCount > 0 && (
+              {activeItemsCount > 0 && !reduceOnly && (
                 <Button type="link" danger size="small" onClick={handleClearOrder} style={{ padding: 0 }}>
                   {labels.clearAll}
                 </Button>
@@ -714,18 +838,18 @@ export const MatrixOrder: React.FC = () => {
               size="large"
               block
               loading={submitting}
-              disabled={isBlocked || (isYilian && isSunday) || totalPortions === 0}
+              disabled={(isBlocked && !isEditing) || selectedDateBlocked || (isYilian && isSunday) || totalPortions === 0}
               onClick={handleSubmitOrder}
               style={{
                 height: 52,
                 fontSize: 16,
                 fontWeight: 'bold',
                 borderRadius: 12,
-                background: isBlocked || totalPortions === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
+                background: (isBlocked && !isEditing) || selectedDateBlocked || totalPortions === 0 ? '#cbd5e1' : 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)',
                 borderColor: 'transparent'
               }}
             >
-              {isBlocked ? labels.btnLocked : labels.btnSubmit}
+              {isBlocked && !isEditing ? labels.btnLocked : labels.btnSubmit}
             </Button>
           </div>
         </Col>

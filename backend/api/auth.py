@@ -11,6 +11,7 @@ from passlib.context import CryptContext
 from database import get_db
 from model.models import StaffUser, CustomerUser, Customer
 from schema.schemas import LoginRequest, TokenSchema
+from api.order_rules import sync_customer_access
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -122,15 +123,16 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
             if not c_user.is_active:
                 raise HTTPException(status_code=400, detail="账号已被禁用")
             upgrade_password_hash_if_needed(c_user, req.password)
-            db.commit()
             customer = db.query(Customer).filter(Customer.id == c_user.customer_id).first()
+            access = sync_customer_access(db, customer) if customer else {"effective_is_blocked": False}
+            db.commit()
             token = create_access_token({
                 "sub": c_user.username,
                 "user_type": "customer",
                 "role": "customer",
                 "name": c_user.contact_name,
                 "customer_id": c_user.customer_id,
-                "is_blocked": customer.is_blocked if customer else False
+                "is_blocked": access["effective_is_blocked"]
             })
             return TokenSchema(
                 access_token=token,
@@ -139,7 +141,7 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
                 username=c_user.username,
                 name=f"{customer.company_name} ({c_user.contact_name})" if customer else c_user.contact_name,
                 customer_id=c_user.customer_id,
-                is_blocked=customer.is_blocked if customer else False
+                is_blocked=access["effective_is_blocked"]
             )
 
         raise HTTPException(

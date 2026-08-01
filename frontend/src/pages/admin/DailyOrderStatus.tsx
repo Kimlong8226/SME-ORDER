@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   App, Card, Table, DatePicker, Select, Tag, Typography, Space, Button,
-  Badge, Modal, Form, InputNumber, Input, Row, Col, Popconfirm, Divider,
+  Badge, Modal, Form, InputNumber, Input, Row, Col, Divider,
   Spin, Empty, Tooltip
 } from 'antd';
 import {
-  ReloadOutlined, EditOutlined, DeleteOutlined, HistoryOutlined,
+  ReloadOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, PlusOutlined,
   UserOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -74,6 +74,7 @@ const OrderAuditDrawer: React.FC<{
       ORDER_CREATE: { zh: '创建新订单', en: 'Order Created' },
       ORDER_UPDATE: { zh: '修改订单内容', en: 'Order Updated' },
       ORDER_DELETE: { zh: '删除订单', en: 'Order Deleted' },
+      ORDER_CANCEL: { zh: '取消订单', en: 'Order Cancelled' },
       ORDER_STATUS_CHANGE: { zh: '修改订单状态', en: 'Status Changed' },
     };
     return isEn ? (map[actionType]?.en ?? actionType) : (map[actionType]?.zh ?? actionType);
@@ -205,7 +206,7 @@ const OrderAuditDrawer: React.FC<{
             // NOTE: 根据操作类型决定时间线圆点颜色
             const dotColor = log.action_type === 'ORDER_CREATE'
               ? '#3b82f6'
-              : log.action_type === 'ORDER_DELETE'
+              : ['ORDER_DELETE', 'ORDER_CANCEL'].includes(log.action_type)
               ? '#ef4444'
               : log.action_type === 'ORDER_STATUS_CHANGE'
               ? '#f59e0b'
@@ -291,8 +292,8 @@ export const DailyOrderStatus: React.FC = () => {
     loadFailed: isEn ? 'Failed to fetch orders' : '获取订单失败',
     statusUpdated: isEn ? 'Order status updated successfully' : '订单状态已更新',
     statusUpdateFailed: isEn ? 'Failed to update order status' : '修改状态失败',
-    deleteSuccess: isEn ? 'Order deleted successfully' : '订单已成功删除',
-    deleteFailed: isEn ? 'Failed to delete order' : '删除订单失败',
+    deleteSuccess: isEn ? 'Order cancelled successfully' : '订单已成功取消',
+    deleteFailed: isEn ? 'Failed to cancel order' : '取消订单失败',
     saveSuccess: isEn ? 'Order updated successfully!' : '后台已成功修改该订单数据！',
     saveFailed: isEn ? 'Failed to save order updates' : '保存订单修改失败',
     colOrderId: isEn ? 'Order ID' : '编号',
@@ -306,12 +307,14 @@ export const DailyOrderStatus: React.FC = () => {
     colStatus: isEn ? 'Current Status' : '状态',
     colAction: isEn ? 'Admin Management' : '数据管理',
     btnEdit: isEn ? 'Edit' : '编辑',
-    btnDelete: isEn ? 'Delete' : '删除',
+    btnDelete: isEn ? 'Cancel' : '取消',
     btnHistory: isEn ? 'History' : '操作记录',
-    confirmDeleteTitle: isEn ? 'Confirm Delete' : '删除订单确认',
-    confirmDeleteDesc: isEn ? 'Are you sure you want to delete this order?' : '确定要彻底删除该笔订单吗？',
+    confirmDeleteTitle: isEn ? 'Confirm Cancellation' : '取消订单确认',
+    confirmDeleteDesc: isEn ? 'Cancel this order? The record and audit history will be retained.' : '确定要取消该笔订单吗？订单记录及审计记录会保留。',
     filterAll: isEn ? 'All Statuses' : '全状态',
     statusSubmitted: isEn ? 'Submitted' : '已提交',
+    statusConfirmed: isEn ? 'Confirmed' : '已确认',
+    statusInProduction: isEn ? 'In Production' : '生产中',
     statusDelivered: isEn ? 'Delivered' : '已送达',
     statusBilled: isEn ? 'Billed' : '已核账',
     statusPaid: isEn ? 'Paid' : '已付款',
@@ -325,6 +328,11 @@ export const DailyOrderStatus: React.FC = () => {
     colModalQty: isEn ? 'Order Quantity' : '预订份数',
     colModalRemark: isEn ? 'Detail Remark' : '明细备注',
     btnRefresh: isEn ? 'Refresh' : '刷新数据',
+    reason: isEn ? 'Operation Reason' : '操作原因',
+    reasonPlaceholder: isEn ? 'Required. This will be stored in the audit log.' : '必填，内容将写入 Audit Log',
+    reasonRequired: isEn ? 'Please enter at least 3 characters.' : '请输入至少 3 个字的操作原因',
+    btnCreate: isEn ? 'Create Order for Customer' : '代顾客下单',
+    lateOverride: isEn ? 'Late Admin Override' : '后台逾期处理',
   };
 
   const [orders, setOrders] = useState<any[]>([]);
@@ -337,6 +345,18 @@ export const DailyOrderStatus: React.FC = () => {
   const [editingOrder, setEditingOrder] = useState<any | null>(null);
   const [editSiteId, setEditSiteId] = useState<number | null>(null);
   const [editDetails, setEditDetails] = useState<any[]>([]);
+  const [editReason, setEditReason] = useState('');
+  const [createModalVisible, setCreateModalVisible] = useState(false);
+  const [createCustomers, setCreateCustomers] = useState<any[]>([]);
+  const [createCustomerId, setCreateCustomerId] = useState<number | null>(null);
+  const [createSites, setCreateSites] = useState<any[]>([]);
+  const [createSiteId, setCreateSiteId] = useState<number | null>(null);
+  const [createDate, setCreateDate] = useState<dayjs.Dayjs>(dayjs().add(1, 'day'));
+  const [createPackages, setCreatePackages] = useState<any[]>([]);
+  const [allCreateSections, setAllCreateSections] = useState<any[]>([]);
+  const [createSections, setCreateSections] = useState<any[]>([]);
+  const [createItems, setCreateItems] = useState<any[]>([]);
+  const [createReason, setCreateReason] = useState('');
 
   const [customerSites, setCustomerSites] = useState<any[]>([]);
   const [customerPackages, setCustomerPackages] = useState<any[]>([]);
@@ -364,38 +384,78 @@ export const DailyOrderStatus: React.FC = () => {
   }, [dateRange]);
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
-    try {
-      await axiosInstance.put(`/admin/orders/${orderId}/status?status=${newStatus}`);
-      message.success(labels.statusUpdated);
-      fetchOrders();
-    } catch (err) {
-      message.error(labels.statusUpdateFailed);
-    }
+    const record = orders.find(order => order.id === orderId);
+    let reason = '';
+    Modal.confirm({
+      title: labels.reason,
+      content: <Input.TextArea rows={3} placeholder={labels.reasonPlaceholder} onChange={(event) => { reason = event.target.value; }} />,
+      okText: labels.btnSave,
+      cancelText: labels.btnCancel,
+      onOk: async () => {
+        if (reason.trim().length < 3) {
+          message.error(labels.reasonRequired);
+          throw new Error('reason_required');
+        }
+        try {
+          await axiosInstance.put(`/admin/orders/${orderId}/status`, {
+            status: newStatus,
+            reason: reason.trim(),
+            expected_order_version: record?.version,
+          });
+          message.success(labels.statusUpdated);
+          await fetchOrders();
+        } catch (err: any) {
+          message.error(err.response?.data?.detail || labels.statusUpdateFailed);
+          throw err;
+        }
+      },
+    });
   };
 
-  const handleDeleteOrder = async (orderId: number) => {
-    try {
-      await axiosInstance.delete(`/admin/orders/${orderId}`);
-      message.success(labels.deleteSuccess);
-      fetchOrders();
-    } catch (err) {
-      message.error(labels.deleteFailed);
-    }
+  const handleDeleteOrder = (record: any) => {
+    let reason = '';
+    Modal.confirm({
+      title: labels.confirmDeleteTitle,
+      content: <Input.TextArea rows={3} placeholder={labels.reasonPlaceholder} onChange={(event) => { reason = event.target.value; }} />,
+      okText: labels.btnDelete,
+      okType: 'danger',
+      cancelText: labels.btnCancel,
+      onOk: async () => {
+        if (reason.trim().length < 3) {
+          message.error(labels.reasonRequired);
+          throw new Error('reason_required');
+        }
+        try {
+          await axiosInstance.post(`/admin/orders/${record.id}/cancel`, {
+            reason: reason.trim(),
+            expected_order_version: record.version,
+          });
+          message.success(labels.deleteSuccess);
+          await fetchOrders();
+        } catch (err: any) {
+          message.error(err.response?.data?.detail || labels.deleteFailed);
+          throw err;
+        }
+      },
+    });
   };
 
   const handleOpenEditModal = async (orderRecord: any) => {
     setEditingOrder(orderRecord);
     setEditSiteId(orderRecord.site_id);
     setEditDetails(orderRecord.details.map((d: any) => ({ ...d })));
+    setEditReason('');
 
     try {
-      const resCusts = await axiosInstance.get('/admin/customers');
+      const [resCusts, resPkgs] = await Promise.all([
+        axiosInstance.get('/admin/customers'),
+        axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/packages`),
+      ]);
       const cur = resCusts.data.find((c: any) => c.id === orderRecord.customer_id);
       if (cur && cur.sites) {
         setCustomerSites(cur.sites);
       }
 
-      const resPkgs = await axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/packages`);
       setCustomerPackages(resPkgs.data);
     } catch (err) {
       console.error(err);
@@ -425,11 +485,17 @@ export const DailyOrderStatus: React.FC = () => {
 
   const handleSaveOrderEdit = async () => {
     if (!editingOrder || !editSiteId) return;
+    if (editReason.trim().length < 3) {
+      message.error(labels.reasonRequired);
+      return;
+    }
 
     try {
       await axiosInstance.put(`/admin/orders/${editingOrder.id}`, {
         site_id: editSiteId,
         delivery_date: editingOrder.delivery_date,
+        reason: editReason.trim(),
+        expected_order_version: editingOrder.version,
         items: editDetails.map((d: any) => ({
           meal_section_id: d.meal_section_id,
           customer_package_id: d.customer_package_id,
@@ -442,6 +508,80 @@ export const DailyOrderStatus: React.FC = () => {
       fetchOrders();
     } catch (err) {
       message.error(labels.saveFailed);
+    }
+  };
+
+  const handleOpenCreateModal = async () => {
+    try {
+      const [customersRes, sectionsRes] = await Promise.all([
+        axiosInstance.get('/admin/customers'),
+        axiosInstance.get('/admin/meal-sections'),
+      ]);
+      setCreateCustomers(customersRes.data || []);
+      setAllCreateSections(sectionsRes.data || []);
+      setCreateCustomerId(null);
+      setCreateSites([]);
+      setCreateSiteId(null);
+      setCreatePackages([]);
+      setCreateSections([]);
+      setCreateItems([]);
+      setCreateDate(dayjs().add(1, 'day'));
+      setCreateReason('');
+      setCreateModalVisible(true);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.loadFailed);
+    }
+  };
+
+  const handleCreateCustomerChange = async (customerId: number) => {
+    setCreateCustomerId(customerId);
+    const customer = createCustomers.find(item => item.id === customerId);
+    const sites = customer?.sites || [];
+    setCreateSites(sites);
+    setCreateSiteId(sites[0]?.id || null);
+    try {
+      const [packagesRes, sectionIdsRes] = await Promise.all([
+        axiosInstance.get(`/admin/customers/${customerId}/packages`),
+        axiosInstance.get(`/admin/customers/${customerId}/meal-sections`),
+      ]);
+      const packages = packagesRes.data || [];
+      const allowedIds = new Set<number>(sectionIdsRes.data || []);
+      const sections = allCreateSections.filter(section => allowedIds.has(section.id));
+      setCreatePackages(packages);
+      setCreateSections(sections);
+      setCreateItems(sections[0] && packages[0] ? [{
+        meal_section_id: sections[0].id,
+        customer_package_id: packages[0].id,
+        quantity: 1,
+        remark: '',
+      }] : []);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.loadFailed);
+    }
+  };
+
+  const handleCreateOrder = async () => {
+    if (!createCustomerId || !createSiteId || createItems.length === 0) {
+      message.error(isEn ? 'Select a customer, site and at least one meal item.' : '请选择顾客、送餐地点及至少一项餐品');
+      return;
+    }
+    if (createReason.trim().length < 3) {
+      message.error(labels.reasonRequired);
+      return;
+    }
+    try {
+      const res = await axiosInstance.post('/admin/orders', {
+        customer_id: createCustomerId,
+        site_id: createSiteId,
+        delivery_date: createDate.format('YYYY-MM-DD'),
+        items: createItems,
+        reason: createReason.trim(),
+      });
+      message.success(res.data?.late_override ? `${labels.saveSuccess} (${labels.lateOverride})` : labels.saveSuccess);
+      setCreateModalVisible(false);
+      await fetchOrders();
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.saveFailed);
     }
   };
 
@@ -473,7 +613,7 @@ export const DailyOrderStatus: React.FC = () => {
 
   const columns = [
     { title: labels.colOrderId, dataIndex: 'id', key: 'id', width: 90, render: (val: number) => <Text type="secondary">#{val}</Text> },
-    { title: labels.colDeliveryDate, dataIndex: 'delivery_date', key: 'delivery_date', width: 120, render: (text: string) => <Text strong>{text}</Text> },
+    { title: labels.colDeliveryDate, dataIndex: 'delivery_date', key: 'delivery_date', width: 145, render: (text: string, record: any) => <div><Text strong>{text}</Text>{record.is_late_override && <div><Tag color="warning">{labels.lateOverride}</Tag></div>}</div> },
     { title: labels.colCustomer, dataIndex: 'company_name', key: 'company_name', width: 160, render: (text: string) => <Text strong style={{ color: '#0f172a' }}>{text}</Text> },
     { title: labels.colSite, dataIndex: 'site_name', key: 'site_name', width: 150, render: (text: string) => <Tag color="geekblue">{text}</Tag> },
     {
@@ -514,6 +654,8 @@ export const DailyOrderStatus: React.FC = () => {
           onChange={(val) => handleStatusChange(record.id, val)}
         >
           <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
+          <Option value="confirmed"><Tag color="orange">{labels.statusConfirmed}</Tag></Option>
+          <Option value="in_production"><Tag color="purple">{labels.statusInProduction}</Tag></Option>
           <Option value="delivered"><Tag color="green">{labels.statusDelivered}</Tag></Option>
           <Option value="billed"><Tag color="purple">{labels.statusBilled}</Tag></Option>
           <Option value="paid"><Tag color="gold">{labels.statusPaid}</Tag></Option>
@@ -547,17 +689,9 @@ export const DailyOrderStatus: React.FC = () => {
             </Button>
           </Tooltip>
 
-          <Popconfirm
-            title={labels.confirmDeleteTitle}
-            description={labels.confirmDeleteDesc}
-            onConfirm={() => handleDeleteOrder(record.id)}
-            okText={labels.btnDelete}
-            cancelText={labels.btnCancel}
-          >
-            <Button size="small" danger icon={<DeleteOutlined />}>
-              {labels.btnDelete}
-            </Button>
-          </Popconfirm>
+          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDeleteOrder(record)} disabled={record.status === 'cancelled'}>
+            {labels.btnDelete}
+          </Button>
         </Space>
       )
     }
@@ -570,6 +704,7 @@ export const DailyOrderStatus: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
             <Title level={4} style={{ margin: 0 }}>📋 {labels.title}</Title>
             <Space style={{ flexWrap: 'wrap' }}>
+              <Button type="primary" icon={<PlusOutlined />} onClick={handleOpenCreateModal}>{labels.btnCreate}</Button>
               <DatePicker.RangePicker
                 value={dateRange}
                 onChange={(dates) => {
@@ -582,6 +717,8 @@ export const DailyOrderStatus: React.FC = () => {
               <Select value={statusFilter} onChange={(val) => setStatusFilter(val)} style={{ width: 140 }}>
                 <Option value="all">{labels.filterAll}</Option>
                 <Option value="submitted">{labels.statusSubmitted}</Option>
+                <Option value="confirmed">{labels.statusConfirmed}</Option>
+                <Option value="in_production">{labels.statusInProduction}</Option>
                 <Option value="delivered">{labels.statusDelivered}</Option>
                 <Option value="billed">{labels.statusBilled}</Option>
                 <Option value="paid">{labels.statusPaid}</Option>
@@ -593,6 +730,86 @@ export const DailyOrderStatus: React.FC = () => {
         }
       >
         <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 'max-content' }} />
+
+        <Modal
+          title={labels.btnCreate}
+          open={createModalVisible}
+          onCancel={() => setCreateModalVisible(false)}
+          onOk={handleCreateOrder}
+          okText={labels.btnSave}
+          cancelText={labels.btnCancel}
+          width={820}
+        >
+          <Row gutter={16}>
+            <Col xs={24} md={12}>
+              <Form.Item label={labels.colCustomer} required>
+                <Select value={createCustomerId} onChange={handleCreateCustomerChange} showSearch optionFilterProp="children" style={{ width: '100%' }}>
+                  {createCustomers.map(customer => <Option key={customer.id} value={customer.id}>{customer.company_name}</Option>)}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item label={labels.formDeliverySite} required>
+                <Select value={createSiteId} onChange={setCreateSiteId} style={{ width: '100%' }}>
+                  {createSites.map(site => <Option key={site.id} value={site.id}>{site.site_name}</Option>)}
+                </Select>
+              </Form.Item>
+            </Col>
+            <Col xs={24} md={6}>
+              <Form.Item label={labels.colDeliveryDate} required>
+                <DatePicker value={createDate} onChange={(value) => value && setCreateDate(value)} allowClear={false} style={{ width: '100%' }} />
+              </Form.Item>
+            </Col>
+          </Row>
+
+          <Divider />
+          {createItems.map((item, index) => {
+            const section = createSections.find(value => value.id === item.meal_section_id);
+            const allowedCategories = MEAL_SECTION_CATEGORIES[section?.name] || [];
+            const availablePackages = allowedCategories.length
+              ? createPackages.filter(pkg => allowedCategories.includes(pkg.category))
+              : createPackages;
+            return (
+              <Row gutter={10} key={index} align="middle" style={{ marginBottom: 10 }}>
+                <Col xs={24} md={6}>
+                  <Select value={item.meal_section_id} onChange={(value) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, meal_section_id: value } : row))} style={{ width: '100%' }}>
+                    {createSections.map(value => <Option key={value.id} value={value.id}>{value.name}</Option>)}
+                  </Select>
+                </Col>
+                <Col xs={24} md={7}>
+                  <Select value={item.customer_package_id} onChange={(value) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, customer_package_id: value } : row))} style={{ width: '100%' }}>
+                    {availablePackages.map(pkg => <Option key={pkg.id} value={pkg.id}>{pkg.template_name}</Option>)}
+                  </Select>
+                </Col>
+                <Col xs={8} md={3}>
+                  <InputNumber min={1} value={item.quantity} onChange={(value) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: value || 1 } : row))} style={{ width: '100%' }} />
+                </Col>
+                <Col xs={12} md={6}>
+                  <Input value={item.remark} placeholder={labels.colModalRemark} onChange={(event) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, remark: event.target.value } : row))} />
+                </Col>
+                <Col xs={4} md={2}>
+                  <Button danger icon={<DeleteOutlined />} onClick={() => setCreateItems(rows => rows.filter((_, rowIndex) => rowIndex !== index))} />
+                </Col>
+              </Row>
+            );
+          })}
+          <Button
+            type="dashed"
+            icon={<PlusOutlined />}
+            disabled={!createSections[0] || !createPackages[0]}
+            onClick={() => setCreateItems(rows => [...rows, {
+              meal_section_id: createSections[0]?.id,
+              customer_package_id: createPackages[0]?.id,
+              quantity: 1,
+              remark: '',
+            }])}
+          >
+            {isEn ? 'Add Meal Item' : '增加餐品'}
+          </Button>
+          <Form.Item label={labels.reason} required style={{ marginTop: 18 }}>
+            <Input.TextArea rows={3} value={createReason} onChange={(event) => setCreateReason(event.target.value)} placeholder={labels.reasonPlaceholder} />
+          </Form.Item>
+        </Modal>
 
         {/* 编辑订单 Modal */}
         <Modal
@@ -682,6 +899,14 @@ export const DailyOrderStatus: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+              <Form.Item label={labels.reason} required style={{ marginTop: 18, marginBottom: 0 }}>
+                <Input.TextArea
+                  rows={3}
+                  value={editReason}
+                  onChange={(event) => setEditReason(event.target.value)}
+                  placeholder={labels.reasonPlaceholder}
+                />
+              </Form.Item>
             </div>
           )}
         </Modal>

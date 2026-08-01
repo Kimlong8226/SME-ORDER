@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  App, Card, Table, Button, Modal, Form, InputNumber, Select, Checkbox,
+  App, Card, Table, Button, Modal, Form, Input, InputNumber, Select, Checkbox,
   Tag, Typography, Space, Popconfirm, Badge, Alert, Switch, Tooltip, Tabs,
   Row, Col
 } from 'antd';
@@ -306,18 +306,28 @@ export const ClientMenuLibrary: React.FC = () => {
   };
 
   const handleToggleFreeze = async (customer: any) => {
-    const nextState = !customer.is_blocked;
-    try {
-      await axiosInstance.put(`/admin/customers/${customer.id}`, { ...customer, is_blocked: nextState });
-      message.info(
-        nextState
-          ? `${labels.freezeSuccess} [${customer.company_name}]`
-          : `${labels.unfreezeSuccess} [${customer.company_name}]`
-      );
-      fetchCustomers();
-    } catch {
-      message.error(labels.toggleFailed);
-    }
+    const action = customer.effective_is_blocked ? 'unblock' : 'block';
+    let reason = '';
+    Modal.confirm({
+      title: action === 'block' ? labels.freezeConfirmTitle : labels.unfreezeConfirmTitle,
+      content: <Input.TextArea rows={3} placeholder="请输入操作原因（将写入 Audit Log）" onChange={(event) => { reason = event.target.value; }} />,
+      okText: action === 'block' ? labels.btnSuspend : labels.btnActivate,
+      cancelText: labels.btnCancel,
+      onOk: async () => {
+        if (reason.trim().length < 3) {
+          message.error('必须填写至少 3 个字的操作原因');
+          throw new Error('reason_required');
+        }
+        try {
+          await axiosInstance.put(`/admin/customers/${customer.id}/order-access`, { action, reason: reason.trim() });
+          message.info(action === 'block' ? `${labels.freezeSuccess} [${customer.company_name}]` : `${labels.unfreezeSuccess} [${customer.company_name}]`);
+          await fetchCustomers();
+        } catch (err: any) {
+          message.error(err.response?.data?.detail || labels.toggleFailed);
+          throw err;
+        }
+      },
+    });
   };
 
   /**
@@ -548,12 +558,12 @@ export const ClientMenuLibrary: React.FC = () => {
       style={{
         marginBottom: 20,
         padding: '14px 20px',
-        background: currentCustomerObj?.is_blocked ? '#fef2f2' : '#f0f7ff',
+        background: currentCustomerObj?.effective_is_blocked ? '#fef2f2' : '#f0f7ff',
         borderRadius: 10,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        border: currentCustomerObj?.is_blocked ? '1.5px solid #fca5a5' : '1.5px solid #bfdbfe',
+        border: currentCustomerObj?.effective_is_blocked ? '1.5px solid #fca5a5' : '1.5px solid #bfdbfe',
         flexWrap: 'wrap',
         gap: 12,
       }}
@@ -573,13 +583,13 @@ export const ClientMenuLibrary: React.FC = () => {
           {customers.map((c) => (
             <Option key={c.id} value={c.id}>
               <Space>
-                <Badge status={c.is_blocked ? 'error' : 'success'} />
+                <Badge status={c.effective_is_blocked ? 'error' : 'success'} />
                 {c.company_name}
                 <Tag
-                  color={c.is_blocked ? 'error' : 'success'}
+                  color={c.effective_is_blocked ? 'error' : 'success'}
                   style={{ fontSize: 11, marginLeft: 2 }}
                 >
-                  {c.is_blocked ? labels.statusTagSuspended : labels.statusTagActive}
+                  {c.effective_is_blocked ? labels.statusTagSuspended : labels.statusTagActive}
                 </Tag>
               </Space>
             </Option>
@@ -590,7 +600,7 @@ export const ClientMenuLibrary: React.FC = () => {
       {/* 右侧：冻结/解封 按钮 */}
       {currentCustomerObj && (
         <Space size="middle">
-          {currentCustomerObj.is_blocked ? (
+          {currentCustomerObj.effective_is_blocked ? (
             <Popconfirm
               title={labels.unfreezeConfirmTitle}
               description={`${labels.unfreezeConfirmDesc} [${currentCustomerObj.company_name}]`}
@@ -641,7 +651,7 @@ export const ClientMenuLibrary: React.FC = () => {
         {renderCustomerControlBar()}
 
         {/* 冻结提示横幅 */}
-        {currentCustomerObj?.is_blocked && (
+        {currentCustomerObj?.effective_is_blocked && (
           <Alert
             title={labels.blockedWarning}
             type="error"
@@ -651,7 +661,7 @@ export const ClientMenuLibrary: React.FC = () => {
         )}
 
         {/* ── 开通下单餐次控制面板 ── */}
-        {selectedCustomerId && !currentCustomerObj?.is_blocked && (
+        {selectedCustomerId && !currentCustomerObj?.effective_is_blocked && (
           <Card
             size="small"
             title={<Text strong style={{ color: '#1e3a8a' }}>⏱️ 开通餐次</Text>}
@@ -707,7 +717,7 @@ export const ClientMenuLibrary: React.FC = () => {
                       type="primary"
                       icon={<PlusOutlined />}
                       onClick={() => setAssignModalVisible(true)}
-                      disabled={!selectedCustomerId || currentCustomerObj?.is_blocked}
+                      disabled={!selectedCustomerId || currentCustomerObj?.effective_is_blocked}
                       style={{ background: '#2563eb', borderColor: '#2563eb' }}
                     >
                       {labels.btnAddPkgToClient}
@@ -736,7 +746,7 @@ export const ClientMenuLibrary: React.FC = () => {
                       type="primary"
                       icon={<PlusSquareOutlined />}
                       onClick={() => setAddonAssignModalVisible(true)}
-                      disabled={!selectedCustomerId || currentCustomerObj?.is_blocked}
+                      disabled={!selectedCustomerId || currentCustomerObj?.effective_is_blocked}
                       style={{ background: '#ea580c', borderColor: '#ea580c' }}
                     >
                       {labels.btnAddAddonToClient}

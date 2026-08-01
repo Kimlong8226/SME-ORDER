@@ -30,5 +30,8 @@ create index if not exists ix_order_edit_sessions_expires_at
     on public.order_edit_sessions(expires_at);
 
 alter table public.order_edit_sessions enable row level security;
-revoke all on table public.order_edit_sessions from anon, authenticated;
-revoke update, delete on table public.audit_logs from anon, authenticated;
+revoke all on table public.order_edit_sessions from public, anon, authenticated;
+
+alter table public.audit_logs enable row level security;
+revoke all on table public.audit_logs from anon, authenticated;
+revoke update, delete on table public.audit_logs from public;

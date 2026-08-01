@@ -2,7 +2,7 @@
 import hashlib
 import os
 import tempfile
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 test_db = Path(tempfile.gettempdir()) / "central_kitchen_release_check.db"
@@ -71,12 +71,16 @@ assert client.get("/admin/customers", headers=customer_headers).status_code == 4
 order_response = client.post(
     f"/orders/matrix-submit?customer_id={customer_one_id}",
     headers=customer_headers,
-    json={"delivery_date": str(date.today()), "items": [{"delivery_site_id": site_id, "meal_section_id": section_id, "customer_package_id": package_id, "quantity": 8, "remark": "release check"}]},
+    json={"delivery_date": str(date.today() + timedelta(days=2)), "items": [{"delivery_site_id": site_id, "meal_section_id": section_id, "customer_package_id": package_id, "quantity": 8, "remark": "release check"}]},
 )
 assert order_response.status_code == 200, order_response.text
 order_id = order_response.json()[0]["id"]
 
-status_response = client.put(f"/admin/orders/{order_id}/status?status=confirmed", headers=admin_headers)
+status_response = client.put(
+    f"/admin/orders/{order_id}/status",
+    headers=admin_headers,
+    json={"status": "confirmed", "reason": "Release check confirmation", "expected_order_version": 1},
+)
 assert status_response.status_code == 200, status_response.text
 payment_response = client.post(
     "/admin/payments",

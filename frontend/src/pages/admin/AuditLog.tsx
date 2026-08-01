@@ -45,6 +45,13 @@ const ACTION_CONFIG: Record<string, {
     label: 'ORDER DELETE',
     labelEn: 'ORDER DELETE',
   },
+  ORDER_CANCEL: {
+    icon: <DeleteFilled />,
+    color: '#dc2626',
+    bg: '#fef2f2',
+    label: 'ORDER CANCEL',
+    labelEn: 'ORDER CANCEL',
+  },
   ORDER_STATUS_CHANGE: {
     icon: <SwapOutlined />,
     color: '#2563eb',
@@ -59,6 +66,12 @@ const ACTION_CONFIG: Record<string, {
     label: 'CUSTOMER UPDATE',
     labelEn: 'CUSTOMER UPDATE',
   },
+  CUSTOMER_BLOCK: { icon: <DeleteFilled />, color: '#dc2626', bg: '#fef2f2', label: 'CUSTOMER BLOCK', labelEn: 'CUSTOMER BLOCK' },
+  CUSTOMER_UNBLOCK: { icon: <SwapOutlined />, color: '#16a34a', bg: '#f0fdf4', label: 'CUSTOMER UNBLOCK', labelEn: 'CUSTOMER UNBLOCK' },
+  CUSTOMER_TEMP_ACCESS: { icon: <HistoryOutlined />, color: '#d97706', bg: '#fffbeb', label: 'TEMP ACCESS', labelEn: 'TEMP ACCESS' },
+  CUSTOMER_TEMP_ACCESS_END: { icon: <HistoryOutlined />, color: '#64748b', bg: '#f8fafc', label: 'TEMP ACCESS END', labelEn: 'TEMP ACCESS END' },
+  PAYMENT_CREATE: { icon: <ShoppingCartOutlined />, color: '#16a34a', bg: '#f0fdf4', label: 'PAYMENT CREATE', labelEn: 'PAYMENT CREATE' },
+  PAYMENT_DELETE: { icon: <DeleteFilled />, color: '#dc2626', bg: '#fef2f2', label: 'PAYMENT DELETE', labelEn: 'PAYMENT DELETE' },
 };
 
 const PAGE_SIZE = 12;
@@ -245,8 +258,15 @@ export const AuditLog: React.FC = () => {
               <Option value="ORDER_CREATE">ORDER CREATE</Option>
               <Option value="ORDER_UPDATE">ORDER UPDATE</Option>
               <Option value="ORDER_DELETE">ORDER DELETE</Option>
+              <Option value="ORDER_CANCEL">ORDER CANCEL</Option>
               <Option value="ORDER_STATUS_CHANGE">ORDER STATUS CHANGE</Option>
               <Option value="CUSTOMER_UPDATE">CUSTOMER UPDATE</Option>
+              <Option value="CUSTOMER_BLOCK">CUSTOMER BLOCK</Option>
+              <Option value="CUSTOMER_UNBLOCK">CUSTOMER UNBLOCK</Option>
+              <Option value="CUSTOMER_TEMP_ACCESS">CUSTOMER TEMP ACCESS</Option>
+              <Option value="CUSTOMER_TEMP_ACCESS_END">CUSTOMER TEMP ACCESS END</Option>
+              <Option value="PAYMENT_CREATE">PAYMENT CREATE</Option>
+              <Option value="PAYMENT_DELETE">PAYMENT DELETE</Option>
             </Select>
           </Col>
         </Row>

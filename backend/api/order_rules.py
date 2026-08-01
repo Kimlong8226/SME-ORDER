@@ -3,7 +3,6 @@ from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.orm import Session, selectinload
 
@@ -18,7 +17,7 @@ from model.models import (
 )
 
 
-MALAYSIA_TZ = ZoneInfo("Asia/Kuala_Lumpur")
+MALAYSIA_TZ = timezone(timedelta(hours=8), name="Asia/Kuala_Lumpur")
 ORDER_CUTOFF_TIME = time(18, 0)
 ORDER_GRACE_MINUTES = 10
 TEMP_ACCESS_CALENDAR_DAYS = 2
@@ -96,7 +95,10 @@ def calculate_customer_financials(
     )
     confirmed_payments = sum(
         max(0.0, payment.amount or 0.0)
-        for payment in db.query(PaymentRecord).filter(PaymentRecord.customer_id == customer.id).all()
+        for payment in db.query(PaymentRecord).filter(
+            PaymentRecord.customer_id == customer.id,
+            PaymentRecord.payment_date <= current_date,
+        ).all()
     )
 
     remaining_payment = confirmed_payments
@@ -183,9 +185,13 @@ def sync_customer_access(
         )
     elif not has_overdue and customer.is_blocked and customer.block_source == "overdue":
         previous_reason = customer.block_reason
+        previous_temporary_access_until = customer.temporary_access_until
         customer.is_blocked = False
         customer.block_source = None
         customer.block_reason = None
+        customer.temporary_access_started_at = None
+        customer.temporary_access_until = None
+        customer.temporary_access_reason = None
         customer.restriction_updated_by = "系统"
         write_audit_log(
             db=db,
@@ -195,7 +201,11 @@ def sync_customer_access(
             operator_role="system",
             target_id=customer.id,
             target_label=customer.company_name,
-            extra_data={"source": "overdue_cleared", "previous_reason": previous_reason},
+            extra_data={
+                "source": "overdue_cleared",
+                "previous_reason": previous_reason,
+                "previous_temporary_access_until": to_iso_local(previous_temporary_access_until),
+            },
         )
 
     temp_active = temporary_access_is_active(customer, current_utc)
