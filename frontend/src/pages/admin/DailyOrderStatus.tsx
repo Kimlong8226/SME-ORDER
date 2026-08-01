@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   ReloadOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, PlusOutlined,
-  UserOutlined
+  MinusOutlined, UserOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -292,8 +292,8 @@ export const DailyOrderStatus: React.FC = () => {
     loadFailed: isEn ? 'Failed to fetch orders' : '获取订单失败',
     statusUpdated: isEn ? 'Order status updated successfully' : '订单状态已更新',
     statusUpdateFailed: isEn ? 'Failed to update order status' : '修改状态失败',
-    deleteSuccess: isEn ? 'Order cancelled successfully' : '订单已成功取消',
-    deleteFailed: isEn ? 'Failed to cancel order' : '取消订单失败',
+    deleteSuccess: isEn ? 'Order deleted successfully' : '订单已成功删除',
+    deleteFailed: isEn ? 'Failed to delete order' : '删除订单失败',
     saveSuccess: isEn ? 'Order updated successfully!' : '后台已成功修改该订单数据！',
     saveFailed: isEn ? 'Failed to save order updates' : '保存订单修改失败',
     colOrderId: isEn ? 'Order ID' : '编号',
@@ -307,10 +307,10 @@ export const DailyOrderStatus: React.FC = () => {
     colStatus: isEn ? 'Current Status' : '状态',
     colAction: isEn ? 'Admin Management' : '数据管理',
     btnEdit: isEn ? 'Edit' : '编辑',
-    btnDelete: isEn ? 'Cancel' : '取消',
+    btnDelete: isEn ? 'Delete' : '删除',
     btnHistory: isEn ? 'History' : '操作记录',
-    confirmDeleteTitle: isEn ? 'Confirm Cancellation' : '取消订单确认',
-    confirmDeleteDesc: isEn ? 'Cancel this order? The record and audit history will be retained.' : '确定要取消该笔订单吗？订单记录及审计记录会保留。',
+    confirmDeleteTitle: isEn ? 'Confirm Deletion' : '删除订单确认',
+    confirmDeleteDesc: isEn ? 'Delete this order? It will be marked as cancelled and retained in the audit history.' : '确定要删除该笔订单吗？系统会将订单标记为已取消，并保留审计记录。',
     filterAll: isEn ? 'All Statuses' : '全状态',
     statusSubmitted: isEn ? 'Submitted' : '已提交',
     statusConfirmed: isEn ? 'Confirmed' : '已确认',
@@ -333,6 +333,15 @@ export const DailyOrderStatus: React.FC = () => {
     reasonRequired: isEn ? 'Please enter at least 3 characters.' : '请输入至少 3 个字的操作原因',
     btnCreate: isEn ? 'Create Order for Customer' : '代顾客下单',
     lateOverride: isEn ? 'Late Admin Override' : '后台逾期处理',
+    createHint: isEn ? 'The available shifts and packages are identical to the customer ordering page.' : '餐次与套餐与顾客下单页面一致，仅显示已为该顾客开通的选项。',
+    emptyPackages: isEn ? 'No ordering packages are available for this customer.' : '该顾客暂无可下单的餐次或套餐。',
+    orderRemark: isEn ? 'Order Remark' : '订单备注',
+    orderRemarkPlaceholder: isEn ? 'Optional note applied to the selected meal items' : '选填，将写入已选餐品明细',
+    orderSummary: isEn ? 'Order Summary' : '订单摘要',
+    noItems: isEn ? 'No meal items selected' : '尚未选择餐品',
+    totalPortions: isEn ? 'Total Portions' : '总份数',
+    selected: isEn ? 'Selected' : '已选',
+    extraRice: isEn ? 'Extra Rice' : '加白饭',
   };
 
   const [orders, setOrders] = useState<any[]>([]);
@@ -356,6 +365,8 @@ export const DailyOrderStatus: React.FC = () => {
   const [allCreateSections, setAllCreateSections] = useState<any[]>([]);
   const [createSections, setCreateSections] = useState<any[]>([]);
   const [createItems, setCreateItems] = useState<any[]>([]);
+  const [createAddons, setCreateAddons] = useState<Record<string, number>>({});
+  const [createRemark, setCreateRemark] = useState('');
   const [createReason, setCreateReason] = useState('');
 
   const [customerSites, setCustomerSites] = useState<any[]>([]);
@@ -416,7 +427,17 @@ export const DailyOrderStatus: React.FC = () => {
     let reason = '';
     Modal.confirm({
       title: labels.confirmDeleteTitle,
-      content: <Input.TextArea rows={3} placeholder={labels.reasonPlaceholder} onChange={(event) => { reason = event.target.value; }} />,
+      content: (
+        <div>
+          <Text type="secondary">{labels.confirmDeleteDesc}</Text>
+          <Input.TextArea
+            rows={3}
+            placeholder={labels.reasonPlaceholder}
+            onChange={(event) => { reason = event.target.value; }}
+            style={{ marginTop: 12 }}
+          />
+        </div>
+      ),
       okText: labels.btnDelete,
       okType: 'danger',
       cancelText: labels.btnCancel,
@@ -525,6 +546,8 @@ export const DailyOrderStatus: React.FC = () => {
       setCreatePackages([]);
       setCreateSections([]);
       setCreateItems([]);
+      setCreateAddons({});
+      setCreateRemark('');
       setCreateDate(dayjs().add(1, 'day'));
       setCreateReason('');
       setCreateModalVisible(true);
@@ -535,6 +558,7 @@ export const DailyOrderStatus: React.FC = () => {
 
   const handleCreateCustomerChange = async (customerId: number) => {
     setCreateCustomerId(customerId);
+    setCreateAddons({});
     const customer = createCustomers.find(item => item.id === customerId);
     const sites = customer?.sites || [];
     setCreateSites(sites);
@@ -544,17 +568,12 @@ export const DailyOrderStatus: React.FC = () => {
         axiosInstance.get(`/admin/customers/${customerId}/packages`),
         axiosInstance.get(`/admin/customers/${customerId}/meal-sections`),
       ]);
-      const packages = packagesRes.data || [];
+      const packages = (packagesRes.data || []).filter((pkg: any) => pkg.is_shown_to_customer !== false);
       const allowedIds = new Set<number>(sectionIdsRes.data || []);
       const sections = allCreateSections.filter(section => allowedIds.has(section.id));
       setCreatePackages(packages);
       setCreateSections(sections);
-      setCreateItems(sections[0] && packages[0] ? [{
-        meal_section_id: sections[0].id,
-        customer_package_id: packages[0].id,
-        quantity: 1,
-        remark: '',
-      }] : []);
+      setCreateItems([]);
     } catch (err: any) {
       message.error(err.response?.data?.detail || labels.loadFailed);
     }
@@ -574,7 +593,13 @@ export const DailyOrderStatus: React.FC = () => {
         customer_id: createCustomerId,
         site_id: createSiteId,
         delivery_date: createDate.format('YYYY-MM-DD'),
-        items: createItems,
+        items: createItems.map(item => {
+          const extraRice = createAddons[`${item.meal_section_id}-${item.customer_package_id}`] || 0;
+          return {
+            ...item,
+            remark: [extraRice > 0 ? `加白饭 ${extraRice} 份` : '', createRemark.trim()].filter(Boolean).join(' | '),
+          };
+        }),
         reason: createReason.trim(),
       });
       message.success(res.data?.late_override ? `${labels.saveSuccess} (${labels.lateOverride})` : labels.saveSuccess);
@@ -584,6 +609,39 @@ export const DailyOrderStatus: React.FC = () => {
       message.error(err.response?.data?.detail || labels.saveFailed);
     }
   };
+
+  const getCreatePackagesForSection = (section: any) => {
+    const allowedCategories = String(section?.allowed_categories || '')
+      .split(',')
+      .map((value: string) => value.trim())
+      .filter(Boolean);
+    return allowedCategories.length
+      ? createPackages.filter(pkg => allowedCategories.includes(pkg.category))
+      : createPackages;
+  };
+
+  const getCreateQuantity = (mealSectionId: number, customerPackageId: number) =>
+    createItems.find(item => item.meal_section_id === mealSectionId && item.customer_package_id === customerPackageId)?.quantity || 0;
+
+  const setCreateQuantity = (mealSectionId: number, customerPackageId: number, quantity: number) => {
+    const safeQuantity = Math.max(0, quantity || 0);
+    if (safeQuantity === 0) {
+      setCreateAddonQuantity(mealSectionId, customerPackageId, 0);
+    }
+    setCreateItems(current => {
+      const remaining = current.filter(item => !(item.meal_section_id === mealSectionId && item.customer_package_id === customerPackageId));
+      return safeQuantity > 0
+        ? [...remaining, { meal_section_id: mealSectionId, customer_package_id: customerPackageId, quantity: safeQuantity, remark: '' }]
+        : remaining;
+    });
+  };
+
+  const setCreateAddonQuantity = (mealSectionId: number, customerPackageId: number, quantity: number) => {
+    const key = `${mealSectionId}-${customerPackageId}`;
+    setCreateAddons(current => ({ ...current, [key]: Math.max(0, quantity || 0) }));
+  };
+
+  const createTotalPortions = createItems.reduce((sum, item) => sum + (item.quantity || 0), 0);
 
   const translateMealSection = (name: string) => {
     if (!isEn) return name;
@@ -666,7 +724,8 @@ export const DailyOrderStatus: React.FC = () => {
     {
       title: labels.colAction,
       key: 'actions',
-      width: 200,
+      width: 260,
+      fixed: 'right' as const,
       // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
       render: (_: any, record: any) => (
         <Space size="small">
@@ -729,7 +788,7 @@ export const DailyOrderStatus: React.FC = () => {
           </div>
         }
       >
-        <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 'max-content' }} />
+        <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 1700 }} />
 
         <Modal
           title={labels.btnCreate}
@@ -738,19 +797,21 @@ export const DailyOrderStatus: React.FC = () => {
           onOk={handleCreateOrder}
           okText={labels.btnSave}
           cancelText={labels.btnCancel}
-          width={820}
+          width={1080}
+          styles={{ body: { maxHeight: '72vh', overflowY: 'auto' } }}
         >
+          <Alert type="info" showIcon title={labels.createHint} style={{ marginBottom: 18, borderRadius: 10 }} />
           <Row gutter={16}>
-            <Col xs={24} md={12}>
+            <Col xs={24} md={10}>
               <Form.Item label={labels.colCustomer} required>
-                <Select value={createCustomerId} onChange={handleCreateCustomerChange} showSearch optionFilterProp="children" style={{ width: '100%' }}>
+                <Select value={createCustomerId} onChange={handleCreateCustomerChange} showSearch optionFilterProp="children" placeholder={isEn ? 'Select customer' : '请选择顾客'} style={{ width: '100%' }}>
                   {createCustomers.map(customer => <Option key={customer.id} value={customer.id}>{customer.company_name}</Option>)}
                 </Select>
               </Form.Item>
             </Col>
-            <Col xs={24} md={6}>
+            <Col xs={24} md={8}>
               <Form.Item label={labels.formDeliverySite} required>
-                <Select value={createSiteId} onChange={setCreateSiteId} style={{ width: '100%' }}>
+                <Select value={createSiteId} onChange={setCreateSiteId} placeholder={isEn ? 'Select delivery site' : '请选择送货地址/分点'} style={{ width: '100%' }}>
                   {createSites.map(site => <Option key={site.id} value={site.id}>{site.site_name}</Option>)}
                 </Select>
               </Form.Item>
@@ -762,50 +823,110 @@ export const DailyOrderStatus: React.FC = () => {
             </Col>
           </Row>
 
-          <Divider />
-          {createItems.map((item, index) => {
-            const section = createSections.find(value => value.id === item.meal_section_id);
-            const allowedCategories = MEAL_SECTION_CATEGORIES[section?.name] || [];
-            const availablePackages = allowedCategories.length
-              ? createPackages.filter(pkg => allowedCategories.includes(pkg.category))
-              : createPackages;
-            return (
-              <Row gutter={10} key={index} align="middle" style={{ marginBottom: 10 }}>
-                <Col xs={24} md={6}>
-                  <Select value={item.meal_section_id} onChange={(value) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, meal_section_id: value } : row))} style={{ width: '100%' }}>
-                    {createSections.map(value => <Option key={value.id} value={value.id}>{value.name}</Option>)}
-                  </Select>
-                </Col>
-                <Col xs={24} md={7}>
-                  <Select value={item.customer_package_id} onChange={(value) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, customer_package_id: value } : row))} style={{ width: '100%' }}>
-                    {availablePackages.map(pkg => <Option key={pkg.id} value={pkg.id}>{pkg.template_name}</Option>)}
-                  </Select>
-                </Col>
-                <Col xs={8} md={3}>
-                  <InputNumber min={1} value={item.quantity} onChange={(value) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: value || 1 } : row))} style={{ width: '100%' }} />
-                </Col>
-                <Col xs={12} md={6}>
-                  <Input value={item.remark} placeholder={labels.colModalRemark} onChange={(event) => setCreateItems(rows => rows.map((row, rowIndex) => rowIndex === index ? { ...row, remark: event.target.value } : row))} />
-                </Col>
-                <Col xs={4} md={2}>
-                  <Button danger icon={<DeleteOutlined />} onClick={() => setCreateItems(rows => rows.filter((_, rowIndex) => rowIndex !== index))} />
-                </Col>
-              </Row>
-            );
-          })}
-          <Button
-            type="dashed"
-            icon={<PlusOutlined />}
-            disabled={!createSections[0] || !createPackages[0]}
-            onClick={() => setCreateItems(rows => [...rows, {
-              meal_section_id: createSections[0]?.id,
-              customer_package_id: createPackages[0]?.id,
-              quantity: 1,
-              remark: '',
-            }])}
-          >
-            {isEn ? 'Add Meal Item' : '增加餐品'}
-          </Button>
+          <Divider style={{ margin: '4px 0 18px' }} />
+
+          {!createCustomerId ? (
+            <Empty description={isEn ? 'Select a customer to load the ordering menu.' : '请先选择顾客，系统将加载与顾客端相同的下单菜单。'} style={{ padding: '36px 0' }} />
+          ) : createSections.length === 0 || createPackages.length === 0 ? (
+            <Empty description={labels.emptyPackages} style={{ padding: '36px 0' }} />
+          ) : (
+            <Row gutter={[18, 18]}>
+              <Col xs={24} lg={16}>
+                <Row gutter={[14, 14]}>
+                  {createSections.filter(section => getCreatePackagesForSection(section).length > 0).map(section => {
+                    const sectionPackages = getCreatePackagesForSection(section);
+                    const sectionTotal = sectionPackages.reduce((sum, pkg) => sum + getCreateQuantity(section.id, pkg.id), 0);
+                    return (
+                      <Col xs={24} md={12} key={section.id}>
+                        <Card
+                          size="small"
+                          style={{ borderRadius: 14, height: '100%', border: sectionTotal > 0 ? '2px solid #10b981' : '1px solid #e2e8f0', background: sectionTotal > 0 ? '#f0fdf4' : '#fff' }}
+                          styles={{ body: { padding: 16 } }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #e2e8f0', paddingBottom: 10, marginBottom: 12 }}>
+                            <div>
+                              <Text strong style={{ fontSize: 15 }}>{translateMealSection(section.name)}</Text>
+                              <div><Text type="secondary" style={{ fontSize: 12 }}>{sectionTotal} {labels.portions}</Text></div>
+                            </div>
+                            {sectionTotal > 0 && <Tag color="success">{labels.selected}</Tag>}
+                          </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                            {sectionPackages.map(pkg => {
+                              const quantity = getCreateQuantity(section.id, pkg.id);
+                              const addonKey = `${section.id}-${pkg.id}`;
+                              const addonQuantity = createAddons[addonKey] || 0;
+                              const supportsExtraRice = ['饭盒', '大型供餐'].includes(pkg.category);
+                              return (
+                                <div key={pkg.id} style={{ padding: 11, borderRadius: 10, border: quantity > 0 ? '1px solid #10b981' : '1px solid #e2e8f0', background: quantity > 0 ? '#fff' : '#f8fafc' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                                    <div style={{ minWidth: 0 }}>
+                                      <Text strong style={{ display: 'block', fontSize: 13 }}>{translatePackageTemplateName(pkg.template_name)}</Text>
+                                      <Tag color="blue" style={{ marginTop: 4, fontSize: 11 }}>{pkg.category}</Tag>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', flexShrink: 0, background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
+                                      <Button type="text" shape="circle" size="small" disabled={quantity <= 0} icon={<MinusOutlined />} onClick={() => setCreateQuantity(section.id, pkg.id, quantity - 1)} />
+                                      <InputNumber min={0} max={9999} variant="borderless" controls={false} value={quantity} onChange={value => setCreateQuantity(section.id, pkg.id, value || 0)} style={{ width: 48, textAlign: 'center', fontWeight: 700 }} />
+                                      <Button type="text" shape="circle" size="small" icon={<PlusOutlined />} onClick={() => setCreateQuantity(section.id, pkg.id, quantity + 1)} />
+                                    </div>
+                                  </div>
+                                  {supportsExtraRice && quantity > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 8, marginTop: 8 }}>
+                                      <Text type="secondary" style={{ fontSize: 12 }}>{labels.extraRice}</Text>
+                                      <div style={{ display: 'flex', alignItems: 'center', background: '#fffbeb', padding: '1px 4px', borderRadius: 16 }}>
+                                        <Button type="text" shape="circle" size="small" disabled={addonQuantity <= 0} icon={<MinusOutlined />} onClick={() => setCreateAddonQuantity(section.id, pkg.id, addonQuantity - 1)} />
+                                        <InputNumber min={0} max={999} variant="borderless" controls={false} value={addonQuantity} onChange={value => setCreateAddonQuantity(section.id, pkg.id, value || 0)} style={{ width: 42, textAlign: 'center', fontWeight: 700 }} />
+                                        <Button type="text" shape="circle" size="small" icon={<PlusOutlined />} onClick={() => setCreateAddonQuantity(section.id, pkg.id, addonQuantity + 1)} />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </Card>
+                      </Col>
+                    );
+                  })}
+                </Row>
+              </Col>
+              <Col xs={24} lg={8}>
+                <Card size="small" style={{ borderRadius: 14, position: 'sticky', top: 0 }} styles={{ body: { padding: 16 } }}>
+                  <Text strong style={{ fontSize: 16 }}>{labels.orderSummary}</Text>
+                  <Divider style={{ margin: '12px 0' }} />
+                  {createItems.length === 0 ? (
+                    <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={labels.noItems} />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
+                      {createItems.map(item => {
+                        const section = createSections.find(value => value.id === item.meal_section_id);
+                        const pkg = createPackages.find(value => value.id === item.customer_package_id);
+                        return (
+                          <div key={`${item.meal_section_id}-${item.customer_package_id}`} style={{ background: '#f8fafc', borderRadius: 9, padding: '9px 10px' }}>
+                            <Text strong style={{ display: 'block', fontSize: 12 }}>{translateMealSection(section?.name || '')}</Text>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
+                              <Text type="secondary" ellipsis style={{ fontSize: 12 }}>{translatePackageTemplateName(pkg?.template_name || '')}</Text>
+                              <Tag color="blue" style={{ margin: 0 }}>{item.quantity} {labels.portions}</Tag>
+                            </div>
+                            {(createAddons[`${item.meal_section_id}-${item.customer_package_id}`] || 0) > 0 && (
+                              <Text style={{ color: '#b45309', fontSize: 11 }}>{labels.extraRice} +{createAddons[`${item.meal_section_id}-${item.customer_package_id}`]}</Text>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <Divider style={{ margin: '12px 0' }} />
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Text strong>{labels.totalPortions}</Text>
+                    <Text strong style={{ color: '#10b981', fontSize: 22 }}>{createTotalPortions}</Text>
+                  </div>
+                  <Form.Item label={labels.orderRemark} style={{ marginTop: 14, marginBottom: 0 }}>
+                    <Input.TextArea rows={3} value={createRemark} onChange={event => setCreateRemark(event.target.value)} placeholder={labels.orderRemarkPlaceholder} />
+                  </Form.Item>
+                </Card>
+              </Col>
+            </Row>
+          )}
           <Form.Item label={labels.reason} required style={{ marginTop: 18 }}>
             <Input.TextArea rows={3} value={createReason} onChange={(event) => setCreateReason(event.target.value)} placeholder={labels.reasonPlaceholder} />
           </Form.Item>
