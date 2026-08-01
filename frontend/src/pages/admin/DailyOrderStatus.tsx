@@ -770,12 +770,14 @@ export const DailyOrderStatus: React.FC = () => {
       title: labels.colStatus,
       dataIndex: 'status',
       key: 'status',
-      width: 120,
+      width: 145,
+      align: 'center' as const,
       // NOTE: 加了 dataIndex='status'，render 第一参数为 status 值，第二参数为整行 record
       render: (_: string, record: any) => (
         <Select
           value={record.status}
-          style={{ width: 110 }}
+          size="small"
+          style={{ width: 105, textAlign: 'left' }}
           onChange={(val) => handleStatusChange(record.id, val)}
         >
           <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
@@ -791,11 +793,12 @@ export const DailyOrderStatus: React.FC = () => {
     {
       title: labels.colAction,
       key: 'actions',
-      width: 130,
+      width: 120,
       fixed: 'right' as const,
+      align: 'center' as const,
       // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
       render: (_: any, record: any) => (
-        <Space size="small">
+        <Space size={6} style={{ justifyContent: 'center' }}>
           <Tooltip title={isEn ? 'View status and operation history' : '查看状态与操作历史'}>
             <Button
               size="small"
