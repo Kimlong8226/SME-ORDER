@@ -756,18 +756,34 @@ export const DailyOrderStatus: React.FC = () => {
     {
       title: labels.colAction,
       key: 'actions',
-      width: 170,
+      width: 100,
       fixed: 'right' as const,
       // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
       render: (_: any, record: any) => (
         <Space size="small">
-          <Button size="small" type="primary" ghost icon={<EditOutlined />} onClick={() => handleOpenEditModal(record)}>
-            {labels.btnEdit}
-          </Button>
+          <Tooltip title={labels.btnEdit}>
+            <Button
+              size="small"
+              type="primary"
+              ghost
+              shape="circle"
+              icon={<EditOutlined />}
+              onClick={() => handleOpenEditModal(record)}
+              aria-label={labels.btnEdit}
+            />
+          </Tooltip>
 
-          <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDeleteOrder(record)} disabled={record.status === 'cancelled'}>
-            {labels.btnDelete}
-          </Button>
+          <Tooltip title={labels.btnDelete}>
+            <Button
+              size="small"
+              danger
+              shape="circle"
+              icon={<DeleteOutlined />}
+              onClick={() => handleDeleteOrder(record)}
+              disabled={record.status === 'cancelled'}
+              aria-label={labels.btnDelete}
+            />
+          </Tooltip>
         </Space>
       )
     }
