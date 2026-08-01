@@ -688,6 +688,24 @@ export const DailyOrderStatus: React.FC = () => {
     return name;
   };
 
+  const getMealDisplayOrder = (name: string) => {
+    const normalized = name.toLowerCase();
+    if (name.includes('早餐') || normalized === 'breakfast') return { group: 0, item: 0 };
+    if (name.includes('早班午餐') || normalized.includes('day shift lunch')) return { group: 1, item: 0 };
+    if (name.includes('早班晚餐') || normalized.includes('day shift dinner')) return { group: 1, item: 1 };
+    if (name.includes('客户') || name.includes('顾问') || normalized.includes('visitor')) return { group: 1, item: 2 };
+    if (name.includes('10pm') || normalized.includes('10pm')) return { group: 2, item: 0 };
+    if (name.includes('3am') || normalized.includes('3am')) return { group: 2, item: 1 };
+    return { group: 3, item: 0 };
+  };
+
+  const getMealGroupLabel = (group: number) => {
+    const labelsByGroup = isEn
+      ? ['Breakfast', 'Day Shift Meals', 'Night Shift Meals', 'Other Meals']
+      : ['早餐', '日班餐', '夜班餐', '其他餐次'];
+    return labelsByGroup[group];
+  };
+
   const filteredOrders = orders.filter((o) => statusFilter === 'all' || o.status === statusFilter);
 
   const columns = [
@@ -700,23 +718,51 @@ export const DailyOrderStatus: React.FC = () => {
       dataIndex: 'details',
       key: 'details',
       // NOTE: render 第一参数是 dataIndex 对应的字段值（details 数组）
-      render: (details: any[]) => (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {(details || []).map((d: any, idx: number) => (
-            <div key={idx} style={{ fontSize: 13 }}>
-              <Text strong>{translateMealSection(d.meal_section)}: </Text>
-              <Text>{translatePackageTemplateName(d.package_name)}</Text>
-              <Tag color="green" style={{ marginLeft: 6 }}>{d.quantity} {labels.portions}</Tag>
-              {d.unit_price > 0 && (
-                <Tag color="gold" style={{ fontSize: 11, marginLeft: 2 }}>
-                  {d.quantity} × RM{d.unit_price.toFixed(2)} = RM{d.subtotal ? d.subtotal.toFixed(2) : (d.quantity * d.unit_price).toFixed(2)}
+      render: (details: any[]) => {
+        const sortedDetails = [...(details || [])].sort((a, b) => {
+          const left = getMealDisplayOrder(a.meal_section || '');
+          const right = getMealDisplayOrder(b.meal_section || '');
+          return left.group - right.group || left.item - right.item;
+        });
+        const groupedDetails = sortedDetails.reduce((groups: Record<number, any[]>, detail: any) => {
+          const group = getMealDisplayOrder(detail.meal_section || '').group;
+          groups[group] = [...(groups[group] || []), detail];
+          return groups;
+        }, {});
+
+        return (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {Object.entries(groupedDetails).map(([group, groupDetails], groupIndex) => (
+              <div
+                key={group}
+                style={{
+                  paddingTop: groupIndex === 0 ? 0 : 7,
+                  borderTop: groupIndex === 0 ? 'none' : '1px dashed #e2e8f0',
+                }}
+              >
+                <Tag color={Number(group) === 2 ? 'purple' : Number(group) === 1 ? 'cyan' : 'blue'} style={{ marginBottom: 4, fontSize: 11 }}>
+                  {getMealGroupLabel(Number(group))}
                 </Tag>
-              )}
-              {d.remark && <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>({d.remark})</Text>}
-            </div>
-          ))}
-        </div>
-      )
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {groupDetails.map((d: any, idx: number) => (
+                    <div key={d.id || idx} style={{ fontSize: 13 }}>
+                      <Text strong>{translateMealSection(d.meal_section)}: </Text>
+                      <Text>{translatePackageTemplateName(d.package_name)}</Text>
+                      <Tag color="green" style={{ marginLeft: 6 }}>{d.quantity} {labels.portions}</Tag>
+                      {d.unit_price > 0 && (
+                        <Tag color="gold" style={{ fontSize: 11, marginLeft: 2 }}>
+                          {d.quantity} × RM{d.unit_price.toFixed(2)} = RM{d.subtotal ? d.subtotal.toFixed(2) : (d.quantity * d.unit_price).toFixed(2)}
+                        </Tag>
+                      )}
+                      {d.remark && <Text type="secondary" style={{ fontSize: 12, marginLeft: 4 }}>({d.remark})</Text>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      }
     },
     { title: labels.colTotalPortions, dataIndex: 'total_portions', key: 'total_portions', width: 110, render: (val: number) => <Badge count={`${val} ${labels.portions}`} overflowCount={999} style={{ backgroundColor: '#dc2626' }} /> },
     { title: labels.colTotalPrice, dataIndex: 'total_price', key: 'total_price', width: 130, render: (val: number) => <Text strong style={{ color: '#dc2626' }}>RM {val.toFixed(2)}</Text> },
@@ -724,23 +770,32 @@ export const DailyOrderStatus: React.FC = () => {
       title: labels.colStatus,
       dataIndex: 'status',
       key: 'status',
-      width: 190,
+      width: 120,
       // NOTE: 加了 dataIndex='status'，render 第一参数为 status 值，第二参数为整行 record
       render: (_: string, record: any) => (
-        <Space size={6}>
-          <Select
-            value={record.status}
-            style={{ width: 130 }}
-            onChange={(val) => handleStatusChange(record.id, val)}
-          >
-            <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
-            <Option value="confirmed"><Tag color="orange">{labels.statusConfirmed}</Tag></Option>
-            <Option value="in_production"><Tag color="purple">{labels.statusInProduction}</Tag></Option>
-            <Option value="delivered"><Tag color="green">{labels.statusDelivered}</Tag></Option>
-            <Option value="billed"><Tag color="purple">{labels.statusBilled}</Tag></Option>
-            <Option value="paid"><Tag color="gold">{labels.statusPaid}</Tag></Option>
-            <Option value="cancelled"><Tag color="red">{labels.statusCancelled}</Tag></Option>
-          </Select>
+        <Select
+          value={record.status}
+          style={{ width: 110 }}
+          onChange={(val) => handleStatusChange(record.id, val)}
+        >
+          <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
+          <Option value="confirmed"><Tag color="orange">{labels.statusConfirmed}</Tag></Option>
+          <Option value="in_production"><Tag color="purple">{labels.statusInProduction}</Tag></Option>
+          <Option value="delivered"><Tag color="green">{labels.statusDelivered}</Tag></Option>
+          <Option value="billed"><Tag color="purple">{labels.statusBilled}</Tag></Option>
+          <Option value="paid"><Tag color="gold">{labels.statusPaid}</Tag></Option>
+          <Option value="cancelled"><Tag color="red">{labels.statusCancelled}</Tag></Option>
+        </Select>
+      )
+    },
+    {
+      title: labels.colAction,
+      key: 'actions',
+      width: 130,
+      fixed: 'right' as const,
+      // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
+      render: (_: any, record: any) => (
+        <Space size="small">
           <Tooltip title={isEn ? 'View status and operation history' : '查看状态与操作历史'}>
             <Button
               size="small"
@@ -750,17 +805,6 @@ export const DailyOrderStatus: React.FC = () => {
               aria-label={isEn ? 'View status and operation history' : '查看状态与操作历史'}
             />
           </Tooltip>
-        </Space>
-      )
-    },
-    {
-      title: labels.colAction,
-      key: 'actions',
-      width: 100,
-      fixed: 'right' as const,
-      // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
-      render: (_: any, record: any) => (
-        <Space size="small">
           <Tooltip title={labels.btnEdit}>
             <Button
               size="small"
