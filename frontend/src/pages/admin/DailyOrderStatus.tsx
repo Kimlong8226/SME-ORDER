@@ -756,7 +756,7 @@ export const DailyOrderStatus: React.FC = () => {
     {
       title: labels.colAction,
       key: 'actions',
-      width: 260,
+      width: 170,
       fixed: 'right' as const,
       // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
       render: (_: any, record: any) => (
@@ -764,21 +764,6 @@ export const DailyOrderStatus: React.FC = () => {
           <Button size="small" type="primary" ghost icon={<EditOutlined />} onClick={() => handleOpenEditModal(record)}>
             {labels.btnEdit}
           </Button>
-
-          {/* NOTE: 操作记录按钮 — 点击弹出该订单的完整操作历史抽屉 */}
-          <Tooltip title={labels.btnHistory}>
-            <Button
-              size="small"
-              icon={<HistoryOutlined />}
-              onClick={() => handleOpenAuditDrawer(record)}
-              style={{
-                borderColor: '#2563eb',
-                color: '#2563eb',
-              }}
-            >
-              {labels.btnHistory}
-            </Button>
-          </Tooltip>
 
           <Button size="small" danger icon={<DeleteOutlined />} onClick={() => handleDeleteOrder(record)} disabled={record.status === 'cancelled'}>
             {labels.btnDelete}
