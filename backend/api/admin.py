@@ -1,6 +1,7 @@
 import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
 from datetime import date, datetime, timedelta, timezone
@@ -30,6 +31,7 @@ from api.order_rules import (
     MALAYSIA_TZ,
     MONEY_EPSILON,
     ensure_aware_utc,
+    calculate_customers_financials,
     malaysia_now,
     order_cutoff_window,
     sync_customer_access,
@@ -152,12 +154,25 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
 
 @router.get("/customers", response_model=List[CustomerResponse])
 def list_customers(db: Session = Depends(get_db)):
-    customers = db.query(Customer).order_by(Customer.id.desc()).all()
+    customers = (
+        db.query(Customer)
+        .options(selectinload(Customer.users), selectinload(Customer.sites))
+        .order_by(Customer.id.desc())
+        .all()
+    )
+    current_local = malaysia_now()
+    financials = calculate_customers_financials(db, customers, current_local.date())
     for c in customers:
-        access = sync_customer_access(db, c)
+        access = sync_customer_access(
+            db,
+            c,
+            now=current_local,
+            financial=financials[c.id],
+        )
         _decorate_customer_access(c, access)
         c.username = c.users[0].username if c.users else None
-    db.commit()
+    if db.new or db.dirty:
+        db.commit()
     return customers
 
 @router.put("/customers/{customer_id}", response_model=CustomerResponse)
@@ -1155,29 +1170,43 @@ def get_daily_print_summary(
 # --- 6. 数据看板 Dashboard API ---
 @router.get("/dashboard-stats")
 def get_dashboard_stats(db: Session = Depends(get_db)):
-    today = date.today()
-    today_orders = db.query(Order).filter(Order.delivery_date == today).all()
-    today_portions = sum(sum(d.quantity for d in o.details) for o in today_orders)
+    current_local = malaysia_now()
+    today = current_local.date()
+    today_orders_count, today_portions = (
+        db.query(
+            func.count(func.distinct(Order.id)),
+            func.coalesce(func.sum(OrderDetail.quantity), 0),
+        )
+        .select_from(Order)
+        .outerjoin(OrderDetail, OrderDetail.order_id == Order.id)
+        .filter(Order.delivery_date == today)
+        .one()
+    )
 
     all_customers = db.query(Customer).all()
+    financials = calculate_customers_financials(db, all_customers, today)
     for customer in all_customers:
-        sync_customer_access(db, customer)
-    db.commit()
+        sync_customer_access(
+            db,
+            customer,
+            now=current_local,
+            financial=financials[customer.id],
+        )
     total_customers = len(all_customers)
-    blocked_customers = db.query(Customer).filter(Customer.is_blocked == True).count()
+    blocked_customers = sum(1 for customer in all_customers if customer.is_blocked)
+    if db.new or db.dirty:
+        db.commit()
 
-    all_orders = db.query(Order).all()
-    month_revenue = 0.0
-    for o in all_orders:
-        for d in o.details:
-            month_revenue += (d.quantity * d.final_unit_price)
+    month_revenue = db.query(
+        func.coalesce(func.sum(OrderDetail.quantity * OrderDetail.final_unit_price), 0.0)
+    ).scalar()
 
     return {
-        "today_portions": today_portions,
-        "today_orders_count": len(today_orders),
+        "today_portions": int(today_portions or 0),
+        "today_orders_count": int(today_orders_count or 0),
         "total_customers": total_customers,
-            "blocked_customers": blocked_customers,
-        "month_revenue": month_revenue,
+        "blocked_customers": blocked_customers,
+        "month_revenue": float(month_revenue or 0.0),
         "today_date": today.strftime("%Y-%m-%d")
     }
 

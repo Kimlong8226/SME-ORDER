@@ -78,28 +78,14 @@ def _order_amount(order: Order) -> float:
     return round(sum(max(0, d.quantity or 0) * max(0.0, d.final_unit_price or 0.0) for d in order.details), 2)
 
 
-def calculate_customer_financials(
-    db: Session,
+def _calculate_financials_from_records(
     customer: Customer,
-    today: date | None = None,
+    orders: list[Order],
+    payments: list[PaymentRecord],
+    current_date: date,
 ) -> dict[str, Any]:
-    """Apply confirmed payments FIFO to the oldest non-cancelled DOs."""
-    current_date = today or malaysia_now().date()
     cycle_days = parse_billing_cycle(customer.billing_cycle)
-    orders = (
-        db.query(Order)
-        .options(selectinload(Order.details))
-        .filter(Order.customer_id == customer.id, Order.status != "cancelled")
-        .order_by(Order.delivery_date.asc(), Order.id.asc())
-        .all()
-    )
-    confirmed_payments = sum(
-        max(0.0, payment.amount or 0.0)
-        for payment in db.query(PaymentRecord).filter(
-            PaymentRecord.customer_id == customer.id,
-            PaymentRecord.payment_date <= current_date,
-        ).all()
-    )
+    confirmed_payments = sum(max(0.0, payment.amount or 0.0) for payment in payments)
 
     remaining_payment = confirmed_payments
     total_charges = 0.0
@@ -140,6 +126,77 @@ def calculate_customer_financials(
     }
 
 
+def calculate_customer_financials(
+    db: Session,
+    customer: Customer,
+    today: date | None = None,
+) -> dict[str, Any]:
+    """Apply confirmed payments FIFO to the oldest non-cancelled DOs."""
+    current_date = today or malaysia_now().date()
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.details))
+        .filter(Order.customer_id == customer.id, Order.status != "cancelled")
+        .order_by(Order.delivery_date.asc(), Order.id.asc())
+        .all()
+    )
+    payments = (
+        db.query(PaymentRecord)
+        .filter(
+            PaymentRecord.customer_id == customer.id,
+            PaymentRecord.payment_date <= current_date,
+        )
+        .all()
+    )
+    return _calculate_financials_from_records(customer, orders, payments, current_date)
+
+
+def calculate_customers_financials(
+    db: Session,
+    customers: list[Customer],
+    today: date | None = None,
+) -> dict[int, dict[str, Any]]:
+    """Calculate all customer balances with three batched database round trips."""
+    current_date = today or malaysia_now().date()
+    customer_ids = [customer.id for customer in customers if customer.id is not None]
+    if not customer_ids:
+        return {}
+
+    orders = (
+        db.query(Order)
+        .options(selectinload(Order.details))
+        .filter(Order.customer_id.in_(customer_ids), Order.status != "cancelled")
+        .order_by(Order.customer_id.asc(), Order.delivery_date.asc(), Order.id.asc())
+        .all()
+    )
+    payments = (
+        db.query(PaymentRecord)
+        .filter(
+            PaymentRecord.customer_id.in_(customer_ids),
+            PaymentRecord.payment_date <= current_date,
+        )
+        .all()
+    )
+
+    orders_by_customer: dict[int, list[Order]] = {customer_id: [] for customer_id in customer_ids}
+    payments_by_customer: dict[int, list[PaymentRecord]] = {customer_id: [] for customer_id in customer_ids}
+    for order in orders:
+        orders_by_customer[order.customer_id].append(order)
+    for payment in payments:
+        payments_by_customer[payment.customer_id].append(payment)
+
+    return {
+        customer.id: _calculate_financials_from_records(
+            customer,
+            orders_by_customer[customer.id],
+            payments_by_customer[customer.id],
+            current_date,
+        )
+        for customer in customers
+        if customer.id is not None
+    }
+
+
 def temporary_access_is_active(customer: Customer, now: datetime | None = None) -> bool:
     until = ensure_aware_utc(customer.temporary_access_until)
     return bool(until and until >= (now or datetime.now(timezone.utc)).astimezone(timezone.utc))
@@ -155,11 +212,13 @@ def sync_customer_access(
     db: Session,
     customer: Customer,
     now: datetime | None = None,
+    financial: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Synchronize automatic overdue freeze/unfreeze without overriding manual blocks."""
     current_local = (now or malaysia_now()).astimezone(MALAYSIA_TZ)
     current_utc = current_local.astimezone(timezone.utc)
-    financial = calculate_customer_financials(db, customer, current_local.date())
+    if financial is None:
+        financial = calculate_customer_financials(db, customer, current_local.date())
     has_overdue = financial["overdue_amount"] > MONEY_EPSILON
 
     if has_overdue and not customer.is_blocked:

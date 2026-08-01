@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp, Result, Card } from 'antd';
+import React, { lazy, Suspense, useState, useEffect } from 'react';
+import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp, Result, Card, Spin } from 'antd';
 
 import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
@@ -12,22 +12,29 @@ import './i18n';
 import './index.css';
 import { brightTheme } from './theme/themeConfig';
 import { Login } from './pages/Login';
-import { DashboardOverview } from './pages/admin/DashboardOverview';
-import { CustomerManagement } from './pages/admin/CustomerManagement';
-import { StaffManagement } from './pages/admin/StaffManagement';
-import { PackageManagement } from './pages/admin/PackageManagement';
-import { ClientMenuLibrary } from './pages/admin/ClientMenuLibrary';
-import { OrderCalendar } from './pages/admin/OrderCalendar';
-import { InvoiceManagement } from './pages/admin/InvoiceManagement';
-import { DailyOrderStatus } from './pages/admin/DailyOrderStatus';
-import { MatrixOrder } from './pages/customer/MatrixOrder';
-import { OrderHistory } from './pages/customer/WeeklyOrder';
-import { DeliveryOrders } from './pages/customer/DeliveryOrders';
-import { MealSectionsManagement } from './pages/admin/MealSectionsManagement';
-import { AuditLog } from './pages/admin/AuditLog';
+
+const DashboardOverview = lazy(() => import('./pages/admin/DashboardOverview').then((module) => ({ default: module.DashboardOverview })));
+const CustomerManagement = lazy(() => import('./pages/admin/CustomerManagement').then((module) => ({ default: module.CustomerManagement })));
+const StaffManagement = lazy(() => import('./pages/admin/StaffManagement').then((module) => ({ default: module.StaffManagement })));
+const PackageManagement = lazy(() => import('./pages/admin/PackageManagement').then((module) => ({ default: module.PackageManagement })));
+const ClientMenuLibrary = lazy(() => import('./pages/admin/ClientMenuLibrary').then((module) => ({ default: module.ClientMenuLibrary })));
+const OrderCalendar = lazy(() => import('./pages/admin/OrderCalendar').then((module) => ({ default: module.OrderCalendar })));
+const InvoiceManagement = lazy(() => import('./pages/admin/InvoiceManagement').then((module) => ({ default: module.InvoiceManagement })));
+const DailyOrderStatus = lazy(() => import('./pages/admin/DailyOrderStatus').then((module) => ({ default: module.DailyOrderStatus })));
+const MatrixOrder = lazy(() => import('./pages/customer/MatrixOrder').then((module) => ({ default: module.MatrixOrder })));
+const OrderHistory = lazy(() => import('./pages/customer/WeeklyOrder').then((module) => ({ default: module.OrderHistory })));
+const DeliveryOrders = lazy(() => import('./pages/customer/DeliveryOrders').then((module) => ({ default: module.DeliveryOrders })));
+const MealSectionsManagement = lazy(() => import('./pages/admin/MealSectionsManagement').then((module) => ({ default: module.MealSectionsManagement })));
+const AuditLog = lazy(() => import('./pages/admin/AuditLog').then((module) => ({ default: module.AuditLog })));
 
 const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
+
+const PageLoading: React.FC = () => (
+  <div style={{ display: 'flex', justifyContent: 'center', padding: 64 }}>
+    <Spin size="large" />
+  </div>
+);
 
 export const App: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -179,7 +186,8 @@ export const App: React.FC = () => {
 
           <Layout style={{ background: '#f8fafc' }}>
             <Content style={{ padding: '16px', minHeight: 'calc(100vh - 68px - 70px)', width: '100%' }}>
-              <div style={{ width: '100%' }}>
+              <Suspense fallback={<PageLoading />}>
+                <div style={{ width: '100%' }}>
                 {activeMenu === 'dashboard' && <DashboardOverview onNavigate={(key) => setActiveMenu(key)} />}
                 {activeMenu === 'orderStatus' && <DailyOrderStatus />}
                 {activeMenu === 'calendar' && <OrderCalendar />}
@@ -204,7 +212,8 @@ export const App: React.FC = () => {
                 {activeMenu === 'orderHistory' && <OrderHistory onEditOrder={handleEditOrder} />}
                 {activeMenu === 'deliveryOrders' && <DeliveryOrders />}
                 {activeMenu === 'auditLog' && isSuperadmin && <AuditLog />}
-              </div>
+                </div>
+              </Suspense>
             </Content>
             <Footer style={{ textAlign: 'left', color: '#64748b', fontSize: 11, background: 'transparent', padding: '16px 24px', letterSpacing: '0.5px' }}>
               COPY RIGHT by KIM LONG CATERING SDN BHD <br />

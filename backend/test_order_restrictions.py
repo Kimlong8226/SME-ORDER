@@ -16,6 +16,7 @@ from api.auth import create_access_token
 from api.order_rules import (
     MALAYSIA_TZ,
     calculate_customer_financials,
+    calculate_customers_financials,
     malaysia_now,
     order_cutoff_window,
     sync_customer_access,
@@ -99,6 +100,25 @@ class OrderRestrictionTests(unittest.TestCase):
         self.assertEqual(result["outstanding_balance"], 140)
         self.assertEqual(result["overdue_amount"], 40)
         self.assertEqual(result["oldest_overdue_due_date"], date(2026, 7, 8))
+
+    def test_batched_financials_match_single_customer_calculation(self):
+        self.add_order(date(2026, 7, 1), 10)
+        self.db.add(PaymentRecord(customer_id=self.customer.id, payment_date=date(2026, 8, 10), amount=60))
+        second_customer = Customer(company_name="No Orders", billing_cycle="14", is_blocked=False)
+        self.db.add(second_customer)
+        self.db.commit()
+
+        current_date = date(2026, 8, 20)
+        expected = calculate_customer_financials(self.db, self.customer, current_date)
+        batched = calculate_customers_financials(
+            self.db,
+            [self.customer, second_customer],
+            current_date,
+        )
+
+        self.assertEqual(batched[self.customer.id], expected)
+        self.assertEqual(batched[second_customer.id]["outstanding_balance"], 0)
+        self.assertEqual(batched[second_customer.id]["overdue_amount"], 0)
 
     def test_overdue_auto_freezes_then_payment_auto_unfreezes(self):
         self.add_order(date(2026, 7, 1), 10)
@@ -326,6 +346,17 @@ class OrderRestrictionApiTests(unittest.TestCase):
         self.assertIn(self.template_id, package_ids)
         self.assertNotIn(unassigned.id, package_ids)
         self.assertNotIn(hidden_template.id, package_ids)
+
+    def test_admin_customer_list_and_dashboard_stats(self):
+        customers = self.client.get("/admin/customers", headers=self.staff_headers)
+        self.assertEqual(customers.status_code, 200, customers.text)
+        self.assertEqual(len(customers.json()), 1)
+        self.assertEqual(customers.json()[0]["sites"][0]["id"], self.site_id)
+
+        dashboard = self.client.get("/admin/dashboard-stats", headers=self.staff_headers)
+        self.assertEqual(dashboard.status_code, 200, dashboard.text)
+        self.assertEqual(dashboard.json()["total_customers"], 1)
+        self.assertEqual(dashboard.json()["today_orders_count"], 0)
 
     def test_staff_can_override_orders_but_only_superadmin_reads_global_audit(self):
         delivery = malaysia_now().date()
