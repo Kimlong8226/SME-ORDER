@@ -5,7 +5,7 @@ import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
   FormOutlined, GlobalOutlined, LogoutOutlined, DashboardOutlined,
   FileTextOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, WhatsAppOutlined
+  MenuFoldOutlined, MenuUnfoldOutlined, WhatsAppOutlined, AuditOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import './i18n';
@@ -26,6 +26,7 @@ const OrderHistory = lazy(() => import('./pages/customer/WeeklyOrder').then((mod
 const DeliveryOrders = lazy(() => import('./pages/customer/DeliveryOrders').then((module) => ({ default: module.DeliveryOrders })));
 const MealSectionsManagement = lazy(() => import('./pages/admin/MealSectionsManagement').then((module) => ({ default: module.MealSectionsManagement })));
 const WhatsAppSettings = lazy(() => import('./pages/admin/WhatsAppSettings').then((module) => ({ default: module.WhatsAppSettings })));
+const AuditLog = lazy(() => import('./pages/admin/AuditLog').then((module) => ({ default: module.AuditLog })));
 
 const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
@@ -97,6 +98,7 @@ export const App: React.FC = () => {
     { key: 'invoices', icon: <FileTextOutlined />, label: t('nav.invoices') },
     ...(isSuperadmin ? [{ key: 'staff', icon: <TeamOutlined />, label: t('nav.staff') }] : []),
     ...(isSuperadmin ? [{ key: 'whatsappSettings', icon: <WhatsAppOutlined />, label: t('nav.whatsappSettings') }] : []),
+    ...(isSuperadmin ? [{ key: 'auditLog', icon: <AuditOutlined />, label: t('nav.auditLog') }] : []),
   ];
 
   const customerMenuItems = [
@@ -210,6 +212,11 @@ export const App: React.FC = () => {
                 {activeMenu === 'whatsappSettings' && (
                   isSuperadmin ? <WhatsAppSettings /> : (
                     <Result status="403" title="403" subTitle={i18n.language === 'en' ? 'Only superadmin can access WhatsApp settings.' : '只有最高权限者可以进入 WhatsApp 设置。'} />
+                  )
+                )}
+                {activeMenu === 'auditLog' && (
+                  isSuperadmin ? <AuditLog /> : (
+                    <Result status="403" title="403" subTitle={i18n.language === 'en' ? 'Only superadmin can access the audit log.' : '只有最高权限者可以查看审计日志。'} />
                   )
                 )}
                 {activeMenu === 'matrixOrder' && <MatrixOrder />}
