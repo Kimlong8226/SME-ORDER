@@ -7,7 +7,7 @@ import os
 from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import quote, urlencode, urlparse
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -89,6 +89,17 @@ def get_settings(db: Session) -> WhatsAppSettings | None:
     return db.query(WhatsAppSettings).filter(WhatsAppSettings.id == 1).first()
 
 
+def get_gateway_configuration() -> tuple[str, str]:
+    """Return the server-managed KIM LONG Gateway identity."""
+    gateway_url = os.getenv("WHATSAPP_GATEWAY_URL", "").strip()
+    shared_secret = os.getenv("WHATSAPP_GATEWAY_SHARED_SECRET", "").strip()
+    if not gateway_url:
+        raise WhatsAppConfigurationError("WHATSAPP_GATEWAY_URL must be configured on the backend")
+    if not shared_secret:
+        raise WhatsAppConfigurationError("WHATSAPP_GATEWAY_SHARED_SECRET must be configured on the backend")
+    return validate_gateway_url(gateway_url), shared_secret
+
+
 def get_active_mapping(db: Session, customer_id: int) -> CustomerWhatsAppGroup | None:
     return db.query(CustomerWhatsAppGroup).filter(
         CustomerWhatsAppGroup.customer_id == customer_id,
@@ -100,8 +111,7 @@ def require_ready_mapping(db: Session, customer_id: int) -> CustomerWhatsAppGrou
     settings = get_settings(db)
     if not settings or not settings.is_enabled:
         return None
-    if not settings.gateway_url or not settings.api_key_encrypted:
-        raise WhatsAppConfigurationError("WhatsApp 已启用，但 Gateway URL 或 API Key 尚未设置")
+    get_gateway_configuration()
     mapping = get_active_mapping(db, customer_id)
     if not mapping:
         raise WhatsAppConfigurationError("该顾客尚未绑定可用的 WhatsApp 群组")
@@ -111,18 +121,15 @@ def require_ready_mapping(db: Session, customer_id: int) -> CustomerWhatsAppGrou
 
 
 def _gateway_request(
-    settings: WhatsAppSettings,
+    _settings: WhatsAppSettings | None,
     method: str,
     path: str,
     payload: dict[str, Any] | None = None,
     timeout_seconds: int = 20,
 ) -> Any:
-    gateway_url = validate_gateway_url(settings.gateway_url)
+    gateway_url, shared_secret = get_gateway_configuration()
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
-    headers = {"Accept": "application/json"}
-    api_key = decrypt_api_key(settings.api_key_encrypted)
-    if api_key:
-        headers["X-Api-Key"] = api_key
+    headers = {"Accept": "application/json", "X-Gateway-Key": shared_secret}
     if body is not None:
         headers["Content-Type"] = "application/json"
     request = Request(f"{gateway_url}{path}", data=body, method=method, headers=headers)
@@ -139,11 +146,7 @@ def _gateway_request(
 
 def list_gateway_groups(db: Session) -> list[dict[str, str]]:
     settings = get_settings(db)
-    if not settings or not settings.gateway_url or not settings.api_key_encrypted:
-        raise WhatsAppConfigurationError("请先保存 Gateway URL 与 API Key")
-    session = quote(settings.session_name or "default", safe="")
-    query = urlencode({"limit": 1000, "exclude": "participants"})
-    response = _gateway_request(settings, "GET", f"/api/{session}/groups?{query}")
+    response = _gateway_request(settings, "GET", "/api/groups")
     rows = response.get("data", response) if isinstance(response, dict) else response
     if not isinstance(rows, list):
         raise RuntimeError("Gateway returned an invalid groups response")
@@ -160,31 +163,40 @@ def list_gateway_groups(db: Session) -> list[dict[str, str]]:
 
 def get_gateway_qr(db: Session) -> dict[str, str]:
     settings = get_settings(db)
-    if not settings or not settings.gateway_url or not settings.api_key_encrypted:
-        raise WhatsAppConfigurationError("请先保存 Gateway URL 与 API Key")
-    session = quote(settings.session_name or "default", safe="")
-    response = _gateway_request(settings, "GET", f"/api/{session}/auth/qr")
+    response = _gateway_request(settings, "GET", "/api/qr")
     if not isinstance(response, dict):
         raise RuntimeError("Gateway returned an invalid QR response")
-    mimetype = str(response.get("mimetype") or "image/png").lower()
-    data = str(response.get("data") or "").strip()
+    qr_value = str(response.get("qr") or "").strip()
+    mimetype = "image/png"
+    data = qr_value
+    if qr_value.startswith("data:") and ";base64," in qr_value:
+        header, data = qr_value.split(",", 1)
+        mimetype = header[5:].split(";", 1)[0].lower()
     if mimetype not in {"image/png", "image/jpeg"} or not data:
         raise RuntimeError("Gateway did not return a QR image")
     try:
         base64.b64decode(data, validate=True)
     except ValueError as exc:
         raise RuntimeError("Gateway returned invalid QR image data") from exc
-    return {"mimetype": mimetype, "data": data, "session_name": settings.session_name or "default"}
+    return {"mimetype": mimetype, "data": data, "session_name": "default"}
+
+
+def get_gateway_status(db: Session) -> dict[str, Any]:
+    response = _gateway_request(get_settings(db), "GET", "/api/status")
+    if not isinstance(response, dict):
+        raise RuntimeError("Gateway returned an invalid status response")
+    return {
+        "status": str(response.get("status") or "UNKNOWN").upper(),
+        "user": response.get("user"),
+        "has_qr": bool(response.get("hasQr")),
+    }
 
 
 def send_test_message(db: Session, mapping: CustomerWhatsAppGroup, operator_name: str) -> dict[str, Any]:
     settings = get_settings(db)
-    if not settings or not settings.gateway_url or not settings.api_key_encrypted:
-        raise WhatsAppConfigurationError("请先保存 Gateway URL 与 API Key")
-    response = _gateway_request(settings, "POST", "/api/sendText", {
-        "session": settings.session_name or "default",
-        "chatId": mapping.group_id,
-        "text": f"✅ WhatsApp 群组绑定测试成功\n客户：{mapping.customer.company_name}\n操作人员：{operator_name}\n时间：{malaysia_now().strftime('%d/%m/%Y %H:%M')}",
+    response = _gateway_request(settings, "POST", "/api/send", {
+        "to": mapping.group_id,
+        "message": f"✅ WhatsApp 群组绑定测试成功\n客户：{mapping.customer.company_name}\n操作人员：{operator_name}\n时间：{malaysia_now().strftime('%d/%m/%Y %H:%M')}",
     })
     mapping.verified_at = datetime.now(timezone.utc)
     mapping.updated_at = datetime.now(timezone.utc)
@@ -427,10 +439,9 @@ def process_delivery(db: Session, delivery_id: int) -> WhatsAppDelivery:
         if not delivery.message_text:
             delivery.message_text = format_delivery_message(delivery, order)
             db.commit()
-        response = _gateway_request(settings, "POST", "/api/sendText", {
-            "session": settings.session_name or "default",
-            "chatId": delivery.group_id,
-            "text": delivery.message_text,
+        response = _gateway_request(settings, "POST", "/api/send", {
+            "to": delivery.group_id,
+            "message": delivery.message_text,
         })
         delivery = db.query(WhatsAppDelivery).filter(WhatsAppDelivery.id == delivery_id).first()
         delivery.status = "sent"

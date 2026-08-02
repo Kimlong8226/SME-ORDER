@@ -25,16 +25,16 @@ from model.models import (
 from services.whatsapp_service import (
     WhatsAppConfigurationError,
     apply_ack_event,
-    encrypt_api_key,
     enqueue_order_message,
     get_active_mapping,
     get_gateway_qr,
+    get_gateway_status,
+    get_gateway_configuration,
     get_settings,
     list_gateway_groups,
     process_delivery,
     send_test_message,
     serialize_delivery,
-    validate_gateway_url,
 )
 
 
@@ -52,9 +52,6 @@ system_router = APIRouter(tags=["WhatsApp System"])
 
 
 class WhatsAppSettingsUpdate(BaseModel):
-    gateway_url: str = Field(min_length=4, max_length=500)
-    session_name: str = Field(default="default", min_length=1, max_length=100)
-    api_key: Optional[str] = Field(default=None, max_length=1000)
     is_enabled: bool = False
 
 
@@ -82,10 +79,13 @@ def _settings_payload(settings: WhatsAppSettings | None, db: Session) -> dict:
     failed_count = db.query(func.count(WhatsAppDelivery.id)).filter(
         WhatsAppDelivery.status == "failed"
     ).scalar() or 0
+    try:
+        get_gateway_configuration()
+        gateway_configured = True
+    except WhatsAppConfigurationError:
+        gateway_configured = False
     return {
-        "gateway_url": settings.gateway_url if settings else "",
-        "session_name": settings.session_name if settings else "default",
-        "has_api_key": bool(settings and settings.api_key_encrypted),
+        "gateway_configured": gateway_configured,
         "is_enabled": bool(settings and settings.is_enabled),
         "updated_by": settings.updated_by if settings else None,
         "updated_at": settings.updated_at if settings else None,
@@ -108,83 +108,39 @@ def update_whatsapp_settings(
     operator_name, operator_role = _operator(auth)
     settings = get_settings(db)
     before = _settings_payload(settings, db)
-    try:
-        gateway_url = validate_gateway_url(req.gateway_url)
-        if req.is_enabled and not ((req.api_key and req.api_key.strip()) or (settings and settings.api_key_encrypted)):
-            raise WhatsAppConfigurationError("启用自动发送前必须设置 API Key")
-    except WhatsAppConfigurationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if req.is_enabled:
+        try:
+            get_gateway_configuration()
+        except WhatsAppConfigurationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not settings:
         settings = WhatsAppSettings(id=1)
         db.add(settings)
-    normalized_session = req.session_name.strip()
-    gateway_identity_changed = bool(
-        (settings.gateway_url and settings.gateway_url != gateway_url)
-        or (settings.session_name and settings.session_name != normalized_session)
-        or (req.api_key and req.api_key.strip())
-    )
-    settings.gateway_url = gateway_url
-    settings.session_name = normalized_session
     settings.is_enabled = req.is_enabled
-    if req.api_key and req.api_key.strip():
-        try:
-            settings.api_key_encrypted = encrypt_api_key(req.api_key.strip())
-        except WhatsAppConfigurationError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
     settings.updated_by = operator_name
     settings.updated_at = datetime.now(timezone.utc)
-
-    invalidated_mappings = 0
-    superseded_pending_deliveries = 0
-    if gateway_identity_changed:
-        verified_mappings = db.query(CustomerWhatsAppGroup).filter(
-            CustomerWhatsAppGroup.verified_at.isnot(None)
-        ).all()
-        for mapping in verified_mappings:
-            mapping.verified_at = None
-            mapping.updated_at = datetime.now(timezone.utc)
-        invalidated_mappings = len(verified_mappings)
-        pending_rows = db.query(WhatsAppDelivery).filter(
-            WhatsAppDelivery.status.in_(["pending", "failed"])
-        ).all()
-        now = datetime.now(timezone.utc)
-        for delivery in pending_rows:
-            delivery.status = "superseded"
-            delivery.last_error = "WhatsApp Gateway identity was changed by superadmin"
-            delivery.updated_at = now
-        superseded_pending_deliveries = len(pending_rows)
 
     write_audit_log(
         db=db,
         action_type=AUDIT_ACTION_WHATSAPP_SETTINGS_UPDATE,
-        description="更新 WhatsApp Gateway 设置",
+        description="更新 WhatsApp 自动发送设置",
         operator_name=operator_name,
         operator_role=operator_role,
         target_label="WhatsApp Settings",
         extra_data={
-            "reason": "Superadmin configuration update",
+            "reason": "Superadmin automation update",
             "before": {
                 key: value.isoformat() if isinstance(value, datetime) else value
                 for key, value in before.items()
                 if key not in {"pending_count", "failed_count"}
             },
-            "after": {
-                "gateway_url": gateway_url,
-                "session_name": settings.session_name,
-                "has_api_key": bool(settings.api_key_encrypted),
-                "is_enabled": settings.is_enabled,
-            },
-            "invalidated_mappings": invalidated_mappings,
-            "superseded_pending_deliveries": superseded_pending_deliveries,
+            "after": {"is_enabled": settings.is_enabled},
         },
     )
     db.commit()
     db.refresh(settings)
-    payload = _settings_payload(settings, db)
-    payload["invalidated_mappings"] = invalidated_mappings
-    payload["superseded_pending_deliveries"] = superseded_pending_deliveries
-    return payload
+    return _settings_payload(settings, db)
 
 
 @settings_router.get("/groups")
@@ -199,6 +155,14 @@ def read_gateway_groups(db: Session = Depends(get_db)):
 def read_gateway_qr(db: Session = Depends(get_db)):
     try:
         return get_gateway_qr(db)
+    except (WhatsAppConfigurationError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@settings_router.get("/status")
+def read_gateway_status(db: Session = Depends(get_db)):
+    try:
+        return get_gateway_status(db)
     except (WhatsAppConfigurationError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

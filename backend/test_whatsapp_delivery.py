@@ -1,7 +1,8 @@
 import os
+import json
 import unittest
 from datetime import date, datetime, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -30,6 +31,7 @@ from model.models import (
 )
 from services.whatsapp_service import (
     WhatsAppConfigurationError,
+    _gateway_request,
     _claim_delivery,
     apply_ack_event,
     encrypt_api_key,
@@ -43,7 +45,11 @@ from services.whatsapp_service import (
 class WhatsAppDeliveryTests(unittest.TestCase):
     def setUp(self):
         self.original_encryption_key = os.environ.get("WHATSAPP_CONFIG_ENCRYPTION_KEY")
+        self.original_gateway_url = os.environ.get("WHATSAPP_GATEWAY_URL")
+        self.original_gateway_secret = os.environ.get("WHATSAPP_GATEWAY_SHARED_SECRET")
         os.environ["WHATSAPP_CONFIG_ENCRYPTION_KEY"] = "unit-test-whatsapp-key"
+        os.environ["WHATSAPP_GATEWAY_URL"] = "https://kim-long-whatsapp-gateway.example.com"
+        os.environ["WHATSAPP_GATEWAY_SHARED_SECRET"] = "unit-test-gateway-secret"
         self.engine = create_engine("sqlite:///:memory:")
         Base.metadata.create_all(bind=self.engine)
         self.Session = sessionmaker(bind=self.engine)
@@ -108,6 +114,14 @@ class WhatsAppDeliveryTests(unittest.TestCase):
             os.environ.pop("WHATSAPP_CONFIG_ENCRYPTION_KEY", None)
         else:
             os.environ["WHATSAPP_CONFIG_ENCRYPTION_KEY"] = self.original_encryption_key
+        if self.original_gateway_url is None:
+            os.environ.pop("WHATSAPP_GATEWAY_URL", None)
+        else:
+            os.environ["WHATSAPP_GATEWAY_URL"] = self.original_gateway_url
+        if self.original_gateway_secret is None:
+            os.environ.pop("WHATSAPP_GATEWAY_SHARED_SECRET", None)
+        else:
+            os.environ["WHATSAPP_GATEWAY_SHARED_SECRET"] = self.original_gateway_secret
 
     def test_do_number_is_permanent_after_delivery_date_changes(self):
         order = self.db.query(Order).filter(Order.id == self.order_id).first()
@@ -145,6 +159,24 @@ class WhatsAppDeliveryTests(unittest.TestCase):
         self.assertEqual(result.status, "sent")
         self.assertEqual(result.gateway_message_id, "message-123")
         self.assertIsNotNone(result.message_text)
+
+    def test_shared_gateway_request_uses_kim_long_header_and_contract(self):
+        response = MagicMock()
+        response.read.return_value = b'{"success":true,"messageId":"message-123"}'
+        response.__enter__.return_value = response
+        with patch("services.whatsapp_service.urlopen", return_value=response) as mocked_urlopen:
+            result = _gateway_request(None, "POST", "/api/send", {
+                "to": "123456789@g.us",
+                "message": "Test",
+            })
+        request = mocked_urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "https://kim-long-whatsapp-gateway.example.com/api/send")
+        self.assertEqual(request.get_header("X-gateway-key"), "unit-test-gateway-secret")
+        self.assertEqual(json.loads(request.data.decode("utf-8")), {
+            "to": "123456789@g.us",
+            "message": "Test",
+        })
+        self.assertEqual(result["messageId"], "message-123")
 
     def test_delivery_claim_prevents_a_second_worker_from_sending_same_job(self):
         order = self.db.query(Order).filter(Order.id == self.order_id).first()
@@ -303,41 +335,32 @@ class WhatsAppDeliveryTests(unittest.TestCase):
         payload = {"user_type": "staff", "role": "superadmin", "name": "Owner"}
         self.assertEqual(require_superadmin(payload), payload)
 
-    def test_superadmin_settings_update_never_returns_api_key(self):
+    def test_superadmin_settings_update_only_changes_automation(self):
         result = update_whatsapp_settings(
-            WhatsAppSettingsUpdate(
-                gateway_url="https://gateway.example.com",
-                session_name="default",
-                api_key=None,
-                is_enabled=True,
-            ),
+            WhatsAppSettingsUpdate(is_enabled=True),
             db=self.db,
             auth={"user_type": "staff", "role": "superadmin", "name": "Owner"},
         )
-        self.assertTrue(result["has_api_key"])
+        self.assertTrue(result["gateway_configured"])
+        self.assertTrue(result["is_enabled"])
         self.assertNotIn("api_key", result)
+        self.assertNotIn("gateway_url", result)
 
-    def test_gateway_identity_change_invalidates_mappings_and_unsent_tasks(self):
+    def test_automation_update_does_not_change_mapping_or_unsent_tasks(self):
         order = self.db.query(Order).filter(Order.id == self.order_id).first()
         pending = enqueue_order_message(self.db, order, "confirmed", "Admin")
         pending_id = pending.id
         self.db.commit()
         result = update_whatsapp_settings(
-            WhatsAppSettingsUpdate(
-                gateway_url="https://replacement-gateway.example.com",
-                session_name="replacement",
-                api_key="replacement-api-key",
-                is_enabled=True,
-            ),
+            WhatsAppSettingsUpdate(is_enabled=False),
             db=self.db,
             auth={"user_type": "staff", "role": "superadmin", "name": "Owner"},
         )
-        self.assertEqual(result["invalidated_mappings"], 1)
-        self.assertEqual(result["superseded_pending_deliveries"], 1)
-        self.assertIsNone(self.db.query(CustomerWhatsAppGroup).first().verified_at)
+        self.assertFalse(result["is_enabled"])
+        self.assertIsNotNone(self.db.query(CustomerWhatsAppGroup).first().verified_at)
         self.assertEqual(
             self.db.query(WhatsAppDelivery).filter(WhatsAppDelivery.id == pending_id).first().status,
-            "superseded",
+            "pending",
         )
         self.assertNotIn("api_key", result)
 

@@ -1,4 +1,4 @@
-# WhatsApp DO Delivery Setup
+# Shared KIM LONG WhatsApp Delivery Setup
 
 The application sends approved, updated, cancelled, and manually sent DOs to the single WhatsApp group assigned to each customer.
 
@@ -6,11 +6,11 @@ The application sends approved, updated, cancelled, and manually sent DOs to the
 
 - Only `superadmin` can access `/admin/whatsapp/*` settings and mapping endpoints.
 - Staff can approve a DO or use the WhatsApp button in **Order Status** only for the already approved customer group.
-- API keys are encrypted at rest and are never returned by the API.
+- Gateway credentials are server-managed environment variables and are never returned by the API.
 - A WhatsApp group can be assigned to only one customer.
 - Enabling automation blocks confirmation or editing of an approved DO when its customer has no active, test-verified group mapping.
 - Changing/disabling a group or changing its price visibility supersedes that customer's unsent tasks so an old group or old price policy cannot be used; test the new mapping and manually resend the affected DOs.
-- Changing the Gateway URL, session name, or API key invalidates all tested mappings and supersedes unsent tasks; reload the live groups, test every mapping again, then resend affected DOs.
+- This application must never log out, restart, or clear the shared KIM LONG Gateway session. Doing so would disconnect both systems.
 - Approval, DO changes, and cancellation each make one immediate automatic send attempt. There is no scheduled or background retry.
 - A failed attempt stays visible on the DO. Staff must deliberately use its WhatsApp button in **Order Status** to send again.
 - Every attempt is retained in `whatsapp_deliveries` and recorded in Audit Log.
@@ -18,23 +18,15 @@ The application sends approved, updated, cancelled, and manually sent DOs to the
 ## Required deployment steps
 
 1. Apply `supabase/migrations/20260802090000_whatsapp_do_delivery.sql` to the target database after taking the normal production backup.
-2. Configure these server-side environment variables:
-   - `WHATSAPP_CONFIG_ENCRYPTION_KEY`
-   - `WHATSAPP_WEBHOOK_SECRET`
+2. Configure these environment variables only on the Central Kitchen backend:
+   - `WHATSAPP_GATEWAY_URL=https://<kim-long-whatsapp-gateway-domain>`
+   - `WHATSAPP_GATEWAY_SHARED_SECRET=<same secret already used by KIM LONG>`
+3. Do not put either value in Vite/frontend environment variables. Do not change the existing KIM LONG Gateway service or its persisted `default` session.
+4. Sign in as `superadmin` and open **WhatsApp Settings**. The page reads the shared connection status and displays a QR only when the existing Gateway needs login.
+5. Load the live groups, bind each customer, and complete a successful test message for every group before enabling automatic sends.
+6. No Vercel Cron is required. The backend waits for the immediate Gateway response and shows failures in **Order Status**.
 
-   Use separate random values of at least 32 characters. Keep `WHATSAPP_CONFIG_ENCRYPTION_KEY` stable; if it is rotated, re-enter the WAHA API key through the superadmin screen.
-3. Deploy a WAHA Gateway with a persistent session volume and an API key. Restrict WAHA Dashboard access to the highest-permission operator as well. Start the session there and scan its QR from the dedicated WhatsApp Business number under **Linked devices**. The QR is intentionally not shown to normal staff in this application.
-4. Configure WAHA to send `message.ack` and `message.ack.group` webhooks to:
-
-   `POST https://<backend-domain>/webhooks/whatsapp`
-
-   For a global WAHA webhook, configure at least:
-
-   - `WHATSAPP_HOOK_EVENTS=message.ack,message.ack.group`
-   - `WHATSAPP_HOOK_CUSTOM_HEADERS=X-Webhook-Secret:<WHATSAPP_WEBHOOK_SECRET value>`
-
-5. No Vercel Cron is required. The backend waits for the one immediate Gateway result and shows any failure in **Order Status**, so this workflow does not require a Vercel Pro Cron schedule.
-6. Sign in as `superadmin`, open **WhatsApp Settings**, save the Gateway details, load the live groups, bind each customer, and complete a successful test message for every group before enabling automatic sends.
+The KIM LONG Gateway accepts the send request but does not currently provide WAHA delivery/read acknowledgment webhooks. A successful request is therefore recorded as `sent`; later `server`, `device`, and `read` states are not expected from this shared adapter.
 
 For an existing local SQLite database, run `migrate_local_schema_20260801.py` instead of the Supabase migration.
 

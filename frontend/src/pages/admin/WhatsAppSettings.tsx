@@ -5,7 +5,6 @@ import {
   Button,
   Card,
   Col,
-  Form,
   Input,
   Modal,
   Row,
@@ -22,7 +21,6 @@ import {
   ReloadOutlined,
   SaveOutlined,
   SendOutlined,
-  SettingOutlined,
   WhatsAppOutlined,
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
@@ -50,7 +48,6 @@ export const WhatsAppSettings: React.FC = () => {
   const { message } = App.useApp();
   const { i18n } = useTranslation();
   const isEn = i18n.language === 'en';
-  const [form] = Form.useForm();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [groupLoading, setGroupLoading] = useState(false);
@@ -60,19 +57,17 @@ export const WhatsAppSettings: React.FC = () => {
   const [rowBusy, setRowBusy] = useState<number | null>(null);
   const [qrLoading, setQrLoading] = useState(false);
   const [qrImage, setQrImage] = useState<string | null>(null);
+  const [gatewayStatus, setGatewayStatus] = useState('UNKNOWN');
+  const [gatewayUser, setGatewayUser] = useState<string | null>(null);
+  const [automationEnabled, setAutomationEnabled] = useState(false);
 
   const labels = {
     title: isEn ? 'WhatsApp Automation Settings' : 'WhatsApp 自动发送设置',
     restricted: isEn
-      ? 'Only superadmin can view or change Gateway credentials and customer group mappings.'
-      : '只有最高权限者（superadmin）可以查看或修改 Gateway 凭证及顾客群组绑定。',
-    gateway: isEn ? 'Gateway Configuration' : 'Gateway 配置',
-    gatewayUrl: isEn ? 'Gateway URL' : 'Gateway URL',
-    session: isEn ? 'Session Name' : 'Session 名称',
-    apiKey: isEn ? 'API Key' : 'API Key',
-    apiKeyHint: isEn ? 'Leave blank to keep the current key' : '留空表示保留当前密钥',
+      ? 'This system shares the existing KIM LONG WhatsApp connection. Gateway credentials stay on the backend.'
+      : '本系统共用现有 KIM LONG WhatsApp 连接；Gateway 凭证只保存在后端。',
     enabled: isEn ? 'Enable automatic delivery' : '启用自动发送',
-    save: isEn ? 'Save Settings' : '保存设置',
+    save: isEn ? 'Save Automation' : '保存自动发送',
     mappings: isEn ? 'Customer Group Mappings' : '顾客 WhatsApp 群组绑定',
     refreshGroups: isEn ? 'Load Live Groups' : '读取实时群组',
     customer: isEn ? 'Customer' : '顾客',
@@ -92,20 +87,30 @@ export const WhatsAppSettings: React.FC = () => {
     qrTitle: isEn ? 'WhatsApp Login QR' : 'WhatsApp 登录 QR',
     qrRefresh: isEn ? 'Refresh QR' : '刷新 QR',
     qrHint: isEn ? 'Scan with WhatsApp Business under Linked devices. QR codes expire quickly.' : '请用 WhatsApp Business 的“已关联设备”扫描；QR 会很快过期。',
-    qrEmpty: isEn ? 'Save the Gateway URL and API Key, then refresh the QR.' : '请先保存 Gateway URL 与 API Key，然后刷新 QR。',
+    qrEmpty: isEn ? 'Waiting for a login QR from the shared Gateway.' : '正在等待共用 Gateway 产生登录 QR。',
+    connected: isEn ? 'Connected' : '已连接',
+    disconnected: isEn ? 'Not connected' : '未连接',
   };
 
-  const loadQr = async (showError = true) => {
+  const loadGateway = async (showError = true) => {
     setQrLoading(true);
     try {
-      const response = await axiosInstance.get('/admin/whatsapp/qr');
-      const mimetype = response.data?.mimetype || 'image/png';
-      const data = response.data?.data;
-      setQrImage(data ? `data:${mimetype};base64,${data}` : null);
+      const statusResponse = await axiosInstance.get('/admin/whatsapp/status');
+      const status = String(statusResponse.data?.status || 'UNKNOWN').toUpperCase();
+      setGatewayStatus(status);
+      setGatewayUser(statusResponse.data?.user || null);
+      if (status === 'CONNECTED') {
+        setQrImage(null);
+      } else {
+        const qrResponse = await axiosInstance.get('/admin/whatsapp/qr');
+        const mimetype = qrResponse.data?.mimetype || 'image/png';
+        const data = qrResponse.data?.data;
+        setQrImage(data ? `data:${mimetype};base64,${data}` : null);
+      }
     } catch (error: any) {
       setQrImage(null);
       if (showError) {
-        message.error(error.response?.data?.detail || (isEn ? 'Failed to load QR' : '读取 QR 失败'));
+        message.error(error.response?.data?.detail || (isEn ? 'Failed to load WhatsApp connection' : '读取 WhatsApp 连接失败'));
       }
     } finally {
       setQrLoading(false);
@@ -122,13 +127,8 @@ export const WhatsAppSettings: React.FC = () => {
       const settings = settingsResponse.data || {};
       setSettingsMeta(settings);
       setMappings(mappingsResponse.data || []);
-      form.setFieldsValue({
-        gateway_url: settings.gateway_url || '',
-        session_name: settings.session_name || 'default',
-        api_key: '',
-        is_enabled: Boolean(settings.is_enabled),
-      });
-      if (settings.has_api_key) void loadQr(false);
+      setAutomationEnabled(Boolean(settings.is_enabled));
+      if (settings.gateway_configured) void loadGateway(false);
     } catch (error: any) {
       message.error(error.response?.data?.detail || (isEn ? 'Failed to load WhatsApp settings' : '读取 WhatsApp 设置失败'));
     } finally {
@@ -138,24 +138,16 @@ export const WhatsAppSettings: React.FC = () => {
 
   useEffect(() => {
     loadBaseData();
+    const timer = window.setInterval(() => void loadGateway(false), 5000);
+    return () => window.clearInterval(timer);
   }, []);
 
-  const saveSettings = async (values: any) => {
+  const saveSettings = async () => {
     setSaving(true);
     try {
-      const response = await axiosInstance.put('/admin/whatsapp/settings', values);
+      const response = await axiosInstance.put('/admin/whatsapp/settings', { is_enabled: automationEnabled });
       setSettingsMeta(response.data || {});
-      form.setFieldValue('api_key', '');
-      const invalidated = response.data?.invalidated_mappings || 0;
-      const superseded = response.data?.superseded_pending_deliveries || 0;
-      if (invalidated > 0 || superseded > 0) {
-        message.warning(isEn
-          ? `Settings saved. Gateway identity changed: ${invalidated} mapping(s) require a new test and ${superseded} unsent task(s) were cancelled for safety.`
-          : `WhatsApp 设置已保存。Gateway 身份有变：${invalidated} 个群组需要重新测试，${superseded} 个未发送任务已为安全起见取消。`);
-        await loadBaseData();
-      } else {
-        message.success(isEn ? 'WhatsApp settings saved' : 'WhatsApp 设置已保存');
-      }
+      message.success(isEn ? 'WhatsApp automation saved' : 'WhatsApp 自动发送已保存');
     } catch (error: any) {
       message.error(error.response?.data?.detail || (isEn ? 'Failed to save settings' : '保存设置失败'));
     } finally {
@@ -370,47 +362,35 @@ export const WhatsAppSettings: React.FC = () => {
         </Col>
       </Row>
 
-      <Card title={<Space><SettingOutlined />{labels.gateway}</Space>} loading={loading}>
-        <Form form={form} layout="vertical" onFinish={saveSettings}>
-          <Row gutter={16}>
-            <Col xs={24} md={12}>
-              <Form.Item name="gateway_url" label={labels.gatewayUrl} rules={[{ required: true }, { type: 'url' }]}>
-                <Input placeholder="https://your-waha-gateway.example.com" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={12}>
-              <Form.Item name="session_name" label={labels.session} rules={[{ required: true }]}>
-                <Input placeholder="default" />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Row gutter={16}>
-            <Col xs={24} md={16}>
-              <Form.Item name="api_key" label={`${labels.apiKey}${settingsMeta.has_api_key ? ' ✓' : ''}`} extra={labels.apiKeyHint}>
-                <Input.Password autoComplete="new-password" />
-              </Form.Item>
-            </Col>
-            <Col xs={24} md={8}>
-              <Form.Item name="is_enabled" label={labels.enabled} valuePropName="checked">
-                <Switch checkedChildren={isEn ? 'ON' : '启用'} unCheckedChildren={isEn ? 'OFF' : '停用'} />
-              </Form.Item>
-            </Col>
-          </Row>
-          <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>{labels.save}</Button>
-        </Form>
-      </Card>
-
       <Card
         title={<Space><WhatsAppOutlined />{labels.qrTitle}</Space>}
-        extra={<Button icon={<ReloadOutlined />} loading={qrLoading} onClick={() => loadQr()}>{labels.qrRefresh}</Button>}
+        extra={<Button icon={<ReloadOutlined />} loading={qrLoading} onClick={() => loadGateway()}>{labels.qrRefresh}</Button>}
       >
         <div style={{ textAlign: 'center' }}>
-          {qrImage ? (
+          <div style={{ marginBottom: 16 }}>
+            <Tag color={gatewayStatus === 'CONNECTED' ? 'success' : 'warning'} icon={gatewayStatus === 'CONNECTED' ? <CheckCircleOutlined /> : undefined}>
+              {gatewayStatus === 'CONNECTED' ? labels.connected : `${labels.disconnected} (${gatewayStatus})`}
+            </Tag>
+            {gatewayUser && <Text type="secondary">{gatewayUser}</Text>}
+          </div>
+          {gatewayStatus === 'CONNECTED' ? (
+            <Alert type="success" showIcon message={isEn ? 'The shared WhatsApp number is ready.' : '共用 WhatsApp 号码已连接，可以使用。'} />
+          ) : qrImage ? (
             <img src={qrImage} alt={labels.qrTitle} style={{ width: 280, maxWidth: '100%', borderRadius: 8 }} />
           ) : (
             <Text type="secondary">{labels.qrEmpty}</Text>
           )}
           <Text type="secondary" style={{ display: 'block', marginTop: 12 }}>{labels.qrHint}</Text>
+          <Space style={{ marginTop: 16 }}>
+            <Text>{labels.enabled}</Text>
+            <Switch
+              checked={automationEnabled}
+              onChange={setAutomationEnabled}
+              checkedChildren={isEn ? 'ON' : '启用'}
+              unCheckedChildren={isEn ? 'OFF' : '停用'}
+            />
+            <Button type="primary" icon={<SaveOutlined />} loading={saving} onClick={saveSettings}>{labels.save}</Button>
+          </Space>
         </div>
       </Card>
 
