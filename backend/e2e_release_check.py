@@ -81,6 +81,13 @@ cleanup_inactive_package = client.delete(
     headers=admin_headers,
 )
 assert cleanup_inactive_package.status_code == 200, cleanup_inactive_package.text
+package_delete_audit = client.get(
+    "/admin/audit-logs?action_type=PACKAGE_TEMPLATE_DELETE",
+    headers=admin_headers,
+)
+assert package_delete_audit.status_code == 200, package_delete_audit.text
+assert package_delete_audit.json()["total"] == 1
+assert package_delete_audit.json()["items"][0]["target_label"] == "Inactive Test Meal"
 
 assigned_section_delete = client.delete(f"/admin/meal-sections/{section_id}", headers=admin_headers)
 assert assigned_section_delete.status_code == 409, assigned_section_delete.text
@@ -120,6 +127,11 @@ db.close()
 historical_package_delete = client.delete(f"/admin/packages/{package_id}", headers=admin_headers)
 assert historical_package_delete.status_code == 409, historical_package_delete.text
 assert historical_package_delete.json()["detail"]["code"] == "package_has_order_history"
+package_delete_audit = client.get(
+    "/admin/audit-logs?action_type=PACKAGE_TEMPLATE_DELETE",
+    headers=admin_headers,
+)
+assert package_delete_audit.json()["total"] == 1
 
 print("PASS: auth, authorization, customer ordering, admin confirmation, and payment recording")
 engine.dispose()

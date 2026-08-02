@@ -93,6 +93,28 @@ def _operator(auth: dict) -> tuple[str, str]:
     return auth.get("name") or auth.get("sub") or "后台管理员", auth.get("role") or "staff"
 
 
+def _write_admin_audit(
+    db: Session,
+    auth: dict,
+    action_type: str,
+    description: str,
+    target_id: int | None = None,
+    target_label: str | None = None,
+    extra_data: dict | None = None,
+) -> None:
+    operator_name, operator_role = _operator(auth)
+    write_audit_log(
+        db=db,
+        action_type=action_type,
+        description=description,
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=target_id,
+        target_label=target_label,
+        extra_data=extra_data,
+    )
+
+
 def _required_reason(value: str) -> str:
     reason = value.strip()
     if len(reason) < 3:
@@ -138,7 +160,7 @@ def _decorate_customer_access(customer: Customer, access: dict) -> None:
 
 # --- 1. 客户档案管理 ---
 @router.post("/customers", response_model=CustomerResponse)
-def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
+def create_customer(req: CustomerCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     existing_user = db.query(CustomerUser).filter(CustomerUser.username == req.username).first()
     if existing_user:
         raise HTTPException(status_code=400, detail="订餐员用户名已存在")
@@ -159,8 +181,7 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db)):
         is_blocked=False
     )
     db.add(customer)
-    db.commit()
-    db.refresh(customer)
+    db.flush()
 
     c_user = CustomerUser(
         customer_id=customer.id,
@@ -208,7 +229,7 @@ def list_customers(db: Session = Depends(get_db)):
     return customers
 
 @router.put("/customers/{customer_id}", response_model=CustomerResponse)
-def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends(get_db)):
+def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -394,7 +415,7 @@ def get_customer_restriction_history(customer_id: int, db: Session = Depends(get
     return results
 
 @router.post("/customers/{customer_id}/sites", response_model=DeliverySiteResponse)
-def add_delivery_site(customer_id: int, site_in: DeliverySiteCreate, db: Session = Depends(get_db)):
+def add_delivery_site(customer_id: int, site_in: DeliverySiteCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
@@ -407,16 +428,19 @@ def add_delivery_site(customer_id: int, site_in: DeliverySiteCreate, db: Session
         phone=site_in.phone
     )
     db.add(site)
+    db.flush()
+    _write_admin_audit(db, auth, "DELIVERY_SITE_CREATE", f"为客户 {customer.company_name} 新增送餐地点 {site.site_name}", site.id, site.site_name, {"customer_id": customer.id, "address": site.address})
     db.commit()
     db.refresh(site)
     return site
 
 @router.put("/customers/sites/{site_id}", response_model=DeliverySiteResponse)
-def update_delivery_site(site_id: int, site_in: DeliverySiteCreate, db: Session = Depends(get_db)):
+def update_delivery_site(site_id: int, site_in: DeliverySiteCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     site = db.query(DeliverySite).filter(DeliverySite.id == site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="分点不存在")
 
+    before = {"site_name": site.site_name, "address": site.address, "contact_person": site.contact_person, "phone": site.phone}
     site.site_name = site_in.site_name
     site.address = site_in.address
     if site_in.contact_person is not None:
@@ -429,18 +453,20 @@ def update_delivery_site(site_id: int, site_in: DeliverySiteCreate, db: Session 
     return site
 
 @router.delete("/customers/sites/{site_id}")
-def delete_delivery_site(site_id: int, db: Session = Depends(get_db)):
+def delete_delivery_site(site_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     site = db.query(DeliverySite).filter(DeliverySite.id == site_id).first()
     if not site:
         raise HTTPException(status_code=404, detail="分点不存在")
 
+    snapshot = {"customer_id": site.customer_id, "site_name": site.site_name, "address": site.address}
     db.delete(site)
+    _write_admin_audit(db, auth, "DELIVERY_SITE_DELETE", f"删除送餐地点 {site.site_name}", site.id, site.site_name, {"deleted": snapshot})
     db.commit()
     return {"message": "分点已成功删除"}
 
 # --- 2. 内部员工账号管理 (仅 Superadmin 可访问) ---
 @router.post("/staff", response_model=StaffUserResponse, dependencies=[Depends(require_superadmin)])
-def create_staff(req: StaffUserCreate, db: Session = Depends(get_db)):
+def create_staff(req: StaffUserCreate, db: Session = Depends(get_db), auth: dict = Depends(require_superadmin)):
     existing = db.query(StaffUser).filter(StaffUser.username == req.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="员工用户名已存在")
@@ -453,6 +479,8 @@ def create_staff(req: StaffUserCreate, db: Session = Depends(get_db)):
         is_active=req.is_active
     )
     db.add(staff)
+    db.flush()
+    _write_admin_audit(db, auth, "STAFF_CREATE", f"创建员工账号 {staff.username}", staff.id, staff.username, {"role": staff.role, "is_active": staff.is_active})
     db.commit()
     db.refresh(staff)
     return staff
@@ -462,7 +490,7 @@ def list_staff(db: Session = Depends(get_db)):
     return db.query(StaffUser).all()
 
 @router.put("/staff/{staff_id}", response_model=StaffUserResponse, dependencies=[Depends(require_superadmin)])
-def update_staff(staff_id: int, req: StaffUserUpdate, db: Session = Depends(get_db)):
+def update_staff(staff_id: int, req: StaffUserUpdate, db: Session = Depends(get_db), auth: dict = Depends(require_superadmin)):
     staff = db.query(StaffUser).filter(StaffUser.id == staff_id).first()
     if not staff:
         raise HTTPException(status_code=404, detail="员工不存在")
@@ -486,20 +514,29 @@ def update_staff(staff_id: int, req: StaffUserUpdate, db: Session = Depends(get_
     return staff
 
 @router.delete("/staff/{staff_id}", dependencies=[Depends(require_superadmin)])
-def delete_staff(staff_id: int, db: Session = Depends(get_db)):
+def delete_staff(staff_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_superadmin)):
 
     staff = db.query(StaffUser).filter(StaffUser.id == staff_id).first()
     if not staff:
         raise HTTPException(status_code=404, detail="员工不存在")
+    snapshot = {"username": staff.username, "full_name": staff.full_name, "role": staff.role, "is_active": staff.is_active}
     db.delete(staff)
+    _write_admin_audit(db, auth, "STAFF_DELETE", f"删除员工账号 {staff.username}", staff.id, staff.username, {"deleted": snapshot})
     db.commit()
     return {"message": "删除成功"}
 
 # --- 3. 菜单与套餐库管理 ---
 @router.post("/packages", response_model=PackageTemplateResponse)
-def create_package_template(req: PackageTemplateCreate, db: Session = Depends(get_db)):
+def create_package_template(req: PackageTemplateCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     template = PackageTemplate(**req.dict())
     db.add(template)
+    db.flush()
+    _write_admin_audit(db, auth, "PACKAGE_TEMPLATE_CREATE", f"创建套餐模板 {template.name}", template.id, template.name, {"category": template.category, "default_price": template.default_price})
+    _write_admin_audit(db, auth, "CUSTOMER_CREATE", f"创建客户 {customer.company_name}", customer.id, customer.company_name, {"username": req.username, "site_count": len(req.sites)})
+    audit_changes = sorted([*update_data.keys(), *(["username"] if username else []), *(["password"] if password else [])])
+    _write_admin_audit(db, auth, AUDIT_ACTION_CUSTOMER_UPDATE, f"更新客户 {customer.company_name} 的资料", customer.id, customer.company_name, {"changed_fields": audit_changes})
+    _write_admin_audit(db, auth, "DELIVERY_SITE_UPDATE", f"更新送餐地点 {site.site_name}", site.id, site.site_name, {"before": before, "after": {"site_name": site.site_name, "address": site.address, "contact_person": site.contact_person, "phone": site.phone}})
+    _write_admin_audit(db, auth, "STAFF_UPDATE", f"更新员工账号 {staff.username}", staff.id, staff.username, {"changed_fields": sorted(update_data.keys())})
     db.commit()
     db.refresh(template)
     return template
@@ -509,14 +546,15 @@ def list_package_templates(db: Session = Depends(get_db)):
     return db.query(PackageTemplate).all()
 
 @router.put("/packages/{package_id}", response_model=PackageTemplateResponse)
-def update_package_template(package_id: int, req: PackageTemplateCreate, db: Session = Depends(get_db)):
+def update_package_template(package_id: int, req: PackageTemplateCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     template = db.query(PackageTemplate).filter(PackageTemplate.id == package_id).first()
     if not template:
         raise HTTPException(status_code=404, detail="套餐模板不存在")
     
+    before = {"name": template.name, "category": template.category, "default_price": template.default_price, "description": template.description}
     for key, value in req.dict().items():
         setattr(template, key, value)
-        
+    _write_admin_audit(db, auth, "PACKAGE_TEMPLATE_UPDATE", f"更新套餐模板 {template.name}", template.id, template.name, {"before": before, "after": req.dict()})
     db.commit()
     db.refresh(template)
     return template
@@ -526,6 +564,7 @@ def delete_package_template(
     package_id: int,
     cleanup_inactive: bool = False,
     db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
 ):
     template = db.query(PackageTemplate).filter(PackageTemplate.id == package_id).first()
     if not template:
@@ -581,6 +620,10 @@ def delete_package_template(
                 synchronize_session=False
             )
         db.delete(template)
+        _write_admin_audit(
+            db, auth, "PACKAGE_TEMPLATE_DELETE", f"删除套餐模板 {template.name}", template.id, template.name,
+            {"cleaned_inactive_customers": sorted({row.customer.company_name for row in inactive_links})},
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
@@ -595,7 +638,7 @@ def delete_package_template(
     return {"detail": "删除成功"}
 
 @router.post("/customers/{customer_id}/packages", response_model=CustomerPackageResponse)
-def assign_package_to_customer(customer_id: int, req: CustomerPackageAssign, db: Session = Depends(get_db)):
+def assign_package_to_customer(customer_id: int, req: CustomerPackageAssign, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     template = db.query(PackageTemplate).filter(PackageTemplate.id == req.package_template_id).first()
     if not template:
         raise HTTPException(status_code=404, detail="套餐模板不存在")
@@ -627,7 +670,7 @@ def assign_package_to_customer(customer_id: int, req: CustomerPackageAssign, db:
     )
 
 @router.delete("/customers/{customer_id}/packages/{cp_id}")
-def delete_customer_package(customer_id: int, cp_id: int, db: Session = Depends(get_db)):
+def delete_customer_package(customer_id: int, cp_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     cp = db.query(CustomerPackage).filter(
         CustomerPackage.id == cp_id,
         CustomerPackage.customer_id == customer_id
@@ -637,6 +680,7 @@ def delete_customer_package(customer_id: int, cp_id: int, db: Session = Depends(
     
     # Soft delete to preserve order history
     cp.is_active = False
+    _write_admin_audit(db, auth, "CUSTOMER_PACKAGE_DEACTIVATE", f"停用客户套餐 {cp.template.name}", cp.id, cp.template.name, {"customer_id": customer_id})
     db.commit()
     return {"detail": "删除成功"}
 
@@ -657,7 +701,7 @@ def get_customer_assigned_packages(customer_id: int, db: Session = Depends(get_d
     return result
 
 @router.patch("/customers/{customer_id}/packages/{cp_id}/toggle-visibility", response_model=CustomerPackageResponse)
-def toggle_package_visibility(customer_id: int, cp_id: int, db: Session = Depends(get_db)):
+def toggle_package_visibility(customer_id: int, cp_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """
     切换该客户专属套餐在下单页面的显示状态
     勾选 = 下单页可以选择，取消勾选 = 下单页隐藏
@@ -671,6 +715,7 @@ def toggle_package_visibility(customer_id: int, cp_id: int, db: Session = Depend
         raise HTTPException(status_code=404, detail="该专属套餐不存在")
 
     cp.is_shown_to_customer = not cp.is_shown_to_customer
+    _write_admin_audit(db, auth, "CUSTOMER_PACKAGE_VISIBILITY", f"{'显示' if cp.is_shown_to_customer else '隐藏'}客户套餐 {cp.template.name}", cp.id, cp.template.name, {"customer_id": customer_id, "is_shown_to_customer": cp.is_shown_to_customer})
     db.commit()
     db.refresh(cp)
 
@@ -990,6 +1035,9 @@ def edit_order_by_admin(
         except WhatsAppConfigurationError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     delivery_id = delivery.id if delivery else None
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    db.flush()
+    _write_admin_audit(db, auth, "CUSTOMER_PACKAGE_ASSIGN", f"为客户 {customer.company_name if customer else customer_id} 分配套餐 {template.name}", cp.id, template.name, {"customer_id": customer_id, "agreement_price": cp.agreement_price})
     db.commit()
     delivery_result = process_delivery(db, delivery_id) if delivery_id else None
     return {
@@ -1725,7 +1773,7 @@ def get_unbilled_orders(customer_id: int, start_date: Optional[date] = None, end
     }
 
 @router.post("/invoices")
-def create_invoice(req: InvoiceCreateRequest, db: Session = Depends(get_db)):
+def create_invoice(req: InvoiceCreateRequest, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     if req.order_ids:
         orders = db.query(Order).filter(
             Order.id.in_(req.order_ids),
@@ -1770,14 +1818,16 @@ def create_invoice(req: InvoiceCreateRequest, db: Session = Depends(get_db)):
         payment_status="unpaid"
     )
     db.add(invoice)
-    db.commit()
-    db.refresh(invoice)
+    db.flush()
     
     # Link orders to this consolidated DO
     for o in orders:
         o.invoice_id = invoice.id
         o.status = "billed"
+    customer = db.query(Customer).filter(Customer.id == req.customer_id).first()
+    _write_admin_audit(db, auth, "INVOICE_CREATE", f"创建总 DO {invoice.invoice_number}", invoice.id, invoice.invoice_number, {"customer": customer.company_name if customer else req.customer_id, "order_ids": [o.id for o in orders], "total_amount": total_amount})
     db.commit()
+    db.refresh(invoice)
     
     return {
         "detail": "总 DO 合并生成成功",
@@ -1789,7 +1839,7 @@ def create_invoice(req: InvoiceCreateRequest, db: Session = Depends(get_db)):
     }
 
 @router.put("/invoices/{invoice_id}/status")
-def update_invoice_status(invoice_id: int, req: InvoiceStatusUpdate, db: Session = Depends(get_db)):
+def update_invoice_status(invoice_id: int, req: InvoiceStatusUpdate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="发票不存在")
@@ -1808,12 +1858,14 @@ def update_invoice_status(invoice_id: int, req: InvoiceStatusUpdate, db: Session
             o.invoice_id = None
             o.status = "delivered"
             
+    old_status = invoice.payment_status
     invoice.payment_status = status_lower
+    _write_admin_audit(db, auth, "INVOICE_STATUS_UPDATE", f"将总 DO {invoice.invoice_number} 状态从 {old_status} 更新为 {status_lower}", invoice.id, invoice.invoice_number, {"before": old_status, "after": status_lower})
     db.commit()
     return {"detail": "发票状态更新成功，关联合同/DO已顺利释放"}
 
 @router.delete("/invoices/{invoice_id}")
-def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
+def delete_invoice(invoice_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     invoice = db.query(Invoice).filter(Invoice.id == invoice_id).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="发票不存在")
@@ -1824,7 +1876,9 @@ def delete_invoice(invoice_id: int, db: Session = Depends(get_db)):
         o.invoice_id = None
         o.status = "delivered"
     
+    snapshot = {"invoice_number": invoice.invoice_number, "customer_id": invoice.customer_id, "total_amount": invoice.total_amount, "order_ids": [o.id for o in orders]}
     db.delete(invoice)
+    _write_admin_audit(db, auth, "INVOICE_DELETE", f"删除总 DO {invoice.invoice_number}", invoice.id, invoice.invoice_number, {"deleted": snapshot})
     db.commit()
     return {"detail": "发票记录已成功彻底删除，相关 DO 已释放"}
 
@@ -2405,30 +2459,34 @@ def list_addon_templates(db: Session = Depends(get_db)):
 
 
 @router.post("/addons", response_model=AddonTemplateResponse)
-def create_addon_template(req: AddonTemplateCreate, db: Session = Depends(get_db)):
+def create_addon_template(req: AddonTemplateCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """在全局 Add-on 池中创建新单点项"""
     addon = AddonTemplate(**req.dict())
     db.add(addon)
+    db.flush()
+    _write_admin_audit(db, auth, "ADDON_TEMPLATE_CREATE", f"创建 Add-on 模板 {addon.name}", addon.id, addon.name, {"default_price": addon.default_price})
     db.commit()
     db.refresh(addon)
     return addon
 
 
 @router.put("/addons/{addon_id}", response_model=AddonTemplateResponse)
-def update_addon_template(addon_id: int, req: AddonTemplateCreate, db: Session = Depends(get_db)):
+def update_addon_template(addon_id: int, req: AddonTemplateCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """修改指定 Add-on 模板的名称、单价或描述"""
     addon = db.query(AddonTemplate).filter(AddonTemplate.id == addon_id).first()
     if not addon:
         raise HTTPException(status_code=404, detail="Add-on 模板不存在")
+    before = {"name": addon.name, "default_price": addon.default_price, "description": addon.description}
     for key, value in req.dict().items():
         setattr(addon, key, value)
+    _write_admin_audit(db, auth, "ADDON_TEMPLATE_UPDATE", f"更新 Add-on 模板 {addon.name}", addon.id, addon.name, {"before": before, "after": req.dict()})
     db.commit()
     db.refresh(addon)
     return addon
 
 
 @router.delete("/addons/{addon_id}")
-def delete_addon_template(addon_id: int, db: Session = Depends(get_db)):
+def delete_addon_template(addon_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """
     删除 Add-on 模板。
     若已被分配给任何客户，则拒绝删除（需先在客户菜单库中移除）。
@@ -2448,6 +2506,7 @@ def delete_addon_template(addon_id: int, db: Session = Depends(get_db)):
 
     try:
         db.delete(addon)
+        _write_admin_audit(db, auth, "ADDON_TEMPLATE_DELETE", f"删除 Add-on 模板 {addon.name}", addon.id, addon.name)
         db.commit()
     except Exception:
         db.rollback()
@@ -2493,7 +2552,8 @@ def get_customer_addons(customer_id: int, db: Session = Depends(get_db)):
 def assign_addon_to_customer(
     customer_id: int,
     req: CustomerAddonAssignRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
 ):
     """
     将 Add-on 模板指派给指定客户并设定协议价。
@@ -2513,8 +2573,6 @@ def assign_addon_to_customer(
 
     if existing:
         existing.agreement_price = req.agreement_price
-        db.commit()
-        db.refresh(existing)
         ca = existing
     else:
         ca = CustomerAddon(
@@ -2523,8 +2581,11 @@ def assign_addon_to_customer(
             agreement_price=req.agreement_price
         )
         db.add(ca)
-        db.commit()
-        db.refresh(ca)
+    db.flush()
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    _write_admin_audit(db, auth, "CUSTOMER_ADDON_ASSIGN", f"为客户 {customer.company_name if customer else customer_id} 分配 Add-on {template.name}", ca.id, template.name, {"customer_id": customer_id, "agreement_price": ca.agreement_price})
+    db.commit()
+    db.refresh(ca)
 
     return {
         "id": ca.id,
@@ -2540,7 +2601,8 @@ def update_customer_addon_price(
     customer_id: int,
     ca_id: int,
     req: CustomerAddonUpdateRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
 ):
     """修改客户专属 Add-on 协议价"""
     ca = db.query(CustomerAddon).filter(
@@ -2550,7 +2612,9 @@ def update_customer_addon_price(
     if not ca:
         raise HTTPException(status_code=404, detail="该专属 Add-on 不存在")
 
+    old_price = ca.agreement_price
     ca.agreement_price = req.agreement_price
+    _write_admin_audit(db, auth, "CUSTOMER_ADDON_UPDATE", f"更新客户 Add-on {ca.template.name} 协议价", ca.id, ca.template.name, {"customer_id": customer_id, "before": old_price, "after": ca.agreement_price})
     db.commit()
     db.refresh(ca)
     return {
@@ -2563,7 +2627,7 @@ def update_customer_addon_price(
 
 
 @router.delete("/customers/{customer_id}/addons/{ca_id}")
-def delete_customer_addon(customer_id: int, ca_id: int, db: Session = Depends(get_db)):
+def delete_customer_addon(customer_id: int, ca_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """从客户菜单库中移除指定 Add-on（保留订单历史，硬删除 CustomerAddon 行）"""
     ca = db.query(CustomerAddon).filter(
         CustomerAddon.id == ca_id,
@@ -2574,6 +2638,7 @@ def delete_customer_addon(customer_id: int, ca_id: int, db: Session = Depends(ge
 
     try:
         db.delete(ca)
+        _write_admin_audit(db, auth, "CUSTOMER_ADDON_DELETE", f"移除客户 Add-on {ca.template.name}", ca.id, ca.template.name, {"customer_id": customer_id})
         db.commit()
     except Exception:
         db.rollback()
@@ -2596,7 +2661,7 @@ def list_meal_sections(db: Session = Depends(get_db)):
 
 
 @router.post("/meal-sections", response_model=MealSectionResponse)
-def create_meal_section(req: MealSectionCreate, db: Session = Depends(get_db)):
+def create_meal_section(req: MealSectionCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """创建新餐次"""
     existing = db.query(MealSection).filter(MealSection.name == req.name).first()
     if existing:
@@ -2608,13 +2673,15 @@ def create_meal_section(req: MealSectionCreate, db: Session = Depends(get_db)):
         allowed_categories=req.allowed_categories
     )
     db.add(sec)
+    db.flush()
+    _write_admin_audit(db, auth, "MEAL_SECTION_CREATE", f"创建餐次 {sec.name}", sec.id, sec.name, {"sort_order": sec.sort_order, "allowed_categories": sec.allowed_categories})
     db.commit()
     db.refresh(sec)
     return sec
 
 
 @router.put("/meal-sections/{sec_id}", response_model=MealSectionResponse)
-def update_meal_section(sec_id: int, req: MealSectionCreate, db: Session = Depends(get_db)):
+def update_meal_section(sec_id: int, req: MealSectionCreate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """更新餐次信息（名称、排序、可用分类）"""
     sec = db.query(MealSection).filter(MealSection.id == sec_id).first()
     if not sec:
@@ -2625,17 +2692,19 @@ def update_meal_section(sec_id: int, req: MealSectionCreate, db: Session = Depen
     if existing:
         raise HTTPException(status_code=400, detail="餐次名称已存在")
 
+    before = {"name": sec.name, "sort_order": sec.sort_order, "allowed_categories": sec.allowed_categories}
     sec.name = req.name
     sec.sort_order = req.sort_order
     sec.allowed_categories = req.allowed_categories
     
+    _write_admin_audit(db, auth, "MEAL_SECTION_UPDATE", f"更新餐次 {sec.name}", sec.id, sec.name, {"before": before, "after": req.dict()})
     db.commit()
     db.refresh(sec)
     return sec
 
 
 @router.delete("/meal-sections/{sec_id}")
-def delete_meal_section(sec_id: int, db: Session = Depends(get_db)):
+def delete_meal_section(sec_id: int, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """删除餐次（若已有订单引用则限制删除）"""
     sec = db.query(MealSection).filter(MealSection.id == sec_id).first()
     if not sec:
@@ -2662,6 +2731,7 @@ def delete_meal_section(sec_id: int, db: Session = Depends(get_db)):
         )
 
     db.delete(sec)
+    _write_admin_audit(db, auth, "MEAL_SECTION_DELETE", f"删除餐次 {sec.name}", sec.id, sec.name, {"sort_order": sec.sort_order, "allowed_categories": sec.allowed_categories})
     db.commit()
     return {"detail": "已成功删除该餐次定义"}
 
@@ -2678,12 +2748,13 @@ def get_customer_assigned_meal_sections(customer_id: int, db: Session = Depends(
 
 
 @router.post("/customers/{customer_id}/meal-sections")
-def save_customer_meal_sections(customer_id: int, req: CustomerMealSectionsUpdate, db: Session = Depends(get_db)):
+def save_customer_meal_sections(customer_id: int, req: CustomerMealSectionsUpdate, db: Session = Depends(get_db), auth: dict = Depends(require_staff)):
     """保存并更新指定顾客已开通的下单餐次"""
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
     if not customer:
         raise HTTPException(status_code=404, detail="客户不存在")
 
+    previous_ids = [row.meal_section_id for row in db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == customer_id).all()]
     # 1. 删除现有的开通记录
     db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == customer_id).delete()
 
@@ -2694,6 +2765,7 @@ def save_customer_meal_sections(customer_id: int, req: CustomerMealSectionsUpdat
         if exists:
             db.add(CustomerMealSection(customer_id=customer_id, meal_section_id=sid))
             
+    _write_admin_audit(db, auth, "CUSTOMER_MEAL_SECTIONS_UPDATE", f"更新客户 {customer.company_name} 的餐次权限", customer.id, customer.company_name, {"before": previous_ids, "after": req.meal_section_ids})
     db.commit()
     return {"detail": "餐次开通权限已更新！"}
 

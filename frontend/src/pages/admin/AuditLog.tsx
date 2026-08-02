@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   Card, Input, Select, Typography, Tag, Space, Button, Spin, Empty,
-  Pagination, Badge, Tooltip, Row, Col
+  Pagination, Badge, Tooltip, Row, Col, message
 } from 'antd';
 import {
   SearchOutlined, ReloadOutlined, ShoppingCartOutlined, FormOutlined,
@@ -120,13 +120,14 @@ export const AuditLog: React.FC = () => {
       });
       setLogs(res.data.items ?? res.data ?? []);
       setTotalCount(res.data.total ?? (res.data?.length ?? 0));
-    } catch {
+    } catch (err: any) {
       setLogs([]);
       setTotalCount(0);
+      message.error(err.response?.data?.detail || (isEn ? 'Failed to load audit logs' : '审计日志加载失败，请检查网络或权限后重试'));
     } finally {
       setLoading(false);
     }
-  }, [actionType, keyword, currentPage]);
+  }, [actionType, keyword, currentPage, isEn]);
 
   useEffect(() => {
     fetchLogs();
@@ -267,6 +268,32 @@ export const AuditLog: React.FC = () => {
               <Option value="CUSTOMER_TEMP_ACCESS_END">CUSTOMER TEMP ACCESS END</Option>
               <Option value="PAYMENT_CREATE">PAYMENT CREATE</Option>
               <Option value="PAYMENT_DELETE">PAYMENT DELETE</Option>
+              <Option value="CUSTOMER_CREATE">CUSTOMER CREATE</Option>
+              <Option value="DELIVERY_SITE_CREATE">DELIVERY SITE CREATE</Option>
+              <Option value="DELIVERY_SITE_UPDATE">DELIVERY SITE UPDATE</Option>
+              <Option value="DELIVERY_SITE_DELETE">DELIVERY SITE DELETE</Option>
+              <Option value="STAFF_CREATE">STAFF CREATE</Option>
+              <Option value="STAFF_UPDATE">STAFF UPDATE</Option>
+              <Option value="STAFF_DELETE">STAFF DELETE</Option>
+              <Option value="PACKAGE_TEMPLATE_CREATE">PACKAGE TEMPLATE CREATE</Option>
+              <Option value="PACKAGE_TEMPLATE_UPDATE">PACKAGE TEMPLATE UPDATE</Option>
+              <Option value="PACKAGE_TEMPLATE_DELETE">PACKAGE TEMPLATE DELETE</Option>
+              <Option value="CUSTOMER_PACKAGE_ASSIGN">CUSTOMER PACKAGE ASSIGN</Option>
+              <Option value="CUSTOMER_PACKAGE_DEACTIVATE">CUSTOMER PACKAGE DEACTIVATE</Option>
+              <Option value="CUSTOMER_PACKAGE_VISIBILITY">CUSTOMER PACKAGE VISIBILITY</Option>
+              <Option value="INVOICE_CREATE">INVOICE CREATE</Option>
+              <Option value="INVOICE_STATUS_UPDATE">INVOICE STATUS UPDATE</Option>
+              <Option value="INVOICE_DELETE">INVOICE DELETE</Option>
+              <Option value="ADDON_TEMPLATE_CREATE">ADDON TEMPLATE CREATE</Option>
+              <Option value="ADDON_TEMPLATE_UPDATE">ADDON TEMPLATE UPDATE</Option>
+              <Option value="ADDON_TEMPLATE_DELETE">ADDON TEMPLATE DELETE</Option>
+              <Option value="CUSTOMER_ADDON_ASSIGN">CUSTOMER ADDON ASSIGN</Option>
+              <Option value="CUSTOMER_ADDON_UPDATE">CUSTOMER ADDON UPDATE</Option>
+              <Option value="CUSTOMER_ADDON_DELETE">CUSTOMER ADDON DELETE</Option>
+              <Option value="MEAL_SECTION_CREATE">MEAL SECTION CREATE</Option>
+              <Option value="MEAL_SECTION_UPDATE">MEAL SECTION UPDATE</Option>
+              <Option value="MEAL_SECTION_DELETE">MEAL SECTION DELETE</Option>
+              <Option value="CUSTOMER_MEAL_SECTIONS_UPDATE">CUSTOMER MEAL SECTIONS UPDATE</Option>
             </Select>
           </Col>
         </Row>
