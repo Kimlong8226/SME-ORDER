@@ -236,14 +236,46 @@ export const PackageManagement: React.FC = () => {
     setModalVisible(true);
   };
 
-  const handleDeletePackageTemplate = async (record: any) => {
+  const handleDeletePackageTemplate = async (record: any, cleanupInactive = false) => {
     try {
-      await axiosInstance.delete(`/admin/packages/${record.id}`);
+      await axiosInstance.delete(`/admin/packages/${record.id}`, {
+        params: cleanupInactive ? { cleanup_inactive: true } : undefined,
+      });
       message.success(labels.deleteSuccess);
       fetchPackages();
     } catch (err: any) {
-      const errMsg = err.response?.data?.detail || labels.deleteFailed;
-      message.error(errMsg);
+      const detail = err.response?.data?.detail;
+      if (detail?.code === 'package_has_inactive_customers' && !cleanupInactive) {
+        const customers = Array.isArray(detail.customers) ? detail.customers : [];
+        Modal.confirm({
+          title: isEn ? 'Clean inactive links and delete?' : '清理停用关联并删除？',
+          content: (
+            <div>
+              <p>{detail.message}</p>
+              {customers.length > 0 && (
+                <p>
+                  {isEn ? 'Affected customers: ' : '涉及客户：'}
+                  <Text strong>{customers.join('、')}</Text>
+                </p>
+              )}
+              <Text type="danger">
+                {isEn
+                  ? 'This removes only inactive menu links. Order history will not be deleted.'
+                  : '只会清理已停用的菜单关联，不会删除任何订单历史。'}
+              </Text>
+            </div>
+          ),
+          okText: isEn ? 'Clean and delete' : '确认清理并删除',
+          cancelText: labels.btnCancel,
+          okButtonProps: { danger: true },
+          onOk: () => handleDeletePackageTemplate(record, true),
+        });
+        return;
+      }
+
+      const errMsg = typeof detail === 'string' ? detail : detail?.message || labels.deleteFailed;
+      const customers = Array.isArray(detail?.customers) ? detail.customers : [];
+      message.error(customers.length > 0 ? `${errMsg} ${customers.join('、')}` : errMsg);
     }
   };
 

@@ -34,11 +34,13 @@ customer_user_one = CustomerUser(customer_id=customer_one.id, username="one@test
 customer_user_two = CustomerUser(customer_id=customer_two.id, username="two@test", password_hash=legacy_hash("CustomerPass123!"), contact_name="Two")
 section = MealSection(name="Lunch", sort_order=1, allowed_categories="Meal")
 package = PackageTemplate(name="Test Meal", category="Meal", default_price=12.5)
-db.add_all([site, customer_user_one, customer_user_two, section, package])
+inactive_package = PackageTemplate(name="Inactive Test Meal", category="Meal", default_price=9.5)
+db.add_all([site, customer_user_one, customer_user_two, section, package, inactive_package])
 db.commit()
 db.add_all([
     CustomerMealSection(customer_id=customer_one.id, meal_section_id=section.id),
     CustomerPackage(customer_id=customer_one.id, package_template_id=package.id, agreement_price=12.5, is_active=True, is_shown_to_customer=True),
+    CustomerPackage(customer_id=customer_two.id, package_template_id=inactive_package.id, agreement_price=9.5, is_active=False, is_shown_to_customer=False),
 ])
 db.commit()
 customer_one_id = customer_one.id
@@ -46,6 +48,7 @@ customer_two_id = customer_two.id
 site_id = site.id
 section_id = section.id
 package_id = package.id
+inactive_package_id = inactive_package.id
 db.close()
 
 client = TestClient(app)
@@ -63,6 +66,21 @@ other_customer_headers = login("two@test", "CustomerPass123!")
 db = SessionLocal()
 assert db.query(StaffUser).filter_by(username="admin@test").one().password_hash.startswith("$pbkdf2-sha256$")
 db.close()
+
+active_package_delete = client.delete(f"/admin/packages/{package_id}", headers=admin_headers)
+assert active_package_delete.status_code == 409, active_package_delete.text
+assert active_package_delete.json()["detail"]["code"] == "package_has_active_customers"
+assert active_package_delete.json()["detail"]["customers"] == ["Customer One"]
+
+inactive_package_delete = client.delete(f"/admin/packages/{inactive_package_id}", headers=admin_headers)
+assert inactive_package_delete.status_code == 409, inactive_package_delete.text
+assert inactive_package_delete.json()["detail"]["code"] == "package_has_inactive_customers"
+assert inactive_package_delete.json()["detail"]["customers"] == ["Customer Two"]
+cleanup_inactive_package = client.delete(
+    f"/admin/packages/{inactive_package_id}?cleanup_inactive=true",
+    headers=admin_headers,
+)
+assert cleanup_inactive_package.status_code == 200, cleanup_inactive_package.text
 
 assigned_section_delete = client.delete(f"/admin/meal-sections/{section_id}", headers=admin_headers)
 assert assigned_section_delete.status_code == 409, assigned_section_delete.text
@@ -93,6 +111,15 @@ payment_response = client.post(
 )
 assert payment_response.status_code == 200, payment_response.text
 assert client.get(f"/admin/payments?customer_id={customer_one_id}", headers=admin_headers).status_code == 200
+
+db = SessionLocal()
+customer_package = db.query(CustomerPackage).filter_by(package_template_id=package_id).one()
+customer_package.is_active = False
+db.commit()
+db.close()
+historical_package_delete = client.delete(f"/admin/packages/{package_id}", headers=admin_headers)
+assert historical_package_delete.status_code == 409, historical_package_delete.text
+assert historical_package_delete.json()["detail"]["code"] == "package_has_order_history"
 
 print("PASS: auth, authorization, customer ordering, admin confirmation, and payment recording")
 engine.dispose()

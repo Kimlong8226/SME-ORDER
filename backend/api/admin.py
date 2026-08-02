@@ -2,6 +2,7 @@ import json
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, joinedload, selectinload
 from typing import List, Optional
 from datetime import date, datetime, timedelta, timezone
@@ -521,21 +522,75 @@ def update_package_template(package_id: int, req: PackageTemplateCreate, db: Ses
     return template
 
 @router.delete("/packages/{package_id}")
-def delete_package_template(package_id: int, db: Session = Depends(get_db)):
+def delete_package_template(
+    package_id: int,
+    cleanup_inactive: bool = False,
+    db: Session = Depends(get_db),
+):
     template = db.query(PackageTemplate).filter(PackageTemplate.id == package_id).first()
     if not template:
         raise HTTPException(status_code=404, detail="套餐模板不存在")
-    
-    in_use = db.query(CustomerPackage).filter(CustomerPackage.package_template_id == package_id, CustomerPackage.is_active == True).first()
-    if in_use:
-        raise HTTPException(status_code=400, detail="该套餐模板已被分配给顾客，请先在顾客专属菜单库中将其删除。")
-        
+
+    customer_packages = db.query(CustomerPackage).filter(
+        CustomerPackage.package_template_id == package_id
+    ).all()
+    customer_package_ids = [row.id for row in customer_packages]
+
+    historical_order = None
+    if customer_package_ids:
+        historical_order = db.query(OrderDetail).filter(
+            OrderDetail.customer_package_id.in_(customer_package_ids)
+        ).first()
+    if historical_order:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "package_has_order_history",
+                "message": "该套餐模板存在真实订单历史，为保留 DO、账单及对账资料，无法删除。",
+            },
+        )
+
+    active_links = [row for row in customer_packages if row.is_active]
+    if active_links:
+        customer_names = sorted({row.customer.company_name for row in active_links})
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "package_has_active_customers",
+                "message": "该套餐模板仍在客户专属菜单中使用，请先移除或停用。",
+                "customers": customer_names,
+            },
+        )
+
+    inactive_links = [row for row in customer_packages if not row.is_active]
+    if inactive_links and not cleanup_inactive:
+        customer_names = sorted({row.customer.company_name for row in inactive_links})
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "package_has_inactive_customers",
+                "message": "该套餐模板只剩已停用的客户关联。确认后可清理这些关联并删除模板。",
+                "customers": customer_names,
+            },
+        )
+
     try:
+        if inactive_links:
+            inactive_ids = [row.id for row in inactive_links]
+            db.query(CustomerPackage).filter(CustomerPackage.id.in_(inactive_ids)).delete(
+                synchronize_session=False
+            )
         db.delete(template)
         db.commit()
-    except Exception:
+    except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=400, detail="该套餐模板已存在关联订单历史，无法删除。")
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "package_delete_conflict",
+                "message": "删除时发现新的关联记录，请刷新页面后重试。",
+            },
+        )
         
     return {"detail": "删除成功"}
 
