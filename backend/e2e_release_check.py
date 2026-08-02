@@ -64,6 +64,10 @@ db = SessionLocal()
 assert db.query(StaffUser).filter_by(username="admin@test").one().password_hash.startswith("$pbkdf2-sha256$")
 db.close()
 
+assigned_section_delete = client.delete(f"/admin/meal-sections/{section_id}", headers=admin_headers)
+assert assigned_section_delete.status_code == 409, assigned_section_delete.text
+assert "仍已分配给客户" in assigned_section_delete.json()["detail"]
+
 assert client.get(f"/orders/customer-profile/{customer_one_id}", headers=other_customer_headers).status_code == 403
 assert client.get(f"/orders/customer-profile/{customer_one_id}", headers=customer_headers).status_code == 200
 assert client.get("/admin/customers", headers=customer_headers).status_code == 403

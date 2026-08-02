@@ -2585,6 +2585,18 @@ def delete_meal_section(sec_id: int, db: Session = Depends(get_db)):
     sec = db.query(MealSection).filter(MealSection.id == sec_id).first()
     if not sec:
         raise HTTPException(status_code=404, detail="餐次不存在")
+
+    # 客户餐次配置同样通过外键引用此记录。若不先检查，数据库会在
+    # commit 时抛出完整性错误，生产环境最终只会向浏览器返回无 CORS
+    # 标头的 500 响应，前端因而误报为网络/CORS 错误。
+    assigned_customer = db.query(CustomerMealSection).filter(
+        CustomerMealSection.meal_section_id == sec_id
+    ).first()
+    if assigned_customer:
+        raise HTTPException(
+            status_code=409,
+            detail="该餐次仍已分配给客户，无法删除。请先在客户餐次配置中取消全部分配。"
+        )
     
     # 检查是否有订单明细使用了该餐次
     in_use = db.query(OrderDetail).filter(OrderDetail.meal_section_id == sec_id).first()
