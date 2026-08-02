@@ -158,6 +158,25 @@ def list_gateway_groups(db: Session) -> list[dict[str, str]]:
     return sorted(groups, key=lambda item: item["group_name"].casefold())
 
 
+def get_gateway_qr(db: Session) -> dict[str, str]:
+    settings = get_settings(db)
+    if not settings or not settings.gateway_url or not settings.api_key_encrypted:
+        raise WhatsAppConfigurationError("请先保存 Gateway URL 与 API Key")
+    session = quote(settings.session_name or "default", safe="")
+    response = _gateway_request(settings, "GET", f"/api/{session}/auth/qr")
+    if not isinstance(response, dict):
+        raise RuntimeError("Gateway returned an invalid QR response")
+    mimetype = str(response.get("mimetype") or "image/png").lower()
+    data = str(response.get("data") or "").strip()
+    if mimetype not in {"image/png", "image/jpeg"} or not data:
+        raise RuntimeError("Gateway did not return a QR image")
+    try:
+        base64.b64decode(data, validate=True)
+    except ValueError as exc:
+        raise RuntimeError("Gateway returned invalid QR image data") from exc
+    return {"mimetype": mimetype, "data": data, "session_name": settings.session_name or "default"}
+
+
 def send_test_message(db: Session, mapping: CustomerWhatsAppGroup, operator_name: str) -> dict[str, Any]:
     settings = get_settings(db)
     if not settings or not settings.gateway_url or not settings.api_key_encrypted:

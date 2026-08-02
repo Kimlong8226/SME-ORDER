@@ -28,6 +28,7 @@ from services.whatsapp_service import (
     encrypt_api_key,
     enqueue_order_message,
     get_active_mapping,
+    get_gateway_qr,
     get_settings,
     list_gateway_groups,
     process_delivery,
@@ -190,6 +191,14 @@ def update_whatsapp_settings(
 def read_gateway_groups(db: Session = Depends(get_db)):
     try:
         return list_gateway_groups(db)
+    except (WhatsAppConfigurationError, RuntimeError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@settings_router.get("/qr")
+def read_gateway_qr(db: Session = Depends(get_db)):
+    try:
+        return get_gateway_qr(db)
     except (WhatsAppConfigurationError, RuntimeError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

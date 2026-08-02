@@ -58,6 +58,8 @@ export const WhatsAppSettings: React.FC = () => {
   const [mappings, setMappings] = useState<CustomerMapping[]>([]);
   const [settingsMeta, setSettingsMeta] = useState<any>({});
   const [rowBusy, setRowBusy] = useState<number | null>(null);
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrImage, setQrImage] = useState<string | null>(null);
 
   const labels = {
     title: isEn ? 'WhatsApp Automation Settings' : 'WhatsApp 自动发送设置',
@@ -87,6 +89,27 @@ export const WhatsAppSettings: React.FC = () => {
     reasonHint: isEn ? 'Required for the audit log' : '必填，将记录到 Audit Log',
     pending: isEn ? 'Pending' : '等待发送',
     failed: isEn ? 'Failed' : '发送失败',
+    qrTitle: isEn ? 'WhatsApp Login QR' : 'WhatsApp 登录 QR',
+    qrRefresh: isEn ? 'Refresh QR' : '刷新 QR',
+    qrHint: isEn ? 'Scan with WhatsApp Business under Linked devices. QR codes expire quickly.' : '请用 WhatsApp Business 的“已关联设备”扫描；QR 会很快过期。',
+    qrEmpty: isEn ? 'Save the Gateway URL and API Key, then refresh the QR.' : '请先保存 Gateway URL 与 API Key，然后刷新 QR。',
+  };
+
+  const loadQr = async (showError = true) => {
+    setQrLoading(true);
+    try {
+      const response = await axiosInstance.get('/admin/whatsapp/qr');
+      const mimetype = response.data?.mimetype || 'image/png';
+      const data = response.data?.data;
+      setQrImage(data ? `data:${mimetype};base64,${data}` : null);
+    } catch (error: any) {
+      setQrImage(null);
+      if (showError) {
+        message.error(error.response?.data?.detail || (isEn ? 'Failed to load QR' : '读取 QR 失败'));
+      }
+    } finally {
+      setQrLoading(false);
+    }
   };
 
   const loadBaseData = async () => {
@@ -105,6 +128,7 @@ export const WhatsAppSettings: React.FC = () => {
         api_key: '',
         is_enabled: Boolean(settings.is_enabled),
       });
+      if (settings.has_api_key) void loadQr(false);
     } catch (error: any) {
       message.error(error.response?.data?.detail || (isEn ? 'Failed to load WhatsApp settings' : '读取 WhatsApp 设置失败'));
     } finally {
@@ -329,24 +353,6 @@ export const WhatsAppSettings: React.FC = () => {
       </div>
 
       <Alert
-        type="warning"
-        showIcon
-        message={isEn ? 'Restricted security area' : '最高权限安全设置区'}
-        description={isEn
-          ? 'API keys are never returned after saving. Staff cannot change a group, message destination, or Gateway credentials.'
-          : 'API Key 保存后不会再次完整显示；普通员工不能更换群组、发送目标或 Gateway 凭证。'}
-      />
-
-      <Alert
-        type="info"
-        showIcon
-        message={isEn ? 'WhatsApp sign-in uses a QR code' : 'WhatsApp 登录使用扫码方式'}
-        description={isEn
-          ? 'Start the WAHA session and scan the QR in the WAHA Dashboard with the dedicated WhatsApp Business number. This app does not expose the QR to regular staff.'
-          : '请先在 WAHA Dashboard 启动 Session，再用专用 WhatsApp Business 号码的“已关联设备”扫描二维码。本系统不会向普通员工显示二维码。'}
-      />
-
-      <Alert
         type="info"
         showIcon
         message={isEn ? 'One automatic attempt, then manual send' : '自动尝试一次，失败后手动发送'}
@@ -392,6 +398,20 @@ export const WhatsAppSettings: React.FC = () => {
           </Row>
           <Button type="primary" htmlType="submit" icon={<SaveOutlined />} loading={saving}>{labels.save}</Button>
         </Form>
+      </Card>
+
+      <Card
+        title={<Space><WhatsAppOutlined />{labels.qrTitle}</Space>}
+        extra={<Button icon={<ReloadOutlined />} loading={qrLoading} onClick={() => loadQr()}>{labels.qrRefresh}</Button>}
+      >
+        <div style={{ textAlign: 'center' }}>
+          {qrImage ? (
+            <img src={qrImage} alt={labels.qrTitle} style={{ width: 280, maxWidth: '100%', borderRadius: 8 }} />
+          ) : (
+            <Text type="secondary">{labels.qrEmpty}</Text>
+          )}
+          <Text type="secondary" style={{ display: 'block', marginTop: 12 }}>{labels.qrHint}</Text>
+        </div>
       </Card>
 
       <Card
