@@ -22,6 +22,7 @@ from api.order_rules import (
     order_cutoff_window,
     sync_customer_access,
 )
+from services.whatsapp_service import ensure_do_number
 
 router = APIRouter(prefix="/orders", tags=["Customer Orders"])
 
@@ -314,6 +315,7 @@ def submit_matrix_orders(
                 )
                 db.add(order)
                 db.flush()
+                ensure_do_number(order)
                 is_new_order = True
 
             for item in items:
@@ -381,6 +383,7 @@ def submit_matrix_orders(
 
         response_list.append(OrderResponse(
             id=order.id,
+            do_number=order.do_number,
             customer_id=order.customer_id,
             company_name=customer.company_name,
             delivery_site_id=order.delivery_site_id,
@@ -469,6 +472,7 @@ def get_customer_order_history(customer_id: int, db: Session = Depends(get_db)):
         can_start_action = order.status == "submitted" and window["phase"] == "open" and not window["is_delivery_day_or_past"]
         results.append({
             "id": order.id,
+            "do_number": order.do_number,
             "delivery_date": order.delivery_date.strftime("%Y-%m-%d"),
             "site_name": order.site.site_name,
             "site_id": order.delivery_site_id,

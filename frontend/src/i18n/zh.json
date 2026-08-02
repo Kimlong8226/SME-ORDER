@@ -36,7 +36,8 @@
     "orderStatus": "每日订单看板",
     "invoices": "客户账单",
     "mealSections": "餐次管理",
-    "auditLog": "审计日志"
+    "auditLog": "审计日志",
+    "whatsappSettings": "WhatsApp 设置"
   },
   "customer": {
     "companyName": "公司名称",

@@ -11,12 +11,12 @@ from database import get_db
 from model.models import (
     Customer, CustomerUser, DeliverySite, PackageTemplate, AddonTemplate,
     CustomerPackage, CustomerAddon, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection,
-    AuditLog, PaymentRecord,
+    AuditLog, PaymentRecord, WhatsAppDelivery,
     AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_DELETE, AUDIT_ACTION_ORDER_CANCEL,
     AUDIT_ACTION_ORDER_STATUS_CHANGE, AUDIT_ACTION_CUSTOMER_UPDATE,
     AUDIT_ACTION_CUSTOMER_BLOCK, AUDIT_ACTION_CUSTOMER_UNBLOCK,
     AUDIT_ACTION_CUSTOMER_TEMP_ACCESS, AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END,
-    AUDIT_ACTION_PAYMENT_CREATE, AUDIT_ACTION_PAYMENT_DELETE
+    AUDIT_ACTION_PAYMENT_CREATE, AUDIT_ACTION_PAYMENT_DELETE, AUDIT_ACTION_WHATSAPP_SEND
 )
 from schema.schemas import (
     CustomerCreate, CustomerResponse, CustomerBase, DeliverySiteCreate, DeliverySiteResponse,
@@ -36,6 +36,14 @@ from api.order_rules import (
     order_cutoff_window,
     sync_customer_access,
     temporary_access_expiry,
+)
+from services.whatsapp_service import (
+    WhatsAppConfigurationError,
+    display_do_number,
+    enqueue_order_message,
+    ensure_do_number,
+    process_delivery,
+    serialize_delivery,
 )
 
 router = APIRouter(prefix="/admin", tags=["Admin Management"], dependencies=[Depends(require_staff)])
@@ -89,6 +97,29 @@ def _required_reason(value: str) -> str:
     if len(reason) < 3:
         raise HTTPException(status_code=400, detail="操作原因至少需要 3 个非空白字符")
     return reason
+
+
+def _validate_status_transition(old_status: str, new_status: str) -> None:
+    if old_status == new_status:
+        raise HTTPException(status_code=409, detail="订单已经是该状态")
+    if old_status == "cancelled":
+        raise HTTPException(status_code=409, detail="已取消的订单不能重新启用，请建立新的 DO")
+    if old_status == "submitted" and new_status not in {"confirmed", "cancelled"}:
+        raise HTTPException(status_code=409, detail="待批准订单必须先确认接收，不能跳过批准状态")
+    if new_status == "submitted":
+        raise HTTPException(status_code=409, detail="已进入处理流程的订单不能退回待批准状态")
+    if old_status in {"billed", "paid"} and new_status == "cancelled":
+        raise HTTPException(status_code=409, detail="已核账或付款的订单不能直接取消")
+    status_rank = {
+        "submitted": 0,
+        "confirmed": 1,
+        "in_production": 2,
+        "delivered": 3,
+        "billed": 4,
+        "paid": 5,
+    }
+    if new_status != "cancelled" and status_rank.get(new_status, -1) < status_rank.get(old_status, -1):
+        raise HTTPException(status_code=409, detail="订单状态不能倒退；如资料有误，请修改 DO 并填写原因")
 
 
 def _format_audit_time(value: datetime | None) -> str | None:
@@ -651,6 +682,7 @@ def create_order_by_admin(
     )
     db.add(order)
     db.flush()
+    ensure_do_number(order)
 
     snapshot = []
     for item in req.items:
@@ -716,6 +748,13 @@ def get_all_orders(
 
     orders = query.order_by(Order.delivery_date.desc()).all()
     results = []
+    latest_delivery_by_order = {}
+    if orders:
+        delivery_rows = db.query(WhatsAppDelivery).filter(
+            WhatsAppDelivery.order_id.in_([order.id for order in orders])
+        ).order_by(WhatsAppDelivery.created_at.desc(), WhatsAppDelivery.id.desc()).all()
+        for delivery_row in delivery_rows:
+            latest_delivery_by_order.setdefault(delivery_row.order_id, delivery_row)
 
     for o in orders:
         details_list = []
@@ -742,6 +781,7 @@ def get_all_orders(
 
         results.append({
             "id": o.id,
+            "do_number": display_do_number(o),
             "customer_id": o.customer_id,
             "company_name": o.customer.company_name,
             "site_id": o.delivery_site_id,
@@ -753,6 +793,7 @@ def get_all_orders(
             "total_portions": total_portions,
             "total_price": total_price,
             "details": details_list,
+            "whatsapp_delivery": serialize_delivery(latest_delivery_by_order.get(o.id)),
             "created_at": o.created_at.strftime("%Y-%m-%d %H:%M")
         })
 
@@ -773,6 +814,8 @@ def edit_order_by_admin(
         raise HTTPException(status_code=409, detail="订单已被其他人员修改，请刷新后重试")
     if order.invoice_id is not None or order.status in {"billed", "paid"}:
         raise HTTPException(status_code=409, detail="订单已经核账或付款，请先在账单管理中作废/解除关联后再修改")
+    if order.status == "cancelled":
+        raise HTTPException(status_code=409, detail="已取消的订单不能再修改，请建立新的 DO")
     if not any(item.quantity > 0 for item in req.items):
         raise HTTPException(status_code=400, detail="订单至少保留一项数量大于 0 的餐品；整单取消请使用取消功能")
     site = db.query(DeliverySite).filter(
@@ -785,6 +828,7 @@ def edit_order_by_admin(
     assigned_sections = {row.meal_section_id: row.meal_section for row in assigned_rows}
 
     operator_name, operator_role = _operator(auth)
+    old_status = order.status
 
     # NOTE: 在修改前捕获旧值，用于生成变更 diff
     old_delivery_date = str(order.delivery_date)
@@ -877,8 +921,29 @@ def edit_order_by_admin(
         }
     )
 
+    delivery = None
+    if old_status in {"confirmed", "in_production", "delivered"}:
+        try:
+            delivery = enqueue_order_message(
+                db,
+                order,
+                event_type="updated",
+                requested_by=operator_name,
+                request_reason=reason,
+                requested_role=operator_role,
+            )
+        except WhatsAppConfigurationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    delivery_id = delivery.id if delivery else None
     db.commit()
-    return {"message": "订单修改成功", "order_id": order.id, "version": order.version, "late_override": late_override}
+    delivery_result = process_delivery(db, delivery_id) if delivery_id else None
+    return {
+        "message": "订单修改成功",
+        "order_id": order.id,
+        "version": order.version,
+        "late_override": late_override,
+        "whatsapp_delivery": serialize_delivery(delivery_result),
+    }
 
 @router.put("/orders/{order_id}/status")
 def update_order_status(
@@ -897,6 +962,7 @@ def update_order_status(
     allowed_statuses = {"submitted", "confirmed", "in_production", "delivered", "billed", "paid", "cancelled"}
     if new_status not in allowed_statuses:
         raise HTTPException(status_code=400, detail="不支持的订单状态")
+    _validate_status_transition(order.status, new_status)
     if order.invoice_id is not None and new_status not in {"billed", "paid"}:
         raise HTTPException(status_code=409, detail="订单已关联账单，请先在账单管理中解除关联后再更改为其他状态")
     operator_name, operator_role = _operator(auth)
@@ -929,8 +995,42 @@ def update_order_status(
         }
     )
 
+    delivery = None
+    if old_status == "submitted" and new_status == "confirmed":
+        ensure_do_number(order)
+        try:
+            delivery = enqueue_order_message(
+                db,
+                order,
+                event_type="confirmed",
+                requested_by=operator_name,
+                request_reason=reason,
+                requested_role=operator_role,
+            )
+        except WhatsAppConfigurationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    elif old_status in {"confirmed", "in_production", "delivered"} and new_status == "cancelled":
+        try:
+            delivery = enqueue_order_message(
+                db,
+                order,
+                event_type="cancelled",
+                requested_by=operator_name,
+                request_reason=reason,
+                requested_role=operator_role,
+            )
+        except WhatsAppConfigurationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    delivery_id = delivery.id if delivery else None
     db.commit()
-    return {"message": "状态修改成功", "order_id": order_id, "new_status": new_status, "version": order.version}
+    delivery_result = process_delivery(db, delivery_id) if delivery_id else None
+    return {
+        "message": "状态修改成功",
+        "order_id": order_id,
+        "new_status": new_status,
+        "version": order.version,
+        "whatsapp_delivery": serialize_delivery(delivery_result),
+    }
 
 @router.post("/orders/{order_id}/cancel")
 def cancel_order_by_admin(
@@ -983,8 +1083,28 @@ def cancel_order_by_admin(
             "cutoff_at": window["cutoff_at"],
         }
     )
+    delivery = None
+    if old_status in {"confirmed", "in_production", "delivered"}:
+        try:
+            delivery = enqueue_order_message(
+                db,
+                order,
+                event_type="cancelled",
+                requested_by=operator_name,
+                request_reason=reason,
+                requested_role=operator_role,
+            )
+        except WhatsAppConfigurationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    delivery_id = delivery.id if delivery else None
     db.commit()
-    return {"message": "订单已取消并保留审计记录", "order_id": order_id, "version": order.version}
+    delivery_result = process_delivery(db, delivery_id) if delivery_id else None
+    return {
+        "message": "订单已取消并保留审计记录",
+        "order_id": order_id,
+        "version": order.version,
+        "whatsapp_delivery": serialize_delivery(delivery_result),
+    }
 
 # ============================================================
 # 5. 订单操作记录查询 API
@@ -1004,6 +1124,7 @@ def get_order_audit_logs(order_id: int, db: Session = Depends(get_db)):
             AUDIT_ACTION_ORDER_DELETE,
             AUDIT_ACTION_ORDER_CANCEL,
             AUDIT_ACTION_ORDER_STATUS_CHANGE,
+            AUDIT_ACTION_WHATSAPP_SEND,
         ]))
         .order_by(AuditLog.created_at.desc())
         .all()
@@ -1265,7 +1386,7 @@ def get_customer_dos_for_payment(customer_id: int, db: Session = Depends(get_db)
                     continue
 
         delivery_date_str = o.delivery_date.strftime("%Y-%m-%d") if o.delivery_date else today.strftime("%Y-%m-%d")
-        do_num_str = f"DO-{o.delivery_date.strftime('%Y%m%d')}-{o.id:04d}" if o.delivery_date else f"DO-00000000-{o.id:04d}"
+        do_num_str = display_do_number(o)
 
         days_old = (today - o.delivery_date).days if o.delivery_date else 0
         due_date = (o.delivery_date + timedelta(days=billing_cycle_days)) if o.delivery_date else today
@@ -1344,7 +1465,7 @@ def create_payment(
     allocated_dos_str = req.allocated_dos_text or ""
     if req.do_ids and not allocated_dos_str:
         orders = db.query(Order).filter(Order.id.in_(req.do_ids)).all()
-        do_nums = [f"DO-{o.delivery_date.strftime('%Y%m%d')}-{o.id:04d}" for o in orders]
+        do_nums = [display_do_number(o) for o in orders]
         allocated_dos_str = ", ".join(do_nums)
         
     payment = PaymentRecord(
@@ -1475,20 +1596,22 @@ def list_invoices(db: Session = Depends(get_db)):
                 pkg_name = d.customer_package.template.name if (d.customer_package and d.customer_package.template) else (
                     d.customer_addon.template.name if (d.customer_addon and d.customer_addon.template) else "未知"
                 )
-                subtotal = d.quantity * d.final_unit_price
-                total_portions += d.quantity
+                quantity = d.quantity or 0
+                unit_price = calc_detail_price(d)
+                subtotal = quantity * unit_price
+                total_portions += quantity
                 meal_details.append({
                     "meal_section": d.meal_section.name if d.meal_section else "普通餐项",
                     "package_name": pkg_name,
-                    "quantity": d.quantity,
-                    "unit_price": d.final_unit_price,
+                    "quantity": quantity,
+                    "unit_price": unit_price,
                     "subtotal": subtotal,
                     "remark": d.remark or ""
                 })
             
             orders_detail.append({
                 "order_id": o.id,
-                "do_number": f"DO-{o.delivery_date.strftime('%Y%m%d')}-{o.id:04d}",
+                "do_number": display_do_number(o),
                 "delivery_date": o.delivery_date.strftime("%Y-%m-%d"),
                 "total_portions": total_portions,
                 "meal_details": meal_details
@@ -1508,7 +1631,7 @@ def list_invoices(db: Session = Depends(get_db)):
             "end_date": inv.end_date.strftime("%Y-%m-%d"),
             "total_orders": len(inv_orders),
             "total_amount": inv.total_amount,
-            "status": inv.payment_status.upper(),
+            "status": (inv.payment_status or "unpaid").upper(),
             "orders_detail": orders_detail
         })
     return results
@@ -1725,7 +1848,7 @@ def get_daily_dos(
 
         results.append({
             "order_id": o.id,
-            "do_number": f"DO-{o.delivery_date.strftime('%Y%m%d')}-{o.id:04d}",
+            "do_number": display_do_number(o),
             "delivery_date": o.delivery_date.strftime("%Y-%m-%d"),
             "customer_id": o.customer_id,
             "company_name": cust_name,
@@ -1921,7 +2044,7 @@ def get_customer_statement(
                 
         do_list.append({
             "order_id": o.id,
-            "do_number": f"DO-{o.delivery_date.strftime('%Y%m%d')}-{o.id:04d}",
+            "do_number": display_do_number(o),
             "delivery_date": o.delivery_date.strftime("%Y-%m-%d"),
             "due_date": due_date.strftime("%Y-%m-%d"),
             "days_old": days_old,
@@ -2109,7 +2232,7 @@ def get_meal_volume_records(
 
         daily_records.append({
             "order_id": o.id,
-            "do_number": f"DO-{o.delivery_date.strftime('%Y%m%d')}-{o.id:04d}",
+            "do_number": display_do_number(o),
             "delivery_date": o.delivery_date.strftime("%Y-%m-%d"),
             "customer_id": o.customer_id,
             "company_name": cust_name,

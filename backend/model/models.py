@@ -16,6 +16,9 @@ AUDIT_ACTION_CUSTOMER_TEMP_ACCESS = "CUSTOMER_TEMP_ACCESS"
 AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END = "CUSTOMER_TEMP_ACCESS_END"
 AUDIT_ACTION_PAYMENT_CREATE = "PAYMENT_CREATE"
 AUDIT_ACTION_PAYMENT_DELETE = "PAYMENT_DELETE"
+AUDIT_ACTION_WHATSAPP_SETTINGS_UPDATE = "WHATSAPP_SETTINGS_UPDATE"
+AUDIT_ACTION_WHATSAPP_GROUP_UPDATE = "WHATSAPP_GROUP_UPDATE"
+AUDIT_ACTION_WHATSAPP_SEND = "WHATSAPP_SEND"
 
 class StaffUser(Base):
     """
@@ -66,6 +69,12 @@ class Customer(Base):
     addons = relationship("CustomerAddon", back_populates="customer", cascade="all, delete-orphan")
     orders = relationship("Order", back_populates="customer")
     payments = relationship("PaymentRecord", back_populates="customer", cascade="all, delete-orphan")
+    whatsapp_group = relationship(
+        "CustomerWhatsAppGroup",
+        back_populates="customer",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class CustomerUser(Base):
@@ -187,6 +196,7 @@ class Order(Base):
     __tablename__ = "orders"
 
     id = Column(Integer, primary_key=True, index=True)
+    do_number = Column(String(50), unique=True, index=True, nullable=True)
     customer_id = Column(Integer, ForeignKey("customers.id"), nullable=False)
     delivery_site_id = Column(Integer, ForeignKey("delivery_sites.id"), nullable=False)
     delivery_date = Column(Date, nullable=False, index=True)
@@ -201,6 +211,7 @@ class Order(Base):
     customer = relationship("Customer", back_populates="orders")
     site = relationship("DeliverySite", back_populates="orders")
     details = relationship("OrderDetail", back_populates="order", cascade="all, delete-orphan")
+    whatsapp_deliveries = relationship("WhatsAppDelivery", back_populates="order")
 
 class OrderDetail(Base):
     """
@@ -300,4 +311,62 @@ class OrderEditSession(Base):
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
     order_id = Column(Integer, ForeignKey("orders.id"), nullable=True)
+
+
+class WhatsAppSettings(Base):
+    """Superadmin-owned WhatsApp Gateway configuration."""
+    __tablename__ = "whatsapp_settings"
+
+    id = Column(Integer, primary_key=True, default=1)
+    gateway_url = Column(String(500), nullable=False, default="")
+    session_name = Column(String(100), nullable=False, default="default")
+    api_key_encrypted = Column(Text, nullable=True)
+    is_enabled = Column(Boolean, nullable=False, default=False)
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class CustomerWhatsAppGroup(Base):
+    """The only approved WhatsApp destination for a customer."""
+    __tablename__ = "customer_whatsapp_groups"
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    group_id = Column(String(200), nullable=False, unique=True, index=True)
+    group_name = Column(String(200), nullable=False)
+    is_enabled = Column(Boolean, nullable=False, default=True)
+    show_prices = Column(Boolean, nullable=False, default=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+    updated_by = Column(String(100), nullable=True)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+    customer = relationship("Customer", back_populates="whatsapp_group")
+
+
+class WhatsAppDelivery(Base):
+    """Durable outbox and delivery audit record for a DO WhatsApp message."""
+    __tablename__ = "whatsapp_deliveries"
+
+    id = Column(Integer, primary_key=True, index=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    order_version = Column(Integer, nullable=False)
+    event_type = Column(String(30), nullable=False)  # confirmed | updated | cancelled | manual
+    dedupe_key = Column(String(200), nullable=False, unique=True, index=True)
+    group_id = Column(String(200), nullable=False)
+    group_name = Column(String(200), nullable=False)
+    show_prices = Column(Boolean, nullable=False, default=False)
+    message_text = Column(Text, nullable=True)
+    status = Column(String(30), nullable=False, default="pending", index=True)
+    attempt_count = Column(Integer, nullable=False, default=0)
+    gateway_message_id = Column(String(300), nullable=True, index=True)
+    last_error = Column(Text, nullable=True)
+    requested_by = Column(String(100), nullable=False)
+    request_reason = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+    sent_at = Column(DateTime(timezone=True), nullable=True)
+    delivered_at = Column(DateTime(timezone=True), nullable=True)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+
+    order = relationship("Order", back_populates="whatsapp_deliveries")
 

@@ -36,7 +36,8 @@
     "orderStatus": "Daily Orders Status",
     "invoices": "Billing & Invoice",
     "mealSections": "Meal Shifts & Scheduling",
-    "auditLog": "Audit Log"
+    "auditLog": "Audit Log",
+    "whatsappSettings": "WhatsApp Settings"
   },
   "customer": {
     "companyName": "Company Name",

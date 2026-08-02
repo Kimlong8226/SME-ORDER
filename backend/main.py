@@ -9,7 +9,7 @@ from model.models import (
     StaffUser, Customer, CustomerUser, DeliverySite, PackageTemplate,
     MealSection, Order, OrderDetail, CustomerPackage, Invoice, AuditLog
 )
-from api import auth, admin, order
+from api import auth, admin, order, whatsapp
 from api.auth import get_password_hash
 
 app = FastAPI(
@@ -44,6 +44,9 @@ async def global_exception_handler(request, exc):
 app.include_router(auth.router)
 app.include_router(admin.router)
 app.include_router(order.router)
+app.include_router(whatsapp.settings_router)
+app.include_router(whatsapp.operations_router)
+app.include_router(whatsapp.system_router)
 
 def seed_data():
     # 自动自愈补全数据库字段

@@ -6,7 +6,7 @@ import {
 } from 'antd';
 import {
   ReloadOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, PlusOutlined,
-  MinusOutlined, UserOutlined
+  MinusOutlined, UserOutlined, WhatsAppOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -90,6 +90,7 @@ const OrderAuditDrawer: React.FC<{
       ORDER_DELETE: { zh: '删除订单', en: 'Order Deleted' },
       ORDER_CANCEL: { zh: '取消订单', en: 'Order Cancelled' },
       ORDER_STATUS_CHANGE: { zh: '修改订单状态', en: 'Status Changed' },
+      WHATSAPP_SEND: { zh: 'WhatsApp 发送任务', en: 'WhatsApp Delivery' },
     };
     return isEn ? (map[actionType]?.en ?? actionType) : (map[actionType]?.zh ?? actionType);
   };
@@ -198,7 +199,7 @@ const OrderAuditDrawer: React.FC<{
             </span>
           </div>
           <div style={{ color: '#94a3b8', fontSize: 12, marginTop: 7, paddingLeft: 46 }}>
-            {isEn ? 'Order No.: ' : '订单编号：'}{orderLabel}
+            {isEn ? 'DO No.: ' : 'DO编号：'}{orderLabel}
           </div>
         </div>
       }
@@ -313,11 +314,11 @@ export const DailyOrderStatus: React.FC = () => {
     loadFailed: isEn ? 'Failed to fetch orders' : '获取订单失败',
     statusUpdated: isEn ? 'Order status updated successfully' : '订单状态已更新',
     statusUpdateFailed: isEn ? 'Failed to update order status' : '修改状态失败',
-    deleteSuccess: isEn ? 'Order deleted successfully' : '订单已成功删除',
-    deleteFailed: isEn ? 'Failed to delete order' : '删除订单失败',
+    deleteSuccess: isEn ? 'Order cancelled successfully' : 'DO 已成功取消',
+    deleteFailed: isEn ? 'Failed to cancel order' : '取消 DO 失败',
     saveSuccess: isEn ? 'Order updated successfully!' : '后台已成功修改该订单数据！',
     saveFailed: isEn ? 'Failed to save order updates' : '保存订单修改失败',
-    colOrderId: isEn ? 'Order ID' : '编号',
+    colOrderId: isEn ? 'DO Number' : 'DO编号',
     colDeliveryDate: isEn ? 'Delivery Date' : '日期',
     colCustomer: isEn ? 'Customer Client' : '客户',
     colSite: isEn ? 'Delivery Site' : '送餐',
@@ -327,11 +328,17 @@ export const DailyOrderStatus: React.FC = () => {
     colTotalPrice: isEn ? 'Amount (RM)' : '金额 (RM)',
     colStatus: isEn ? 'Current Status' : '状态',
     colAction: isEn ? 'Admin Management' : '数据管理',
+    colWhatsApp: isEn ? 'WhatsApp' : 'WhatsApp发送',
+    btnWhatsAppResend: isEn ? 'Send DO to WhatsApp' : 'WhatsApp 发送 DO',
+    whatsappReason: isEn ? 'WhatsApp send reason' : 'WhatsApp 发送原因',
+    whatsappSent: isEn ? 'WhatsApp Gateway accepted the message' : 'WhatsApp Gateway 已接受发送',
+    whatsappResendProcessed: isEn ? 'WhatsApp send processed' : 'WhatsApp 发送已处理',
+    whatsappFailed: isEn ? 'WhatsApp delivery failed; use the WhatsApp button to send manually' : 'WhatsApp 发送失败；请按 WhatsApp 按键手动发送',
     btnEdit: isEn ? 'Edit' : '编辑',
-    btnDelete: isEn ? 'Delete' : '删除',
+    btnDelete: isEn ? 'Cancel DO' : '取消 DO',
     btnHistory: isEn ? 'History' : '操作记录',
-    confirmDeleteTitle: isEn ? 'Confirm Deletion' : '删除订单确认',
-    confirmDeleteDesc: isEn ? 'Delete this order? It will be marked as cancelled and retained in the audit history.' : '确定要删除该笔订单吗？系统会将订单标记为已取消，并保留审计记录。',
+    confirmDeleteTitle: isEn ? 'Confirm DO Cancellation' : '确认取消 DO',
+    confirmDeleteDesc: isEn ? 'Cancel this DO? The record and details will be retained in the audit history.' : '确定取消这张 DO 吗？系统会保留 DO、明细及审计记录。',
     filterAll: isEn ? 'All Statuses' : '全状态',
     statusSubmitted: isEn ? 'Submitted' : '已提交',
     statusConfirmed: isEn ? 'Confirmed' : '已确认',
@@ -429,12 +436,12 @@ export const DailyOrderStatus: React.FC = () => {
           throw new Error('reason_required');
         }
         try {
-          await axiosInstance.put(`/admin/orders/${orderId}/status`, {
+          const response = await axiosInstance.put(`/admin/orders/${orderId}/status`, {
             status: newStatus,
             reason: reason.trim(),
             expected_order_version: record?.version,
           });
-          message.success(labels.statusUpdated);
+          notifyOperationResult(labels.statusUpdated, response.data?.whatsapp_delivery);
           await fetchOrders();
         } catch (err: any) {
           message.error(err.response?.data?.detail || labels.statusUpdateFailed);
@@ -468,11 +475,11 @@ export const DailyOrderStatus: React.FC = () => {
           throw new Error('reason_required');
         }
         try {
-          await axiosInstance.post(`/admin/orders/${record.id}/cancel`, {
+          const response = await axiosInstance.post(`/admin/orders/${record.id}/cancel`, {
             reason: reason.trim(),
             expected_order_version: record.version,
           });
-          message.success(labels.deleteSuccess);
+          notifyOperationResult(labels.deleteSuccess, response.data?.whatsapp_delivery);
           await fetchOrders();
         } catch (err: any) {
           message.error(err.response?.data?.detail || labels.deleteFailed);
@@ -509,7 +516,7 @@ export const DailyOrderStatus: React.FC = () => {
   /** 打开操作记录抽屉 */
   const handleOpenAuditDrawer = (record: any) => {
     setAuditTargetOrderId(record.id);
-    setAuditTargetLabel(`${record.company_name} | ${record.delivery_date}`);
+    setAuditTargetLabel(record.do_number || `${record.company_name} | ${record.delivery_date}`);
     setAuditDrawerOpen(true);
   };
 
@@ -533,7 +540,7 @@ export const DailyOrderStatus: React.FC = () => {
     }
 
     try {
-      await axiosInstance.put(`/admin/orders/${editingOrder.id}`, {
+      const response = await axiosInstance.put(`/admin/orders/${editingOrder.id}`, {
         site_id: editSiteId,
         delivery_date: editingOrder.delivery_date,
         reason: editReason.trim(),
@@ -545,11 +552,11 @@ export const DailyOrderStatus: React.FC = () => {
           remark: d.remark || ""
         }))
       });
-      message.success(labels.saveSuccess);
+      notifyOperationResult(labels.saveSuccess, response.data?.whatsapp_delivery);
       setEditModalVisible(false);
       fetchOrders();
-    } catch (err) {
-      message.error(labels.saveFailed);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || labels.saveFailed);
     }
   };
 
@@ -708,8 +715,90 @@ export const DailyOrderStatus: React.FC = () => {
 
   const filteredOrders = orders.filter((o) => statusFilter === 'all' || o.status === statusFilter);
 
+  const notifyOperationResult = (successText: string, delivery: any) => {
+    if (delivery?.status === 'failed') {
+      message.warning(`${successText}；${labels.whatsappFailed}：${delivery.last_error || '-'}`);
+      return;
+    }
+    if (delivery) {
+      message.success(`${successText}；${labels.whatsappSent}`);
+      return;
+    }
+    message.success(successText);
+  };
+
+  const renderWhatsAppStatus = (delivery: any) => {
+    if (!delivery) return <Tag>{isEn ? 'Not sent' : '未发送'}</Tag>;
+    const status = delivery.status;
+    const config: Record<string, { color: string; zh: string; en: string }> = {
+      pending: { color: 'warning', zh: '待手动处理', en: 'Manual action' },
+      sending: { color: 'processing', zh: '发送中', en: 'Sending' },
+      sent: { color: 'blue', zh: '已发送', en: 'Sent' },
+      server: { color: 'cyan', zh: '服务器已收', en: 'Server' },
+      device: { color: 'success', zh: '已送达', en: 'Delivered' },
+      read: { color: 'success', zh: '已读', en: 'Read' },
+      failed: { color: 'error', zh: '发送失败', en: 'Failed' },
+      superseded: { color: 'default', zh: '旧版已取代', en: 'Superseded' },
+    };
+    const value = config[status] || { color: 'default', zh: status, en: status };
+    return <Tooltip title={delivery.last_error || delivery.group_name || ''}><Tag color={value.color}>{isEn ? value.en : value.zh}</Tag></Tooltip>;
+  };
+
+  const handleWhatsAppResend = (record: any) => {
+    let reason = '';
+    Modal.confirm({
+      title: `${labels.btnWhatsAppResend} — ${record.do_number}`,
+      content: <Input.TextArea rows={3} placeholder={labels.whatsappReason} onChange={(event) => { reason = event.target.value; }} />,
+      okText: labels.btnWhatsAppResend,
+      cancelText: labels.btnCancel,
+      onOk: async () => {
+        if (reason.trim().length < 3) {
+          message.error(labels.reasonRequired);
+          throw new Error('reason_required');
+        }
+        try {
+          const response = await axiosInstance.post(`/admin/orders/${record.id}/whatsapp-resend`, {
+            reason: reason.trim(),
+            expected_order_version: record.version,
+          });
+          notifyOperationResult(labels.whatsappResendProcessed, response.data?.delivery);
+          await fetchOrders();
+        } catch (error: any) {
+          message.error(error.response?.data?.detail || labels.whatsappFailed);
+          throw error;
+        }
+      },
+    });
+  };
+
+  const statusOptions = [
+    { value: 'submitted', label: labels.statusSubmitted, color: 'blue' },
+    { value: 'confirmed', label: labels.statusConfirmed, color: 'orange' },
+    { value: 'in_production', label: labels.statusInProduction, color: 'purple' },
+    { value: 'delivered', label: labels.statusDelivered, color: 'green' },
+    { value: 'billed', label: labels.statusBilled, color: 'purple' },
+    { value: 'paid', label: labels.statusPaid, color: 'gold' },
+    { value: 'cancelled', label: labels.statusCancelled, color: 'red' },
+  ];
+  const statusRank: Record<string, number> = {
+    submitted: 0,
+    confirmed: 1,
+    in_production: 2,
+    delivered: 3,
+    billed: 4,
+    paid: 5,
+  };
+  const availableStatusOptions = (currentStatus: string) => statusOptions.filter((option) => {
+    if (option.value === currentStatus) return true;
+    if (currentStatus === 'cancelled' || currentStatus === 'paid') return false;
+    if (currentStatus === 'submitted') return ['confirmed', 'cancelled'].includes(option.value);
+    if (option.value === 'submitted') return false;
+    if (option.value === 'cancelled') return !['billed', 'paid'].includes(currentStatus);
+    return (statusRank[option.value] ?? -1) > (statusRank[currentStatus] ?? -1);
+  });
+
   const columns = [
-    { title: labels.colOrderId, dataIndex: 'id', key: 'id', width: 90, render: (val: number) => <Text type="secondary">#{val}</Text> },
+    { title: labels.colOrderId, dataIndex: 'do_number', key: 'do_number', width: 175, render: (value: string) => <Text strong>{value || '-'}</Text> },
     { title: labels.colDeliveryDate, dataIndex: 'delivery_date', key: 'delivery_date', width: 145, render: (text: string, record: any) => <div><Text strong>{text}</Text>{record.is_late_override && <div><Tag color="warning">{labels.lateOverride}</Tag></div>}</div> },
     { title: labels.colCustomer, dataIndex: 'company_name', key: 'company_name', width: 160, render: (text: string) => <Text strong style={{ color: '#0f172a' }}>{text}</Text> },
     { title: labels.colSite, dataIndex: 'site_name', key: 'site_name', width: 150, render: (text: string) => <Tag color="geekblue">{text}</Tag> },
@@ -779,21 +868,28 @@ export const DailyOrderStatus: React.FC = () => {
           size="small"
           style={{ width: 105, textAlign: 'left' }}
           onChange={(val) => handleStatusChange(record.id, val)}
+          disabled={record.status === 'cancelled' || record.status === 'paid'}
         >
-          <Option value="submitted"><Tag color="blue">{labels.statusSubmitted}</Tag></Option>
-          <Option value="confirmed"><Tag color="orange">{labels.statusConfirmed}</Tag></Option>
-          <Option value="in_production"><Tag color="purple">{labels.statusInProduction}</Tag></Option>
-          <Option value="delivered"><Tag color="green">{labels.statusDelivered}</Tag></Option>
-          <Option value="billed"><Tag color="purple">{labels.statusBilled}</Tag></Option>
-          <Option value="paid"><Tag color="gold">{labels.statusPaid}</Tag></Option>
-          <Option value="cancelled"><Tag color="red">{labels.statusCancelled}</Tag></Option>
+          {availableStatusOptions(record.status).map((option) => (
+            <Option key={option.value} value={option.value}>
+              <Tag color={option.color}>{option.label}</Tag>
+            </Option>
+          ))}
         </Select>
       )
     },
     {
+      title: labels.colWhatsApp,
+      dataIndex: 'whatsapp_delivery',
+      key: 'whatsapp_delivery',
+      width: 130,
+      align: 'center' as const,
+      render: (delivery: any) => renderWhatsAppStatus(delivery),
+    },
+    {
       title: labels.colAction,
       key: 'actions',
-      width: 120,
+      width: 160,
       fixed: 'right' as const,
       align: 'center' as const,
       // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
@@ -816,7 +912,20 @@ export const DailyOrderStatus: React.FC = () => {
               shape="circle"
               icon={<EditOutlined />}
               onClick={() => handleOpenEditModal(record)}
+              disabled={['billed', 'paid', 'cancelled'].includes(record.status)}
               aria-label={labels.btnEdit}
+            />
+          </Tooltip>
+
+          <Tooltip title={labels.btnWhatsAppResend}>
+            <Button
+              size="small"
+              shape="circle"
+              icon={<WhatsAppOutlined />}
+              style={{ color: '#16a34a', borderColor: '#16a34a' }}
+              onClick={() => handleWhatsAppResend(record)}
+              disabled={record.status === 'submitted'}
+              aria-label={labels.btnWhatsAppResend}
             />
           </Tooltip>
 
@@ -827,7 +936,7 @@ export const DailyOrderStatus: React.FC = () => {
               shape="circle"
               icon={<DeleteOutlined />}
               onClick={() => handleDeleteOrder(record)}
-              disabled={record.status === 'cancelled'}
+              disabled={['billed', 'paid', 'cancelled'].includes(record.status)}
               aria-label={labels.btnDelete}
             />
           </Tooltip>

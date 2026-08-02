@@ -173,10 +173,10 @@ export const DeliveryOrders: React.FC = () => {
   const columns = [
     {
       title: labels.colDoNo,
-      dataIndex: 'id',
-      key: 'id',
+      dataIndex: 'do_number',
+      key: 'do_number',
       width: 140,
-      render: (id: number) => <Text strong style={{ color: '#0f172a' }}>DO-KL-{1000 + id}</Text>
+      render: (doNumber: string) => <Text strong style={{ color: '#0f172a' }}>{doNumber || '-'}</Text>
     },
     {
       title: labels.colDate,
@@ -376,7 +376,7 @@ export const DeliveryOrders: React.FC = () => {
               </Col>
               <Col span={12} style={{ borderLeft: '1px dashed #cbd5e1', paddingLeft: 20 }}>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Text><Text strong>{labels.colDoNo}:</Text> DO-KL-{1000 + selectedDo.id}</Text>
+                  <Text><Text strong>{labels.colDoNo}:</Text> {selectedDo.do_number || '-'}</Text>
                   <Text><Text strong>{labels.colDate}:</Text> {selectedDo.delivery_date || labels.unknown}</Text>
                   <Text>
                     <Text strong>{labels.colPaymentStatus}:</Text>{' '}

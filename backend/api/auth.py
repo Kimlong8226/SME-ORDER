@@ -45,7 +45,7 @@ def require_superadmin(payload: dict = Depends(get_current_user_payload)):
     if payload.get("user_type") != "staff" or payload.get("role") != "superadmin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="权限不足：只有超级管理员 (superadmin) 才有权访问员工管理后台"
+            detail="权限不足：只有超级管理员 (superadmin) 才有权访问此功能"
         )
     return payload
 

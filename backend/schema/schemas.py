@@ -201,6 +201,7 @@ class OrderDetailResponse(BaseModel):
 
 class OrderResponse(BaseModel):
     id: int
+    do_number: Optional[str] = None
     customer_id: int
     company_name: str
     delivery_site_id: int

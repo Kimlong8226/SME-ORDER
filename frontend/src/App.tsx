@@ -5,7 +5,7 @@ import {
   CalendarOutlined, UsergroupAddOutlined, TeamOutlined, AppstoreOutlined,
   FormOutlined, GlobalOutlined, LogoutOutlined, DashboardOutlined,
   FileTextOutlined, UnorderedListOutlined, BookOutlined, OrderedListOutlined,
-  MenuFoldOutlined, MenuUnfoldOutlined, AuditOutlined
+  MenuFoldOutlined, MenuUnfoldOutlined, WhatsAppOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import './i18n';
@@ -25,7 +25,7 @@ const MatrixOrder = lazy(() => import('./pages/customer/MatrixOrder').then((modu
 const OrderHistory = lazy(() => import('./pages/customer/WeeklyOrder').then((module) => ({ default: module.OrderHistory })));
 const DeliveryOrders = lazy(() => import('./pages/customer/DeliveryOrders').then((module) => ({ default: module.DeliveryOrders })));
 const MealSectionsManagement = lazy(() => import('./pages/admin/MealSectionsManagement').then((module) => ({ default: module.MealSectionsManagement })));
-const AuditLog = lazy(() => import('./pages/admin/AuditLog').then((module) => ({ default: module.AuditLog })));
+const WhatsAppSettings = lazy(() => import('./pages/admin/WhatsAppSettings').then((module) => ({ default: module.WhatsAppSettings })));
 
 const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
@@ -96,7 +96,7 @@ export const App: React.FC = () => {
     { key: 'mealSections', icon: <OrderedListOutlined />, label: t('nav.mealSections') },
     { key: 'invoices', icon: <FileTextOutlined />, label: t('nav.invoices') },
     ...(isSuperadmin ? [{ key: 'staff', icon: <TeamOutlined />, label: t('nav.staff') }] : []),
-    ...(isSuperadmin ? [{ key: 'auditLog', icon: <AuditOutlined />, label: t('nav.auditLog') }] : []),
+    ...(isSuperadmin ? [{ key: 'whatsappSettings', icon: <WhatsAppOutlined />, label: t('nav.whatsappSettings') }] : []),
   ];
 
   const customerMenuItems = [
@@ -207,11 +207,15 @@ export const App: React.FC = () => {
                     </Card>
                   )
                 )}
+                {activeMenu === 'whatsappSettings' && (
+                  isSuperadmin ? <WhatsAppSettings /> : (
+                    <Result status="403" title="403" subTitle={i18n.language === 'en' ? 'Only superadmin can access WhatsApp settings.' : '只有最高权限者可以进入 WhatsApp 设置。'} />
+                  )
+                )}
                 {activeMenu === 'matrixOrder' && <MatrixOrder />}
 
                 {activeMenu === 'orderHistory' && <OrderHistory onEditOrder={handleEditOrder} />}
                 {activeMenu === 'deliveryOrders' && <DeliveryOrders />}
-                {activeMenu === 'auditLog' && isSuperadmin && <AuditLog />}
                 </div>
               </Suspense>
             </Content>

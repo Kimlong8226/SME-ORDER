@@ -379,6 +379,13 @@ class OrderRestrictionApiTests(unittest.TestCase):
         self.assertTrue(create_res.json()["late_override"])
         order_id = create_res.json()["order_id"]
 
+        bypass_approval = self.client.put(
+            f"/admin/orders/{order_id}/status",
+            json={"status": "in_production", "reason": "Attempt to skip approval", "expected_order_version": 1},
+            headers=self.staff_headers,
+        )
+        self.assertEqual(bypass_approval.status_code, 409, bypass_approval.text)
+
         missing_reason = self.client.put(
             f"/admin/orders/{order_id}/status",
             json={"status": "confirmed", "reason": ""},
@@ -397,12 +404,19 @@ class OrderRestrictionApiTests(unittest.TestCase):
             headers=self.staff_headers,
         )
         self.assertEqual(status_res.status_code, 200, status_res.text)
+        listed_order = next(
+            row for row in self.client.get("/admin/all-orders", headers=self.staff_headers).json()
+            if row["id"] == order_id
+        )
+        self.assertTrue(listed_order["do_number"].startswith("DO-"))
 
         order_audit = self.client.get(f"/admin/orders/{order_id}/audit-logs", headers=self.staff_headers)
         self.assertEqual(order_audit.status_code, 200, order_audit.text)
         self.assertGreaterEqual(len(order_audit.json()), 2)
         self.assertEqual(self.client.get("/admin/audit-logs", headers=self.staff_headers).status_code, 403)
         self.assertEqual(self.client.get("/admin/audit-logs", headers=self.super_headers).status_code, 200)
+        self.assertEqual(self.client.get("/admin/whatsapp/settings", headers=self.staff_headers).status_code, 403)
+        self.assertEqual(self.client.get("/admin/whatsapp/settings", headers=self.super_headers).status_code, 200)
 
     def test_frozen_customer_can_reduce_but_not_increase_existing_order(self):
         delivery = malaysia_now().date() + timedelta(days=2)
