@@ -311,7 +311,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
             <Row gutter={[12, 12]}>
               <Col xs={24} md={12}>
                 <Alert
-                  title={
+                  message={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <strong style={{ fontSize: 13 }}>{labels.alertBlockedTitle}</strong>
                       <span style={{ fontSize: 11, lineHeight: 1.4, color: '#854d0e' }}>{labels.alertBlockedDesc}</span>
@@ -325,7 +325,7 @@ export const DashboardOverview: React.FC<DashboardOverviewProps> = ({ onNavigate
               </Col>
               <Col xs={24} md={12}>
                 <Alert
-                  title={
+                  message={
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                       <strong style={{ fontSize: 13 }}>{labels.alertPrivacyTitle}</strong>
                       <span style={{ fontSize: 11, lineHeight: 1.4, color: '#0369a1' }}>{labels.alertPrivacyDesc}</span>
