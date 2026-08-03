@@ -201,6 +201,11 @@ def create_customer(req: CustomerCreate, db: Session = Depends(get_db), auth: di
         )
         db.add(site)
 
+    _write_admin_audit(
+        db, auth, "CUSTOMER_CREATE", f"创建客户 {customer.company_name}",
+        customer.id, customer.company_name,
+        {"username": req.username, "site_count": len(req.sites)},
+    )
     db.commit()
     db.refresh(customer)
     return customer
@@ -264,6 +269,17 @@ def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends
         if hasattr(customer, key):
             setattr(customer, key, value)
 
+    audit_changes = sorted([
+        *update_data.keys(),
+        *(["username"] if username else []),
+        *(["password"] if password else []),
+    ])
+    _write_admin_audit(
+        db, auth, AUDIT_ACTION_CUSTOMER_UPDATE,
+        f"更新客户 {customer.company_name} 的资料",
+        customer.id, customer.company_name,
+        {"changed_fields": audit_changes},
+    )
     db.commit()
     db.refresh(customer)
     customer.username = customer.users[0].username if customer.users else None
@@ -448,6 +464,19 @@ def update_delivery_site(site_id: int, site_in: DeliverySiteCreate, db: Session 
     if site_in.phone is not None:
         site.phone = site_in.phone
 
+    _write_admin_audit(
+        db, auth, "DELIVERY_SITE_UPDATE", f"更新送餐地点 {site.site_name}",
+        site.id, site.site_name,
+        {
+            "before": before,
+            "after": {
+                "site_name": site.site_name,
+                "address": site.address,
+                "contact_person": site.contact_person,
+                "phone": site.phone,
+            },
+        },
+    )
     db.commit()
     db.refresh(site)
     return site
@@ -508,7 +537,12 @@ def update_staff(staff_id: int, req: StaffUserUpdate, db: Session = Depends(get_
 
     for key, value in update_data.items():
         setattr(staff, key, value)
-        
+
+    _write_admin_audit(
+        db, auth, "STAFF_UPDATE", f"更新员工账号 {staff.username}",
+        staff.id, staff.username,
+        {"changed_fields": sorted(update_data.keys())},
+    )
     db.commit()
     db.refresh(staff)
     return staff
@@ -532,11 +566,6 @@ def create_package_template(req: PackageTemplateCreate, db: Session = Depends(ge
     db.add(template)
     db.flush()
     _write_admin_audit(db, auth, "PACKAGE_TEMPLATE_CREATE", f"创建套餐模板 {template.name}", template.id, template.name, {"category": template.category, "default_price": template.default_price})
-    _write_admin_audit(db, auth, "CUSTOMER_CREATE", f"创建客户 {customer.company_name}", customer.id, customer.company_name, {"username": req.username, "site_count": len(req.sites)})
-    audit_changes = sorted([*update_data.keys(), *(["username"] if username else []), *(["password"] if password else [])])
-    _write_admin_audit(db, auth, AUDIT_ACTION_CUSTOMER_UPDATE, f"更新客户 {customer.company_name} 的资料", customer.id, customer.company_name, {"changed_fields": audit_changes})
-    _write_admin_audit(db, auth, "DELIVERY_SITE_UPDATE", f"更新送餐地点 {site.site_name}", site.id, site.site_name, {"before": before, "after": {"site_name": site.site_name, "address": site.address, "contact_person": site.contact_person, "phone": site.phone}})
-    _write_admin_audit(db, auth, "STAFF_UPDATE", f"更新员工账号 {staff.username}", staff.id, staff.username, {"changed_fields": sorted(update_data.keys())})
     db.commit()
     db.refresh(template)
     return template
@@ -657,6 +686,14 @@ def assign_package_to_customer(customer_id: int, req: CustomerPackageAssign, db:
             agreement_price=req.agreement_price
         )
         db.add(cp)
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    db.flush()
+    _write_admin_audit(
+        db, auth, "CUSTOMER_PACKAGE_ASSIGN",
+        f"为客户 {customer.company_name if customer else customer_id} 分配套餐 {template.name}",
+        cp.id, template.name,
+        {"customer_id": customer_id, "agreement_price": cp.agreement_price},
+    )
     db.commit()
     db.refresh(cp)
 
@@ -1035,9 +1072,6 @@ def edit_order_by_admin(
         except WhatsAppConfigurationError as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     delivery_id = delivery.id if delivery else None
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    db.flush()
-    _write_admin_audit(db, auth, "CUSTOMER_PACKAGE_ASSIGN", f"为客户 {customer.company_name if customer else customer_id} 分配套餐 {template.name}", cp.id, template.name, {"customer_id": customer_id, "agreement_price": cp.agreement_price})
     db.commit()
     delivery_result = process_delivery(db, delivery_id) if delivery_id else None
     return {

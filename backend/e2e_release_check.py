@@ -67,6 +67,25 @@ db = SessionLocal()
 assert db.query(StaffUser).filter_by(username="admin@test").one().password_hash.startswith("$pbkdf2-sha256$")
 db.close()
 
+created_package_response = client.post(
+    "/admin/packages",
+    headers=admin_headers,
+    json={
+        "name": "Created Through API",
+        "category": "Meal",
+        "default_price": 15.0,
+        "description": "Audit regression check",
+    },
+)
+assert created_package_response.status_code == 200, created_package_response.text
+package_create_audit = client.get(
+    "/admin/audit-logs?action_type=PACKAGE_TEMPLATE_CREATE",
+    headers=admin_headers,
+)
+assert package_create_audit.status_code == 200, package_create_audit.text
+assert package_create_audit.json()["total"] == 1
+assert package_create_audit.json()["items"][0]["target_label"] == "Created Through API"
+
 active_package_delete = client.delete(f"/admin/packages/{package_id}", headers=admin_headers)
 assert active_package_delete.status_code == 409, active_package_delete.text
 assert active_package_delete.json()["detail"]["code"] == "package_has_active_customers"
