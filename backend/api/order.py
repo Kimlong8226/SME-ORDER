@@ -277,11 +277,6 @@ def submit_matrix_orders(
                 AddonTemplate.is_customer_visible == True,
             ).all()
             addons_by_id = {row.id: row for row in customer_addons}
-            package_item_keys = {
-                (item.meal_section_id, item.customer_package_id)
-                for item in items
-                if item.customer_package_id is not None and item.quantity > 0
-            }
 
             old_snapshot = {}
             if existing_order:
@@ -316,8 +311,6 @@ def submit_matrix_orders(
                     parent_cp = packages_by_template.get(item.parent_package_id)
                     if not addon or not parent_cp:
                         raise HTTPException(status_code=400, detail="所选 Add-on 或对应套餐未向该客户开放")
-                    if (item.meal_section_id, item.parent_package_id) not in package_item_keys:
-                        raise HTTPException(status_code=400, detail="Add-on 必须附加在本次已选择的套餐卡片下")
                     if not any(link.customer_package_id == parent_cp.id for link in addon.package_links):
                         raise HTTPException(status_code=400, detail="该 Add-on 未向所选客户专属套餐开放")
                     key = (item.meal_section_id, "customer_addon", item.customer_addon_id)

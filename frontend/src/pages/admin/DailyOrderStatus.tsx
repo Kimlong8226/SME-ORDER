@@ -670,6 +670,15 @@ export const DailyOrderStatus: React.FC = () => {
       && (addon.customer_package_ids || []).includes(customerPackageId)
     );
 
+  const getCreatePackageAddonSelections = () => createSections.flatMap(section =>
+    getCreatePackagesForSection(section).flatMap(pkg =>
+      getCreateAddonsForPackage(pkg.id).flatMap(addon => {
+        const quantity = createAddons[`package:${section.id}:${pkg.id}:${addon.id}`] || 0;
+        return quantity > 0 ? [{ section, pkg, addon, quantity }] : [];
+      })
+    )
+  );
+
   const getEditPackagesForSection = (item: any) => {
     const section = editMealSectionsById.get(item.meal_section_id);
     const allowedCategories = getEffectiveMealSectionCategories(
@@ -684,14 +693,6 @@ export const DailyOrderStatus: React.FC = () => {
 
   const setCreateQuantity = (mealSectionId: number, customerPackageId: number, quantity: number) => {
     const safeQuantity = Math.max(0, quantity || 0);
-    if (safeQuantity === 0) {
-      setCreateAddons(current => Object.fromEntries(
-        Object.entries(current).map(([key, value]) => [
-          key,
-          key.startsWith(`package:${mealSectionId}:${customerPackageId}:`) ? 0 : value,
-        ])
-      ));
-    }
     setCreateItems(current => {
       const remaining = current.filter(item => !(item.meal_section_id === mealSectionId && item.customer_package_id === customerPackageId));
       return safeQuantity > 0
@@ -1099,8 +1100,8 @@ export const DailyOrderStatus: React.FC = () => {
                                         <div><Text type="secondary" style={{ fontSize: 12 }}>{addon.addon_name}</Text><Text type="secondary" style={{ fontSize: 11, marginLeft: 5 }}>RM {Number(addon.agreement_price || 0).toFixed(2)}</Text></div>
                                         <div style={{ display: 'flex', alignItems: 'center', background: '#fffbeb', padding: '1px 4px', borderRadius: 16 }}>
                                           <Button type="text" shape="circle" size="small" disabled={addonQuantity <= 0} icon={<MinusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, addonQuantity - 1)} />
-                                          <InputNumber min={0} max={999} variant="borderless" controls={false} disabled={quantity <= 0} value={addonQuantity} onChange={value => setCreateAddonQuantity(addonKey, value || 0)} style={{ width: 42, textAlign: 'center', fontWeight: 700 }} />
-                                          <Button type="text" shape="circle" size="small" disabled={quantity <= 0} icon={<PlusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, addonQuantity + 1)} />
+                                          <InputNumber min={0} max={999} variant="borderless" controls={false} value={addonQuantity} onChange={value => setCreateAddonQuantity(addonKey, value || 0)} style={{ width: 42, textAlign: 'center', fontWeight: 700 }} />
+                                          <Button type="text" shape="circle" size="small" icon={<PlusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, addonQuantity + 1)} />
                                         </div>
                                       </div>
                                     );
@@ -1168,6 +1169,13 @@ export const DailyOrderStatus: React.FC = () => {
                         <div key={`admin-${addon.id}`} style={{ background: '#faf5ff', borderRadius: 9, padding: '9px 10px' }}>
                           <Text strong style={{ fontSize: 12 }}>{addon.addon_name}</Text>
                           <Tag color="purple" style={{ float: 'right', margin: 0 }}>{createAddons[`admin:${addon.id}`]}</Tag>
+                        </div>
+                      ))}
+                      {getCreatePackageAddonSelections().filter(({ section, pkg }) => getCreateQuantity(section.id, pkg.id) <= 0).map(({ section, pkg, addon, quantity }) => (
+                        <div key={`package-addon-${section.id}-${pkg.id}-${addon.id}`} style={{ background: '#fffbeb', borderRadius: 9, padding: '9px 10px' }}>
+                          <Text strong style={{ display: 'block', fontSize: 12 }}>{translateMealSection(section.name)}</Text>
+                          <Text type="secondary" style={{ fontSize: 11 }}>{translatePackageTemplateName(pkg.template_name)} · {addon.addon_name}</Text>
+                          <Tag color="orange" style={{ float: 'right', margin: 0 }}>{quantity} {labels.portions}</Tag>
                         </div>
                       ))}
                     </div>

@@ -864,7 +864,11 @@ def create_order_by_admin(
         else:
             addon = addon_map[item.customer_addon_id]
             if addon.template.is_customer_visible:
-                parent_cp = package_map.get(item.parent_package_id)
+                parent_cp = package_map.get(item.parent_package_id) or db.query(CustomerPackage).filter(
+                    CustomerPackage.id == item.parent_package_id,
+                    CustomerPackage.customer_id == req.customer_id,
+                    CustomerPackage.is_active == True,
+                ).first()
                 if not parent_cp or not any(link.customer_package_id == parent_cp.id for link in addon.package_links):
                     raise HTTPException(status_code=400, detail="该 Add-on 未向所选客户专属套餐开放")
             detail = OrderDetail(

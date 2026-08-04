@@ -327,19 +327,19 @@ export const MatrixOrder: React.FC = () => {
             quantity: qty as number,
             remark: remark || ''
           });
-          Object.entries(matrixAddons[sectionName]?.[pkgId] || {}).forEach(([addonId, addonQty]) => {
-            if ((addonQty as number) > 0) {
-              items.push({
-                delivery_site_id: selectedSiteId!,
-                meal_section_id: actualSectionId,
-                customer_addon_id: Number(addonId),
-                parent_package_id: pkgId,
-                quantity: addonQty as number,
-                remark: `[addon_for_package:${pkgId}]`,
-              });
-            }
-          });
         }
+        Object.entries(matrixAddons[sectionName]?.[pkgId] || {}).forEach(([addonId, addonQty]) => {
+          if ((addonQty as number) > 0) {
+            items.push({
+              delivery_site_id: selectedSiteId!,
+              meal_section_id: actualSectionId,
+              customer_addon_id: Number(addonId),
+              parent_package_id: pkgId,
+              quantity: addonQty as number,
+              remark: `[addon_for_package:${pkgId}]`,
+            });
+          }
+        });
       });
     });
 
@@ -383,15 +383,16 @@ export const MatrixOrder: React.FC = () => {
   dbMealSections.forEach((sec: any) => {
     (sec.packages || []).forEach((pkg: any) => {
       const qty = matrixData[sec.name]?.[pkg.id] || 0;
-      if (qty > 0) {
+      const selectedAddons = (pkg.addons || []).flatMap((addon: any) => {
+        const addonQty = matrixAddons[sec.name]?.[pkg.id]?.[addon.id] || 0;
+        return addonQty > 0 ? [{ addon, qty: addonQty }] : [];
+      });
+      if (qty > 0 || selectedAddons.length > 0) {
         activeCartItems.push({
           sectionName: sec.name,
           pkg: pkg,
           qty: qty,
-          addons: (pkg.addons || []).flatMap((addon: any) => {
-            const addonQty = matrixAddons[sec.name]?.[pkg.id]?.[addon.id] || 0;
-            return addonQty > 0 ? [{ addon, qty: addonQty }] : [];
-          }),
+          addons: selectedAddons,
         });
       }
     });
@@ -629,17 +630,6 @@ export const MatrixOrder: React.FC = () => {
                           const updatePkgQty = (newVal: number) => {
                             const maximum = originalMatrixData[sectionName]?.[pkg.id] ?? 0;
                             const safeValue = reduceOnly ? Math.min(maximum, newVal) : newVal;
-                            if (safeValue <= 0) {
-                              setMatrixAddons(prev => ({
-                                ...prev,
-                                [sectionName]: {
-                                  ...(prev[sectionName] || {}),
-                                  [pkg.id]: Object.fromEntries(
-                                    Object.keys(prev[sectionName]?.[pkg.id] || {}).map(addonId => [addonId, 0])
-                                  ),
-                                },
-                              }));
-                            }
                             setMatrixData(prev => ({
                               ...prev,
                               [sectionName]: {
@@ -726,8 +716,8 @@ export const MatrixOrder: React.FC = () => {
                                     </div>
                                     <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
                                       <Button type="text" shape="circle" size="small" disabled={addonQty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)} icon={<MinusOutlined style={{ fontSize: 9 }} />} onClick={() => updateAddonQty(addon.id, addonQty - 1)} style={{ width: 22, height: 22 }} />
-                                      <InputNumber min={0} max={reduceOnly ? (originalMatrixAddons[sectionName]?.[pkg.id]?.[addon.id] ?? 0) : 999} variant="borderless" controls={false} value={addonQty} onChange={(val) => updateAddonQty(addon.id, val || 0)} disabled={qty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)} style={{ width: 32, textAlign: 'center', fontWeight: 'bold', fontSize: 12, background: 'transparent' }} />
-                                      <Button type="text" shape="circle" size="small" disabled={qty <= 0 || isBlocked || (isYilian && isSunday)} icon={<PlusOutlined style={{ fontSize: 9 }} />} onClick={() => updateAddonQty(addon.id, addonQty + 1)} style={{ width: 22, height: 22, background: '#fff' }} />
+                                      <InputNumber min={0} max={reduceOnly ? (originalMatrixAddons[sectionName]?.[pkg.id]?.[addon.id] ?? 0) : 999} variant="borderless" controls={false} value={addonQty} onChange={(val) => updateAddonQty(addon.id, val || 0)} disabled={(isBlocked && !isEditing) || (isYilian && isSunday)} style={{ width: 32, textAlign: 'center', fontWeight: 'bold', fontSize: 12, background: 'transparent' }} />
+                                      <Button type="text" shape="circle" size="small" disabled={isBlocked || (isYilian && isSunday)} icon={<PlusOutlined style={{ fontSize: 9 }} />} onClick={() => updateAddonQty(addon.id, addonQty + 1)} style={{ width: 22, height: 22, background: '#fff' }} />
                                     </div>
                                   </div>
                                 );
@@ -800,7 +790,7 @@ export const MatrixOrder: React.FC = () => {
                         </Text>
                       </div>
                       <span style={{ background: '#e0f2fe', color: '#0369a1', padding: '4px 10px', borderRadius: 20, fontSize: 13, fontWeight: 'bold', minWidth: 60, textAlign: 'center' }}>
-                        {item.qty} {labels.pax}
+                        {item.qty > 0 ? `${item.qty} ${labels.pax}` : (isEn ? 'Add-on only' : '仅附加项')}
                       </span>
                     </div>
 

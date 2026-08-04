@@ -153,6 +153,16 @@ enabled_menu = client.get(f"/orders/meal-sections?customer_id={customer_one_id}"
 assert enabled_menu.status_code == 200, enabled_menu.text
 assert [addon["name"] for addon in enabled_menu.json()[0]["packages"][0]["addons"]] == ["Extra Rice"]
 
+standalone_addon_response = client.post(
+    f"/orders/matrix-submit?customer_id={customer_one_id}",
+    headers=customer_headers,
+    json={"delivery_date": str(date.today() + timedelta(days=4)), "items": [
+        {"delivery_site_id": site_id, "meal_section_id": section_id, "customer_addon_id": customer_rice_id, "parent_package_id": package_id, "quantity": 2, "remark": f"[addon_for_package:{package_id}]"},
+    ]},
+)
+assert standalone_addon_response.status_code == 200, standalone_addon_response.text
+assert standalone_addon_response.json()[0]["details"][0]["addon_name"] == "Extra Rice"
+
 hidden_addon_response = client.post(
     f"/orders/matrix-submit?customer_id={customer_one_id}",
     headers=customer_headers,
