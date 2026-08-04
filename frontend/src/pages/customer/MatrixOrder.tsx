@@ -510,16 +510,6 @@ export const MatrixOrder: React.FC = () => {
         <Alert title={labels.cutoffClosed} type="error" showIcon style={{ marginBottom: 16, borderRadius: 12 }} />
       )}
 
-      {orderWindow?.cutoff_at && (
-        <Alert
-          title={isEn ? 'Your ordering cutoff' : '您的最后下单时间'}
-          description={dayjs(orderWindow.cutoff_at).format('YYYY-MM-DD HH:mm')}
-          type={selectedDateBlocked ? 'warning' : 'info'}
-          showIcon
-          style={{ marginBottom: 16, borderRadius: 12 }}
-        />
-      )}
-
       {isYilian && isSunday && (
         <Alert
           title={labels.sundayReminderTitle}

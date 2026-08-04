@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, App, Button, Card, Col, Descriptions, Modal, Row, Spin, Table, Tag, Typography } from 'antd';
-import { FileTextOutlined } from '@ant-design/icons';
+import { Alert, App, Button, Card, Col, Descriptions, Modal, Row, Space, Spin, Table, Tag, Typography } from 'antd';
+import { FileTextOutlined, PrinterOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../api/axiosInstance';
 
@@ -75,6 +75,7 @@ export const OrderBillModal: React.FC<OrderBillModalProps> = ({ orderId, open, o
     total: isEn ? 'Total Amount' : '账单总额',
     remark: isEn ? 'Remark' : '备注',
     loadFailed: isEn ? 'Failed to load the order bill' : '读取订单账单失败',
+    print: isEn ? 'Print' : '打印',
     close: isEn ? 'Close' : '关闭',
   };
 
@@ -122,12 +123,34 @@ export const OrderBillModal: React.FC<OrderBillModalProps> = ({ orderId, open, o
       open={open}
       onCancel={onClose}
       width={900}
-      footer={<Button onClick={onClose}>{labels.close}</Button>}
+      footer={(
+        <Space>
+          <Button icon={<PrinterOutlined />} disabled={!bill || loading} onClick={() => window.print()}>
+            {labels.print}
+          </Button>
+          <Button onClick={onClose}>{labels.close}</Button>
+        </Space>
+      )}
       destroyOnHidden
     >
+      <style>{`
+        @media print {
+          body * { visibility: hidden !important; }
+          #order-bill-print-area, #order-bill-print-area * { visibility: visible !important; }
+          #order-bill-print-area {
+            position: fixed !important;
+            inset: 0 !important;
+            width: 100% !important;
+            padding: 12mm !important;
+            background: #fff !important;
+          }
+          #order-bill-print-area .ant-table-content { overflow: visible !important; }
+          @page { size: A4 portrait; margin: 0; }
+        }
+      `}</style>
       <Spin spinning={loading}>
         {bill && (
-          <div style={{ paddingTop: 8 }}>
+          <div id="order-bill-print-area" style={{ paddingTop: 8 }}>
             <div style={{ borderBottom: '2px solid #16a34a', paddingBottom: 12, marginBottom: 16 }}>
               <Row justify="space-between" align="middle" gutter={[12, 12]}>
                 <Col>
