@@ -33,7 +33,7 @@ class StaffUser(Base):
     username = Column(String(50), unique=True, index=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     full_name = Column(String(100), nullable=False)
-    role = Column(String(20), default="staff")  # superadmin | staff
+    role = Column(String(20), default="staff")  # superadmin | staff | ordering_staff
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 

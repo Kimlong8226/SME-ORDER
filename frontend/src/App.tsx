@@ -33,6 +33,9 @@ const AuditLog = lazyWithReload('AuditLog', () => import('./pages/admin/AuditLog
 const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
 
+const ORDERING_STAFF_ROLE = 'ordering_staff';
+const ORDERING_STAFF_MENU_KEYS = new Set(['orderStatus', 'calendar', 'customers']);
+
 const PageLoading: React.FC = () => (
   <div style={{ display: 'flex', justifyContent: 'center', padding: 64 }}>
     <Spin size="large" />
@@ -79,6 +82,8 @@ export const App: React.FC = () => {
       setCurrentUser(u);
       if (u.user_type === 'customer') {
         setActiveMenu('matrixOrder');
+      } else if (u.role === ORDERING_STAFF_ROLE) {
+        setActiveMenu('orderStatus');
       }
     }
   }, []);
@@ -101,7 +106,13 @@ export const App: React.FC = () => {
         <AntdApp>
           <Login onLoginSuccess={(u) => {
             setCurrentUser(u);
-            setActiveMenu(u.user_type === 'customer' ? 'matrixOrder' : 'dashboard');
+            setActiveMenu(
+              u.user_type === 'customer'
+                ? 'matrixOrder'
+                : u.role === ORDERING_STAFF_ROLE
+                  ? 'orderStatus'
+                  : 'dashboard'
+            );
           }} />
         </AntdApp>
       </ConfigProvider>
@@ -115,6 +126,7 @@ export const App: React.FC = () => {
 
   const isAdmin = currentUser.user_type === 'staff';
   const isSuperadmin = currentUser.role === 'superadmin';
+  const isOrderingStaff = currentUser.role === ORDERING_STAFF_ROLE;
 
   const adminMenuItems = [
     { key: 'dashboard', icon: <DashboardOutlined />, label: t('nav.dashboard') },
@@ -136,7 +148,19 @@ export const App: React.FC = () => {
     { key: 'deliveryOrders', icon: <FileTextOutlined />, label: t('nav.deliveryOrders') },
   ];
 
-  const menuItems = isAdmin ? adminMenuItems : customerMenuItems;
+  const menuItems = isAdmin
+    ? (isOrderingStaff
+      ? adminMenuItems.filter((item) => ORDERING_STAFF_MENU_KEYS.has(item.key))
+      : adminMenuItems)
+    : customerMenuItems;
+
+  const navigateToMenu = (menuKey: string) => {
+    if (isOrderingStaff && !ORDERING_STAFF_MENU_KEYS.has(menuKey)) {
+      setActiveMenu('orderStatus');
+      return;
+    }
+    setActiveMenu(menuKey);
+  };
 
   return (
     <ConfigProvider theme={brightTheme}>
@@ -168,7 +192,7 @@ export const App: React.FC = () => {
 
           <Space size="middle">
             {isAdmin && (
-              <AdminOrderNotificationBell currentUser={currentUser} onNavigate={setActiveMenu} />
+              <AdminOrderNotificationBell currentUser={currentUser} onNavigate={navigateToMenu} />
             )}
             <Tooltip title={i18n.language === 'zh' ? 'Switch to English' : '切换为中文'}>
               <Button
@@ -208,7 +232,7 @@ export const App: React.FC = () => {
               mode="inline"
               selectedKeys={[activeMenu]}
               onClick={(e) => {
-                setActiveMenu(e.key);
+                navigateToMenu(e.key);
                 if (window.innerWidth < 992) {
                   setCollapsed(true);
                 }
@@ -223,14 +247,14 @@ export const App: React.FC = () => {
               <PageErrorBoundary key={activeMenu}>
               <Suspense fallback={<PageLoading />}>
                 <div style={{ width: '100%' }}>
-                {activeMenu === 'dashboard' && <DashboardOverview onNavigate={(key) => setActiveMenu(key)} />}
+                {activeMenu === 'dashboard' && !isOrderingStaff && <DashboardOverview onNavigate={navigateToMenu} />}
                 {activeMenu === 'orderStatus' && <DailyOrderStatus />}
                 {activeMenu === 'calendar' && <OrderCalendar />}
                 {activeMenu === 'customers' && <CustomerManagement />}
-                {activeMenu === 'packages' && <PackageManagement />}
-                {activeMenu === 'clientMenuLibrary' && <ClientMenuLibrary />}
-                {activeMenu === 'mealSections' && <MealSectionsManagement />}
-                {activeMenu === 'invoices' && <InvoiceManagement />}
+                {activeMenu === 'packages' && !isOrderingStaff && <PackageManagement />}
+                {activeMenu === 'clientMenuLibrary' && !isOrderingStaff && <ClientMenuLibrary />}
+                {activeMenu === 'mealSections' && !isOrderingStaff && <MealSectionsManagement />}
+                {activeMenu === 'invoices' && !isOrderingStaff && <InvoiceManagement />}
                 {activeMenu === 'staff' && (
                   isSuperadmin ? <StaffManagement /> : (
                     <Card style={{ borderRadius: 12, marginTop: 24, textAlign: 'center' }}>

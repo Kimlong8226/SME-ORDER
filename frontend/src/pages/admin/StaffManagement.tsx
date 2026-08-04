@@ -27,6 +27,7 @@ export const StaffManagement: React.FC = () => {
     colStatus: isEn ? 'Status' : '状态',
     roleSuperadmin: isEn ? 'Superadmin' : '超级管理员',
     roleStaff: isEn ? 'Staff Member' : '运营员工',
+    roleOrderingStaff: isEn ? 'Ordering Staff' : '下单权限员工',
     statusActive: isEn ? 'Active' : '在职/启用',
     statusDisabled: isEn ? 'Disabled' : '已禁用',
     modalTitleCreate: isEn ? 'Add Staff Account' : '添加协同管理的员工账号',
@@ -48,6 +49,7 @@ export const StaffManagement: React.FC = () => {
     deleteFailed: isEn ? 'Failed to delete staff member' : '删除员工失败',
     colActions: isEn ? 'Actions' : '操作',
     roleLabelStaff: isEn ? 'Catering Operations Staff (Staff)' : '协同管理员工 (Staff)',
+    roleLabelOrderingStaff: isEn ? 'Ordering Staff (3 pages only)' : '下单权限员工（仅限3个相关页面）',
     roleLabelAdmin: isEn ? 'Super Administrator (Superadmin)' : '超级管理员 (Superadmin)',
   };
 
@@ -146,7 +148,11 @@ export const StaffManagement: React.FC = () => {
       title: labels.colRole,
       dataIndex: 'role',
       key: 'role',
-      render: (role: string) => role === 'superadmin' ? <Tag color="gold">{labels.roleSuperadmin}</Tag> : <Tag color="blue">{labels.roleStaff}</Tag>
+      render: (role: string) => {
+        if (role === 'superadmin') return <Tag color="gold">{labels.roleSuperadmin}</Tag>;
+        if (role === 'ordering_staff') return <Tag color="cyan">{labels.roleOrderingStaff}</Tag>;
+        return <Tag color="blue">{labels.roleStaff}</Tag>;
+      }
     },
     {
       title: labels.colStatus,
@@ -200,6 +206,7 @@ export const StaffManagement: React.FC = () => {
           <Form.Item name="role" label={labels.formRole} initialValue="staff">
             <Select>
               <Option value="staff">{labels.roleLabelStaff}</Option>
+              <Option value="ordering_staff">{labels.roleLabelOrderingStaff}</Option>
               <Option value="superadmin">{labels.roleLabelAdmin}</Option>
             </Select>
           </Form.Item>

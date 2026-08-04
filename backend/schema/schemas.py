@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Literal, Optional
 from datetime import date, datetime
 
 # --- Token & Login Schemas ---
@@ -21,7 +21,7 @@ class LoginRequest(BaseModel):
 class StaffUserBase(BaseModel):
     username: str
     full_name: str
-    role: str = "staff"  # superadmin | staff
+    role: Literal["superadmin", "staff", "ordering_staff"] = "staff"
     is_active: bool = True
 
 class StaffUserCreate(StaffUserBase):
@@ -30,7 +30,7 @@ class StaffUserCreate(StaffUserBase):
 class StaffUserUpdate(BaseModel):
     username: Optional[str] = None
     full_name: Optional[str] = None
-    role: Optional[str] = None
+    role: Optional[Literal["superadmin", "staff", "ordering_staff"]] = None
     is_active: Optional[bool] = None
     password: Optional[str] = None
 
