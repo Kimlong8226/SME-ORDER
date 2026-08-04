@@ -133,9 +133,16 @@ export const App: React.FC = () => {
     { key: 'orderStatus', icon: <UnorderedListOutlined />, label: t('nav.orderStatus') },
     { key: 'calendar', icon: <CalendarOutlined />, label: t('nav.calendar') },
     { key: 'customers', icon: <UsergroupAddOutlined />, label: t('nav.customers') },
-    { key: 'packages', icon: <AppstoreOutlined />, label: t('nav.packages') },
-    { key: 'clientMenuLibrary', icon: <BookOutlined />, label: t('nav.clientMenuLibrary') },
-    { key: 'mealSections', icon: <OrderedListOutlined />, label: t('nav.mealSections') },
+    {
+      key: 'menuManagement',
+      icon: <AppstoreOutlined />,
+      label: t('nav.menuManagement'),
+      children: [
+        { key: 'packages', icon: <AppstoreOutlined />, label: t('nav.packages') },
+        { key: 'clientMenuLibrary', icon: <BookOutlined />, label: t('nav.clientMenuLibrary') },
+        { key: 'mealSections', icon: <OrderedListOutlined />, label: t('nav.mealSections') },
+      ],
+    },
     { key: 'invoices', icon: <FileTextOutlined />, label: t('nav.invoices') },
     ...(isSuperadmin ? [{ key: 'staff', icon: <TeamOutlined />, label: t('nav.staff') }] : []),
     ...(isSuperadmin ? [{ key: 'whatsappSettings', icon: <WhatsAppOutlined />, label: t('nav.whatsappSettings') }] : []),
@@ -229,7 +236,8 @@ export const App: React.FC = () => {
             style={{ borderRight: '1px solid #e2e8f0', background: '#ffffff', zIndex: 10 }}
           >
             <Menu
-              mode="inline"
+              mode="vertical"
+              triggerSubMenuAction="hover"
               selectedKeys={[activeMenu]}
               onClick={(e) => {
                 navigateToMenu(e.key);

@@ -26,6 +26,7 @@
     "calendar": "订单日历",
     "customers": "客户管理",
     "staff": "员工管理",
+    "menuManagement": "菜单管理",
     "packages": "套餐模板库",
     "clientMenuLibrary": "专属菜单",
     "matrixOrder": "点餐下单",

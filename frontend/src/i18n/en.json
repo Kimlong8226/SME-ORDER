@@ -26,6 +26,7 @@
     "calendar": "Order Calendar",
     "customers": "Customer Profiles",
     "staff": "Staff Management",
+    "menuManagement": "Menu Management",
     "packages": "Base Package Templates",
     "clientMenuLibrary": "Client Menu",
     "matrixOrder": "Order Page",
