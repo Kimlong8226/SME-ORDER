@@ -14,6 +14,9 @@ AUDIT_ACTION_CUSTOMER_BLOCK = "CUSTOMER_BLOCK"
 AUDIT_ACTION_CUSTOMER_UNBLOCK = "CUSTOMER_UNBLOCK"
 AUDIT_ACTION_CUSTOMER_TEMP_ACCESS = "CUSTOMER_TEMP_ACCESS"
 AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END = "CUSTOMER_TEMP_ACCESS_END"
+AUDIT_ACTION_CUSTOMER_CUTOFF_UPDATE = "CUSTOMER_CUTOFF_UPDATE"
+AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE = "ORDER_CUTOFF_OVERRIDE"
+AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE_END = "ORDER_CUTOFF_OVERRIDE_END"
 AUDIT_ACTION_PAYMENT_CREATE = "PAYMENT_CREATE"
 AUDIT_ACTION_PAYMENT_DELETE = "PAYMENT_DELETE"
 AUDIT_ACTION_WHATSAPP_SETTINGS_UPDATE = "WHATSAPP_SETTINGS_UPDATE"
@@ -60,6 +63,8 @@ class Customer(Base):
     temporary_access_until = Column(DateTime(timezone=True), nullable=True)
     temporary_access_reason = Column(Text, nullable=True)
     restriction_updated_by = Column(String(100), nullable=True)
+    order_cutoff_day_offset = Column(Integer, nullable=False, default=1)  # 1 = delivery eve, 0 = delivery day
+    order_cutoff_time = Column(String(5), nullable=False, default="18:00")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关联
@@ -75,6 +80,7 @@ class Customer(Base):
         uselist=False,
         cascade="all, delete-orphan",
     )
+    cutoff_overrides = relationship("CustomerOrderCutoffOverride", back_populates="customer", cascade="all, delete-orphan")
 
 
 class CustomerUser(Base):
@@ -316,6 +322,25 @@ class PaymentRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     customer = relationship("Customer", back_populates="payments")
+
+
+class CustomerOrderCutoffOverride(Base):
+    """Staff-only cutoff override for one customer and one delivery date."""
+    __tablename__ = "customer_order_cutoff_overrides"
+    __table_args__ = (
+        UniqueConstraint("customer_id", "delivery_date", name="uq_customer_delivery_cutoff_override"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), nullable=False, index=True)
+    delivery_date = Column(Date, nullable=False, index=True)
+    cutoff_at = Column(DateTime(timezone=True), nullable=False)
+    reason = Column(Text, nullable=False)
+    updated_by = Column(String(100), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime(timezone=True), nullable=True)
+
+    customer = relationship("Customer", back_populates="cutoff_overrides")
 
 
 class OrderEditSession(Base):

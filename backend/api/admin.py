@@ -12,11 +12,13 @@ from database import get_db
 from model.models import (
     Customer, CustomerUser, DeliverySite, PackageTemplate, AddonTemplate,
     CustomerPackage, CustomerAddon, CustomerAddonPackage, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection,
-    AuditLog, PaymentRecord, WhatsAppDelivery, OrderEditSession,
+    AuditLog, PaymentRecord, WhatsAppDelivery, OrderEditSession, CustomerOrderCutoffOverride,
     AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_DELETE, AUDIT_ACTION_ORDER_CANCEL,
     AUDIT_ACTION_ORDER_STATUS_CHANGE, AUDIT_ACTION_CUSTOMER_UPDATE,
     AUDIT_ACTION_CUSTOMER_BLOCK, AUDIT_ACTION_CUSTOMER_UNBLOCK,
     AUDIT_ACTION_CUSTOMER_TEMP_ACCESS, AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END,
+    AUDIT_ACTION_CUSTOMER_CUTOFF_UPDATE, AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE,
+    AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE_END,
     AUDIT_ACTION_PAYMENT_CREATE, AUDIT_ACTION_PAYMENT_DELETE, AUDIT_ACTION_WHATSAPP_SEND
 )
 from schema.schemas import (
@@ -37,6 +39,7 @@ from api.order_rules import (
     MALAYSIA_TZ,
     MONEY_EPSILON,
     ensure_aware_utc,
+    to_iso_local,
     calculate_customers_financials,
     malaysia_now,
     order_cutoff_window,
@@ -87,6 +90,17 @@ class OrderStatusChangeRequest(BaseModel):
 
 
 class AdminCancelOrderRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class CustomerCutoffSettingsRequest(BaseModel):
+    day_offset: int = Field(ge=0, le=1)
+    cutoff_time: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+    reason: str = Field(min_length=3, max_length=500)
+
+
+class CustomerCutoffOverrideRequest(BaseModel):
+    cutoff_at: datetime
     reason: str = Field(min_length=3, max_length=500)
     expected_order_version: Optional[int] = None
 
@@ -299,6 +313,146 @@ def update_customer(customer_id: int, req: CustomerUpdate, db: Session = Depends
     _decorate_customer_access(customer, access)
     db.commit()
     return customer
+
+
+@router.put("/customers/{customer_id}/cutoff-settings")
+def update_customer_cutoff_settings(
+    customer_id: int,
+    req: CustomerCutoffSettingsRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    customer = db.query(Customer).filter(Customer.id == customer_id).with_for_update().first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    before = {
+        "day_offset": customer.order_cutoff_day_offset,
+        "cutoff_time": customer.order_cutoff_time,
+    }
+    customer.order_cutoff_day_offset = req.day_offset
+    customer.order_cutoff_time = req.cutoff_time
+    operator_name, operator_role = _operator(auth)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_CUSTOMER_CUTOFF_UPDATE,
+        description=f"更新客户 {customer.company_name} 的默认下单截止规则",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=customer.id,
+        target_label=customer.company_name,
+        extra_data={
+            "reason": req.reason.strip(),
+            "before": before,
+            "after": {"day_offset": req.day_offset, "cutoff_time": req.cutoff_time},
+        },
+    )
+    db.commit()
+    return {"message": "默认下单截止规则已更新"}
+
+
+@router.get("/customers/{customer_id}/cutoff-overrides")
+def get_customer_cutoff_overrides(customer_id: int, db: Session = Depends(get_db)):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    rows = (
+        db.query(CustomerOrderCutoffOverride)
+        .filter(CustomerOrderCutoffOverride.customer_id == customer_id)
+        .order_by(CustomerOrderCutoffOverride.delivery_date.desc())
+        .limit(50)
+        .all()
+    )
+    return [{
+        "id": row.id,
+        "delivery_date": row.delivery_date.isoformat(),
+        "cutoff_at": ensure_aware_utc(row.cutoff_at).astimezone(MALAYSIA_TZ).isoformat(),
+        "reason": row.reason,
+        "updated_by": row.updated_by,
+        "updated_at": to_iso_local(row.updated_at),
+    } for row in rows]
+
+
+@router.put("/customers/{customer_id}/cutoff-overrides/{delivery_date}")
+def set_customer_cutoff_override(
+    customer_id: int,
+    delivery_date: date,
+    req: CustomerCutoffOverrideRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    cutoff_at = req.cutoff_at
+    if cutoff_at.tzinfo is None:
+        raise HTTPException(status_code=400, detail="截止时间必须包含时区")
+    cutoff_local = cutoff_at.astimezone(MALAYSIA_TZ)
+    if cutoff_local.date() > delivery_date:
+        raise HTTPException(status_code=400, detail="截止时间不能晚于配送日期")
+    operator_name, operator_role = _operator(auth)
+    row = (
+        db.query(CustomerOrderCutoffOverride)
+        .filter(
+            CustomerOrderCutoffOverride.customer_id == customer_id,
+            CustomerOrderCutoffOverride.delivery_date == delivery_date,
+        )
+        .with_for_update()
+        .first()
+    )
+    before = row.cutoff_at.isoformat() if row else None
+    if not row:
+        row = CustomerOrderCutoffOverride(customer_id=customer_id, delivery_date=delivery_date)
+        db.add(row)
+    row.cutoff_at = cutoff_local.astimezone(timezone.utc)
+    row.reason = req.reason.strip()
+    row.updated_by = operator_name
+    row.updated_at = datetime.now(timezone.utc)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE,
+        description=f"为客户 {customer.company_name} 手动设置 {delivery_date.isoformat()} 配送订单截止时间",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=customer.id,
+        target_label=customer.company_name,
+        extra_data={"reason": row.reason, "delivery_date": delivery_date.isoformat(), "before": before, "after": cutoff_local.isoformat()},
+    )
+    db.commit()
+    return {"message": "指定配送日期的截止时间已设置", "cutoff_at": cutoff_local.isoformat()}
+
+
+@router.delete("/customers/{customer_id}/cutoff-overrides/{delivery_date}")
+def delete_customer_cutoff_override(
+    customer_id: int,
+    delivery_date: date,
+    reason: str,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    if len(reason.strip()) < 3:
+        raise HTTPException(status_code=400, detail="必须填写至少3个字的操作原因")
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    row = db.query(CustomerOrderCutoffOverride).filter(
+        CustomerOrderCutoffOverride.customer_id == customer_id,
+        CustomerOrderCutoffOverride.delivery_date == delivery_date,
+    ).first()
+    if not customer or not row:
+        raise HTTPException(status_code=404, detail="临时截止时间不存在")
+    operator_name, operator_role = _operator(auth)
+    old_cutoff = ensure_aware_utc(row.cutoff_at).astimezone(MALAYSIA_TZ).isoformat()
+    db.delete(row)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE_END,
+        description=f"取消客户 {customer.company_name} 的 {delivery_date.isoformat()} 手动截止时间",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=customer.id,
+        target_label=customer.company_name,
+        extra_data={"reason": reason.strip(), "delivery_date": delivery_date.isoformat(), "previous_cutoff_at": old_cutoff},
+    )
+    db.commit()
+    return {"message": "已恢复该配送日期的客户默认截止规则"}
 
 
 @router.put("/customers/{customer_id}/order-access")

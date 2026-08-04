@@ -15,6 +15,8 @@ SQLITE_COLUMNS = {
         "temporary_access_until": "DATETIME",
         "temporary_access_reason": "TEXT",
         "restriction_updated_by": "VARCHAR(100)",
+        "order_cutoff_day_offset": "INTEGER NOT NULL DEFAULT 1",
+        "order_cutoff_time": "VARCHAR(5) NOT NULL DEFAULT '18:00'",
     },
     "orders": {
         "do_number": "VARCHAR(50)",

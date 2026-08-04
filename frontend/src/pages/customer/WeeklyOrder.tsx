@@ -43,11 +43,11 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
     btnEdit: isEn ? 'Edit' : '修改',
     btnCancel: isEn ? 'Cancel' : '取消',
     tooltipModify: isEn ? 'Modify portions or packages' : '修改订单份数或套餐',
-    tooltipNoModify: isEn ? 'Order in process, cannot modify' : '订单已在处理中，不可修改',
+    tooltipNoModify: isEn ? 'Orders cannot be modified from the day before delivery; processed orders also require customer service' : '配送日前一天起不能修改；已进入处理流程的订单也须联系客服',
     tooltipCancel: isEn ? 'Cancel order and retain its record' : '取消订单并保留记录',
     tooltipNoCancel: isEn ? 'Order in process, cannot cancel' : '订单已在处理中，不可取消',
     policyTitle: isEn ? 'Ordering Policy' : '温馨订餐提示',
-    policyDesc: isEn ? 'Next-day orders close at 6:00 PM on the previous day. Start before 6:00 PM to receive a one-time submission window until 6:10 PM. Same-day or processed orders require customer service. Frozen accounts may reduce or cancel existing orders before cutoff, but cannot increase quantities.' : '次日配送订单须在前一天下午 6:00 前处理；在 6:00 前开始操作，可于 6:10 前完成一次提交。当天订单或已进入处理流程的订单须联系客服。冻结账户可在截止前减少或取消现有订单，但不能增加数量。',
+    policyDesc: isEn ? 'Orders may only be modified at least 2 days before delivery. From the day before delivery, changes require customer service. Existing cancellation cutoff rules still apply. Processed orders also require customer service. Frozen accounts may reduce or cancel eligible orders, but cannot increase quantities.' : '订单仅可在配送日前至少 2 天由客户自行修改；从配送日前一天起如需修改，请联系客服。取消订单仍按原有截止时间执行；已进入处理流程的订单也须联系客服。冻结账户只能减少或取消符合条件的订单，不能增加数量。',
   };
 
   const [userInfo, setUserInfo] = useState<any>(null);

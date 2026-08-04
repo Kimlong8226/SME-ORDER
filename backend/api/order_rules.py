@@ -11,6 +11,7 @@ from model.models import (
     AUDIT_ACTION_CUSTOMER_BLOCK,
     AUDIT_ACTION_CUSTOMER_UNBLOCK,
     Customer,
+    CustomerOrderCutoffOverride,
     Order,
     OrderDetail,
     PaymentRecord,
@@ -123,6 +124,60 @@ def _calculate_financials_from_records(
         "overdue_amount": round(overdue_amount, 2),
         "oldest_overdue_due_date": oldest_overdue_due_date,
         "order_balances": order_balances,
+    }
+
+
+def customer_order_cutoff_window(
+    db: Session,
+    customer: Customer,
+    delivery_date: date,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Resolve staff-configured one-date override, then the customer's default rule."""
+    current = (now or malaysia_now()).astimezone(MALAYSIA_TZ)
+    override = (
+        db.query(CustomerOrderCutoffOverride)
+        .filter(
+            CustomerOrderCutoffOverride.customer_id == customer.id,
+            CustomerOrderCutoffOverride.delivery_date == delivery_date,
+        )
+        .first()
+    )
+    if override:
+        cutoff_at = ensure_aware_utc(override.cutoff_at).astimezone(MALAYSIA_TZ)
+        source = "manual_override"
+        override_reason = override.reason
+    else:
+        try:
+            hour, minute = map(int, (customer.order_cutoff_time or "18:00").split(":"))
+        except (TypeError, ValueError):
+            hour, minute = 18, 0
+        day_offset = 0 if customer.order_cutoff_day_offset == 0 else 1
+        cutoff_at = datetime.combine(
+            delivery_date - timedelta(days=day_offset),
+            time(hour, minute),
+            tzinfo=MALAYSIA_TZ,
+        )
+        source = "customer_default" if (day_offset, hour, minute) != (1, 18, 0) else "system_default"
+        override_reason = None
+
+    grace_deadline = cutoff_at + timedelta(minutes=ORDER_GRACE_MINUTES)
+    if current < cutoff_at:
+        phase = "open"
+    elif current <= grace_deadline:
+        phase = "grace"
+    else:
+        phase = "closed"
+    return {
+        "server_now": current.isoformat(),
+        "timezone": "Asia/Kuala_Lumpur",
+        "cutoff_at": cutoff_at.isoformat(),
+        "grace_deadline": grace_deadline.isoformat(),
+        "phase": phase,
+        "can_start_session": phase == "open",
+        "is_delivery_day_or_past": delivery_date < current.date(),
+        "cutoff_source": source,
+        "override_reason": override_reason,
     }
 
 

@@ -516,11 +516,21 @@ export const InvoiceManagement: React.FC = () => {
       style.id = styleId;
       document.head.appendChild(style);
     }
+    const isMealVolumeReport = containerId === 'volume-full-print-container';
+    const pageOrientation = isMealVolumeReport ? 'landscape' : 'portrait';
     style.innerHTML = `
       @media print {
         @page {
-          size: A4 portrait;
-          margin: 12mm 10mm;
+          size: A4 ${pageOrientation};
+          margin: ${isMealVolumeReport ? '8mm' : '12mm 10mm'};
+        }
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          overflow: visible !important;
+          background: #fff !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
         }
         body * { visibility: hidden !important; }
         #${containerId}, #${containerId} * { visibility: visible !important; }
@@ -531,36 +541,70 @@ export const InvoiceManagement: React.FC = () => {
           width: 100% !important;
           padding: 0 !important;
           margin: 0 !important;
+          max-width: 100% !important;
+          box-sizing: border-box !important;
+          overflow: visible !important;
           background: #fff !important;
         }
-        .ant-table {
+        #${containerId} .ant-table-wrapper,
+        #${containerId} .ant-spin-nested-loading,
+        #${containerId} .ant-spin-container,
+        #${containerId} .ant-table {
           width: 100% !important;
+          max-width: 100% !important;
         }
-        .ant-table-container, .ant-table-content {
+        #${containerId} .ant-table-container, #${containerId} .ant-table-content {
           overflow: visible !important;
           width: 100% !important;
+          max-width: 100% !important;
         }
-        table {
+        #${containerId} table {
           width: 100% !important;
-          table-layout: auto !important;
+          min-width: 0 !important;
+          table-layout: ${isMealVolumeReport ? 'fixed' : 'auto'} !important;
         }
-        th, td {
-          white-space: nowrap !important;
-          font-size: 11px !important;
-          padding: 6px 8px !important;
+        #${containerId} th, #${containerId} td {
+          white-space: ${isMealVolumeReport ? 'normal' : 'nowrap'} !important;
+          overflow-wrap: anywhere !important;
+          word-break: break-word !important;
+          font-size: ${isMealVolumeReport ? '8.5pt' : '11px'} !important;
+          line-height: 1.2 !important;
+          padding: ${isMealVolumeReport ? '4px 5px' : '6px 8px'} !important;
+          vertical-align: middle !important;
         }
         /* 允许明细文本例正常折行 */
-        td.cell-break, .breakdown-cell {
+        #${containerId} td.cell-break, #${containerId} .breakdown-cell {
           white-space: normal !important;
           word-break: break-word !important;
         }
-        .ant-tag {
+        #${containerId} .ant-tag {
           font-size: 10px !important;
           padding: 0 4px !important;
           margin: 1px !important;
         }
         /* 隐藏打印无用的翻页器、按钮及 no-print 元素 */
-        .ant-pagination, .ant-pagination *, .no-print, .no-print * {
+        #${containerId} thead { display: table-header-group !important; }
+        #${containerId} tfoot { display: table-footer-group !important; }
+        #${containerId} tr,
+        #${containerId} .ant-card {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        ${isMealVolumeReport ? `
+          #${containerId} .ant-card-body { padding: 7px 9px !important; }
+          #${containerId} .ant-statistic-title { font-size: 8.5pt !important; margin-bottom: 2px !important; }
+          #${containerId} .ant-statistic-content { font-size: 15pt !important; line-height: 1.2 !important; }
+          #${containerId} .volume-records-table col:nth-child(1) { width: 14% !important; }
+          #${containerId} .volume-records-table col:nth-child(2) { width: 9% !important; }
+          #${containerId} .volume-records-table col:nth-child(3) { width: 18% !important; }
+          #${containerId} .volume-records-table col:nth-child(4) { width: 31% !important; }
+          #${containerId} .volume-records-table col:nth-child(5) { width: 9% !important; }
+          #${containerId} .volume-records-table col:nth-child(6) { width: 9% !important; }
+          #${containerId} .volume-records-table col:nth-child(7) { width: 10% !important; }
+          #${containerId} .ant-table-content::-webkit-scrollbar { display: none !important; }
+        ` : ''}
+        #${containerId} .ant-pagination, #${containerId} .ant-pagination *,
+        #${containerId} .no-print, #${containerId} .no-print * {
           display: none !important;
         }
       }
@@ -1360,6 +1404,7 @@ export const InvoiceManagement: React.FC = () => {
 
               <Title level={5} style={{ marginBottom: 12 }}>{isEn ? 'Daily Delivery Orders Volume Breakdown' : '每日送货 DO 数量明细记录'}</Title>
               <Table 
+                className="volume-records-table"
                 loading={loadingVolume}
                 dataSource={mealVolumeData.records || []}
                 rowKey="order_id"

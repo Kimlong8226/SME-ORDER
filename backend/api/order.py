@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 import re
 
@@ -21,7 +21,7 @@ from api.order_rules import (
     MALAYSIA_TZ,
     TEMP_ACCESS_DELIVERY_DAYS,
     malaysia_now,
-    order_cutoff_window,
+    customer_order_cutoff_window,
     sync_customer_access,
 )
 from services.whatsapp_service import ensure_do_number
@@ -88,15 +88,18 @@ def _validate_customer_window(
     delivery_date: date,
     edit_session_id: str | None,
 ) -> tuple[dict, OrderEditSession | None]:
-    window = order_cutoff_window(delivery_date)
+    customer = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="客户不存在")
+    window = customer_order_cutoff_window(db, customer, delivery_date)
     if window["is_delivery_day_or_past"]:
         raise HTTPException(status_code=409, detail="配送当天或过去日期不能由顾客下单、修改或取消，请联系客服处理")
     if window["phase"] == "closed":
-        raise HTTPException(status_code=409, detail="该配送日期已超过下午 6:10 的提交宽限期，请联系客服处理")
+        raise HTTPException(status_code=409, detail="该配送日期已经超过下单截止时间，请联系后台处理")
     if window["phase"] == "open" and not edit_session_id:
         return window, None
     if not edit_session_id:
-        raise HTTPException(status_code=409, detail="下单时间已截止；只有下午 6:00 前开始的操作可在 6:10 前提交")
+        raise HTTPException(status_code=409, detail="下单时间已截止；只有截止前开始的操作可在10分钟宽限期内提交")
 
     session = (
         db.query(OrderEditSession)
@@ -117,12 +120,12 @@ def _validate_customer_window(
         started_at = started_at.replace(tzinfo=timezone.utc)
     cutoff_at = datetime.fromisoformat(window["cutoff_at"]).astimezone(timezone.utc)
     if started_at.astimezone(timezone.utc) >= cutoff_at:
-        raise HTTPException(status_code=409, detail="本次操作并非在下午 6:00 前开始，不能使用宽限期")
+        raise HTTPException(status_code=409, detail="本次操作并非在截止时间前开始，不能使用宽限期")
     expires_at = session.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
     if datetime.now(timezone.utc) > expires_at.astimezone(timezone.utc):
-        raise HTTPException(status_code=409, detail="本次提交资格已于下午 6:10 失效，请联系客服处理")
+        raise HTTPException(status_code=409, detail="本次提交资格已超过宽限期，请联系后台处理")
     return window, session
 
 @router.get("/customer-profile/{customer_id}", dependencies=[Depends(require_customer_access)])
@@ -160,8 +163,9 @@ def get_customer_access_status(customer_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/order-window", dependencies=[Depends(require_customer_access)])
-def get_order_window(customer_id: int, delivery_date: date):
-    return order_cutoff_window(delivery_date)
+def get_order_window(customer_id: int, delivery_date: date, db: Session = Depends(get_db)):
+    customer, _access = _get_customer_and_access(db, customer_id)
+    return customer_order_cutoff_window(db, customer, delivery_date)
 
 
 @router.post("/start-session", dependencies=[Depends(require_customer_access)])
@@ -171,7 +175,7 @@ def start_order_session(
     db: Session = Depends(get_db),
 ):
     customer, access = _get_customer_and_access(db, customer_id)
-    window = order_cutoff_window(req.delivery_date)
+    window = customer_order_cutoff_window(db, customer, req.delivery_date)
     if window["is_delivery_day_or_past"]:
         raise HTTPException(status_code=409, detail="配送当天或过去日期不能由顾客自行操作")
     if window["phase"] != "open":
@@ -260,6 +264,8 @@ def submit_matrix_orders(
             if existing_order and existing_order.status != "submitted":
                 raise HTTPException(status_code=409, detail="该订单已进入处理流程，请联系客服修改")
             if existing_order:
+                if req.delivery_date <= malaysia_now().date() + timedelta(days=1):
+                    raise HTTPException(status_code=409, detail="配送日前一天起不能由顾客修改订单，请联系客服处理")
                 if req.expected_order_version is None:
                     raise HTTPException(status_code=409, detail="该日期已有订单，请从订单记录进入修改，避免覆盖现有内容")
                 if existing_order.version != req.expected_order_version:
@@ -512,14 +518,16 @@ def get_customer_order_history(customer_id: int, db: Session = Depends(get_db)):
                 "quantity": d.quantity,
                 "remark": display_remark
             })
-        window = order_cutoff_window(order.delivery_date)
+        window = customer_order_cutoff_window(db, order.customer, order.delivery_date)
         financial = balance_by_order.get(order.id)
         can_start_action = order.status == "submitted" and window["phase"] == "open" and not window["is_delivery_day_or_past"]
+        can_modify = can_start_action and order.delivery_date >= malaysia_now().date() + timedelta(days=2)
         results.append({
             "id": order.id,
             "do_number": order.do_number,
             "delivery_date": order.delivery_date.strftime("%Y-%m-%d"),
             "site_name": order.site.site_name,
+            "site_address": order.site.address,
             "site_id": order.delivery_site_id,
             "status": order.status,
             "remark": order.remark,
@@ -532,7 +540,7 @@ def get_customer_order_history(customer_id: int, db: Session = Depends(get_db)):
             } if financial else None),
             "details": details_list,
             "customer_actions": {
-                "can_modify": can_start_action,
+                "can_modify": can_modify,
                 "can_cancel": can_start_action,
                 "restriction_mode": "reduce_only" if access["effective_is_blocked"] else "full",
                 "cutoff_at": window["cutoff_at"],

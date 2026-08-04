@@ -347,6 +347,59 @@ class OrderRestrictionApiTests(unittest.TestCase):
         self.assertNotIn(unassigned.id, package_ids)
         self.assertNotIn(hidden_template.id, package_ids)
 
+    def test_customer_cannot_modify_order_on_day_before_delivery(self):
+        delivery = malaysia_now().date() + timedelta(days=1)
+        order = Order(
+            customer_id=self.customer_id,
+            delivery_site_id=self.site_id,
+            delivery_date=delivery,
+            status="submitted",
+            version=1,
+        )
+        self.db.add(order)
+        self.db.flush()
+        self.db.add(OrderDetail(
+            order_id=order.id,
+            meal_section_id=self.section_id,
+            customer_package_id=self.customer_package_id,
+            quantity=5,
+            final_unit_price=12,
+        ))
+        self.db.commit()
+
+        history = self.client.get(
+            f"/orders/customer-history/{self.customer_id}",
+            headers=self.customer_headers,
+        )
+        self.assertEqual(history.status_code, 200, history.text)
+        self.assertFalse(history.json()[0]["customer_actions"]["can_modify"])
+
+        session = self.client.post(
+            f"/orders/start-session?customer_id={self.customer_id}",
+            json={"delivery_date": delivery.isoformat()},
+            headers=self.customer_headers,
+        )
+        if session.status_code == 409:
+            self.assertIn("已截止", session.json()["detail"])
+            return
+        self.assertEqual(session.status_code, 200, session.text)
+        modify = self.client.post(
+            f"/orders/matrix-submit?customer_id={self.customer_id}",
+            json={
+                "delivery_date": delivery.isoformat(),
+                "edit_session_id": session.json()["edit_session_id"],
+                "expected_order_version": 1,
+                "items": [{
+                    "delivery_site_id": self.site_id,
+                    "meal_section_id": self.section_id,
+                    "customer_package_id": self.template_id,
+                    "quantity": 4,
+                }],
+            },
+            headers=self.customer_headers,
+        )
+        self.assertEqual(modify.status_code, 409, modify.text)
+
     def test_admin_customer_list_and_dashboard_stats(self):
         customers = self.client.get("/admin/customers", headers=self.staff_headers)
         self.assertEqual(customers.status_code, 200, customers.text)

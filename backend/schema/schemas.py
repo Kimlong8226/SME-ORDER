@@ -71,6 +71,8 @@ class CustomerBase(BaseModel):
     tax_number: Optional[str] = None
     billing_cycle: str = "30"
     is_blocked: bool = False
+    order_cutoff_day_offset: int = Field(default=1, ge=0, le=1)
+    order_cutoff_time: str = Field(default="18:00", pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 class CustomerCreate(CustomerBase):
     username: str  # 初始订餐员账号

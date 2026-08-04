@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { App, Table, Button, Modal, Form, Input, Select, Card, Tag, Space, Row, Col, Typography, Divider, Popconfirm } from 'antd';
+import { App, Table, Button, Modal, Form, Input, Select, Card, Tag, Space, Row, Col, Typography, Divider, Popconfirm, DatePicker } from 'antd';
 import { PlusOutlined, EnvironmentOutlined, BankOutlined, SafetyCertificateOutlined, LockOutlined, UnlockOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, ClockCircleOutlined } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
+import dayjs from 'dayjs';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -86,6 +87,11 @@ export const CustomerManagement: React.FC = () => {
   const [historyVisible, setHistoryVisible] = useState(false);
   const [historyRecords, setHistoryRecords] = useState<any[]>([]);
   const [historyCustomer, setHistoryCustomer] = useState<any | null>(null);
+  const [cutoffVisible, setCutoffVisible] = useState(false);
+  const [cutoffCustomer, setCutoffCustomer] = useState<any | null>(null);
+  const [cutoffOverrides, setCutoffOverrides] = useState<any[]>([]);
+  const [cutoffForm] = Form.useForm();
+  const [overrideForm] = Form.useForm();
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -227,6 +233,70 @@ export const CustomerManagement: React.FC = () => {
     }
   };
 
+  const openCutoffSettings = async (customer: any) => {
+    setCutoffCustomer(customer);
+    cutoffForm.setFieldsValue({
+      day_offset: customer.order_cutoff_day_offset ?? 1,
+      cutoff_time: customer.order_cutoff_time || '18:00',
+      reason: '',
+    });
+    overrideForm.resetFields();
+    setCutoffVisible(true);
+    try {
+      const res = await axiosInstance.get(`/admin/customers/${customer.id}/cutoff-overrides`);
+      setCutoffOverrides(res.data || []);
+    } catch {
+      setCutoffOverrides([]);
+    }
+  };
+
+  const saveDefaultCutoff = async (values: any) => {
+    if (!cutoffCustomer) return;
+    try {
+      await axiosInstance.put(`/admin/customers/${cutoffCustomer.id}/cutoff-settings`, values);
+      message.success(isEn ? 'Default cutoff rule updated' : '客户默认下单截止规则已更新');
+      await fetchCustomers();
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || (isEn ? 'Failed to update cutoff rule' : '更新截止规则失败'));
+    }
+  };
+
+  const saveCutoffOverride = async (values: any) => {
+    if (!cutoffCustomer) return;
+    const deliveryDate = values.delivery_date.format('YYYY-MM-DD');
+    const cutoffAt = `${values.cutoff_date.format('YYYY-MM-DD')}T${values.cutoff_time}:00+08:00`;
+    try {
+      await axiosInstance.put(`/admin/customers/${cutoffCustomer.id}/cutoff-overrides/${deliveryDate}`, {
+        cutoff_at: cutoffAt,
+        reason: values.reason,
+      });
+      message.success(isEn ? 'Manual cutoff saved' : '指定配送日期的截止时间已设置');
+      overrideForm.resetFields();
+      const res = await axiosInstance.get(`/admin/customers/${cutoffCustomer.id}/cutoff-overrides`);
+      setCutoffOverrides(res.data || []);
+    } catch (err: any) {
+      message.error(err.response?.data?.detail || (isEn ? 'Failed to save manual cutoff' : '保存手动截止时间失败'));
+    }
+  };
+
+  const cancelCutoffOverride = async (record: any) => {
+    if (!cutoffCustomer) return;
+    let reason = '';
+    Modal.confirm({
+      title: isEn ? 'Restore customer default cutoff?' : '恢复客户默认截止规则？',
+      content: <Input.TextArea rows={3} placeholder={labels.reasonPlaceholder} onChange={(e) => { reason = e.target.value; }} />,
+      onOk: async () => {
+        if (reason.trim().length < 3) {
+          message.error(labels.reasonRequired);
+          throw new Error('reason_required');
+        }
+        await axiosInstance.delete(`/admin/customers/${cutoffCustomer.id}/cutoff-overrides/${record.delivery_date}`, { params: { reason: reason.trim() } });
+        setCutoffOverrides((items) => items.filter((item) => item.id !== record.id));
+        message.success(isEn ? 'Customer default cutoff restored' : '已恢复客户默认截止规则');
+      },
+    });
+  };
+
   const columns = [
     {
       title: t('customer.companyName'),
@@ -325,6 +395,20 @@ export const CustomerManagement: React.FC = () => {
         ) : (
           <Tag color="success" style={{ fontSize: 13, padding: '2px 8px' }}>{labels.statusActive}</Tag>
         )
+      ),
+    },
+    {
+      title: isEn ? 'Order Cutoff' : '最后下单时间',
+      key: 'order_cutoff',
+      render: (record: any) => (
+        <div>
+          <Tag color={record.order_cutoff_day_offset === 0 ? 'purple' : 'blue'}>
+            {record.order_cutoff_day_offset === 0
+              ? (isEn ? 'Delivery day' : '配送当天')
+              : (isEn ? 'Previous day' : '配送前一天')} {record.order_cutoff_time || '18:00'}
+          </Tag>
+          <div><Button type="link" size="small" onClick={() => openCutoffSettings(record)}>{isEn ? 'Manage' : '后台设置'}</Button></div>
+        </div>
       ),
     },
     {

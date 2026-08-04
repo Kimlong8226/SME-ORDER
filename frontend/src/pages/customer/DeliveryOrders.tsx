@@ -270,6 +270,18 @@ export const DeliveryOrders: React.FC = () => {
     >
       <style>{`
         @media print {
+          @page {
+            size: A4 portrait;
+            margin: 10mm;
+          }
+          html, body {
+            margin: 0 !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            background: #fff !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           #root {
             display: none !important;
           }
@@ -296,6 +308,51 @@ export const DeliveryOrders: React.FC = () => {
             box-shadow: none !important;
             border: none !important;
             padding: 0 !important;
+          }
+          #customer-do-print-content {
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-sizing: border-box !important;
+            color: #0f172a !important;
+          }
+          #customer-do-print-content .do-header {
+            margin-bottom: 5mm !important;
+            padding-bottom: 4mm !important;
+            border-bottom: 2px solid #0f172a !important;
+          }
+          #customer-do-print-content .do-customer-panel,
+          #customer-do-print-content .do-remarks,
+          #customer-do-print-content .do-signatures {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          #customer-do-print-content .do-customer-panel {
+            margin-bottom: 5mm !important;
+            padding: 4mm !important;
+          }
+          #customer-do-print-content .do-details-table {
+            width: 100% !important;
+            table-layout: fixed !important;
+          }
+          #customer-do-print-content .do-details-table thead { display: table-header-group !important; }
+          #customer-do-print-content .do-details-table tr {
+            break-inside: avoid !important;
+            page-break-inside: avoid !important;
+          }
+          #customer-do-print-content .do-details-table th,
+          #customer-do-print-content .do-details-table td {
+            padding: 3mm 2mm !important;
+            font-size: 10pt !important;
+            line-height: 1.25 !important;
+            white-space: normal !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+          }
+          #customer-do-print-content .do-signatures {
+            margin-top: 12mm !important;
+            padding-top: 5mm !important;
           }
           .ant-modal-close,
           .ant-modal-footer {
@@ -351,64 +408,41 @@ export const DeliveryOrders: React.FC = () => {
             {labels.btnPrint}
           </Button>
         ]}
-        width={680}
+        width={760}
         styles={{ body: { padding: '24px 8px' } }}
         style={{ borderRadius: 16 }}
         destroyOnHidden
       >
         {selectedDo ? (
-          <div style={{ padding: '0 16px', fontFamily: 'monospace, sans-serif' }}>
+          <div id="customer-do-print-content" style={{ padding: '0 16px', fontFamily: 'Arial, "Microsoft YaHei", sans-serif' }}>
             {/* DO Header */}
-            <div style={{ textAlign: 'center', marginBottom: 20 }}>
+            <div className="do-header" style={{ textAlign: 'center', marginBottom: 20 }}>
               <Title level={3} style={{ margin: 0, letterSpacing: '2px', fontWeight: 'bold' }}>DELIVERY ORDER</Title>
               <Text strong style={{ color: '#4b5563' }}>{labels.doSlipTitle}</Text>
             </div>
 
             <Divider style={{ margin: '12px 0' }} />
 
-            <Row gutter={16} style={{ marginBottom: 16 }}>
-              <Col span={12}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Text><Text strong>{labels.supplier}:</Text> {labels.supplierVal}</Text>
-                  <Text><Text strong>{labels.address}:</Text> Johor Bahru Industrial Zone</Text>
-                  <Text><Text strong>{labels.phone}:</Text> +60 7-555 8899</Text>
-                </div>
-              </Col>
-              <Col span={12} style={{ borderLeft: '1px dashed #cbd5e1', paddingLeft: 20 }}>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  <Text><Text strong>{labels.colDoNo}:</Text> {selectedDo.do_number || '-'}</Text>
-                  <Text><Text strong>{labels.colDate}:</Text> {selectedDo.delivery_date || labels.unknown}</Text>
+            <div className="do-customer-panel" style={{ background: '#f8fafc', padding: 16, borderRadius: 8, border: '1px solid #cbd5e1' }}>
+              <Row gutter={[20, 10]}>
+                <Col span={14}><Text><Text strong>{labels.receiverCompany}:</Text> {customerProfile?.company_name || labels.unknown}</Text></Col>
+                <Col span={10}><Text><Text strong>{labels.colDoNo}:</Text> {selectedDo.do_number || '-'}</Text></Col>
+                <Col span={14}><Text><Text strong>{labels.colSite}:</Text> {selectedDo.site_name || labels.unknown}</Text></Col>
+                <Col span={10}><Text><Text strong>{labels.colDate}:</Text> {selectedDo.delivery_date || labels.unknown}</Text></Col>
+                <Col span={24}>
                   <Text>
-                    <Text strong>{labels.colPaymentStatus}:</Text>{' '}
-                    <span 
-                      style={{ 
-                        color: calculatePaymentStatus(selectedDo).statusText === labels.statusPaid ? '#10b981' : (calculatePaymentStatus(selectedDo).isOverdue ? '#ef4444' : '#e67e22'),
-                        fontWeight: 'bold' 
-                      }}
-                    >
-                      {calculatePaymentStatus(selectedDo).statusText} ({calculatePaymentStatus(selectedDo).dueText})
-                    </span>
+                    <Text strong>{labels.address}:</Text>{' '}
+                    {selectedDo.site_address || customerProfile?.sites?.find((site: any) => site.id === selectedDo.site_id)?.address || labels.unknown}
                   </Text>
-                </div>
-              </Col>
-            </Row>
-
-            <Divider style={{ margin: '12px 0' }} />
-
-            {/* DO 收货方客户信息 */}
-            <div style={{ background: '#f8fafc', padding: 12, borderRadius: 8, marginBottom: 20, border: '1px solid #f1f5f9' }}>
-              <Row gutter={16}>
-                <Col span={12}>
-                  <Text><Text strong>{labels.receiverCompany}:</Text> {customerProfile?.company_name || labels.unknown}</Text>
-                </Col>
-                <Col span={12}>
-                  <Text><Text strong>{labels.colSite}:</Text> {selectedDo.site_name || labels.unknown}</Text>
                 </Col>
               </Row>
             </div>
 
+            <Divider style={{ margin: '12px 0' }} />
+
+            {/* DO 收货方客户信息 */}
             {/* DO 明细表格 (不显示金额) */}
-            <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 30 }}>
+            <table className="do-details-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 30 }}>
               <thead>
                 <tr style={{ borderBottom: '2px solid #0f172a', textAlign: 'left' }}>
                   <th style={{ padding: '8px 4px', width: '30%' }}>{labels.mealCategory}</th>
@@ -429,14 +463,14 @@ export const DeliveryOrders: React.FC = () => {
 
             {/* 订单备注 */}
             {selectedDo.remark && (
-              <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: 12, borderRadius: 8, marginBottom: 30 }}>
+              <div className="do-remarks" style={{ background: '#fffbeb', border: '1px solid #fef3c7', padding: 12, borderRadius: 8, marginBottom: 30 }}>
                 <Text strong style={{ color: '#b45309', display: 'block', marginBottom: 4 }}>{labels.remarkTitle}:</Text>
                 <Text style={{ color: '#78350f', fontSize: 13 }}>{selectedDo.remark}</Text>
               </div>
             )}
 
             {/* 签收签字栏 */}
-            <Row gutter={32} style={{ marginTop: 40, paddingTop: 20 }}>
+            <Row className="do-signatures" gutter={32} style={{ marginTop: 40, paddingTop: 20 }}>
               <Col span={12} style={{ textAlign: 'center' }}>
                 <div style={{ width: '80%', margin: '0 auto', borderBottom: '1px solid #94a3b8', height: 40 }}></div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginTop: 8 }}>{labels.authorizedSignatory}</Text>
