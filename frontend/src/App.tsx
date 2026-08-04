@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useEffect } from 'react';
+import React, { Suspense, useState, useEffect } from 'react';
 import { ConfigProvider, Layout, Menu, Button, Space, Typography, Tooltip, App as AntdApp, Result, Card, Spin } from 'antd';
 
 import {
@@ -12,21 +12,22 @@ import './i18n';
 import './index.css';
 import { brightTheme } from './theme/themeConfig';
 import { Login } from './pages/Login';
+import { lazyWithReload } from './utils/lazyWithReload';
 
-const DashboardOverview = lazy(() => import('./pages/admin/DashboardOverview').then((module) => ({ default: module.DashboardOverview })));
-const CustomerManagement = lazy(() => import('./pages/admin/CustomerManagement').then((module) => ({ default: module.CustomerManagement })));
-const StaffManagement = lazy(() => import('./pages/admin/StaffManagement').then((module) => ({ default: module.StaffManagement })));
-const PackageManagement = lazy(() => import('./pages/admin/PackageManagement').then((module) => ({ default: module.PackageManagement })));
-const ClientMenuLibrary = lazy(() => import('./pages/admin/ClientMenuLibrary').then((module) => ({ default: module.ClientMenuLibrary })));
-const OrderCalendar = lazy(() => import('./pages/admin/OrderCalendar').then((module) => ({ default: module.OrderCalendar })));
-const InvoiceManagement = lazy(() => import('./pages/admin/InvoiceManagement').then((module) => ({ default: module.InvoiceManagement })));
-const DailyOrderStatus = lazy(() => import('./pages/admin/DailyOrderStatus').then((module) => ({ default: module.DailyOrderStatus })));
-const MatrixOrder = lazy(() => import('./pages/customer/MatrixOrder').then((module) => ({ default: module.MatrixOrder })));
-const OrderHistory = lazy(() => import('./pages/customer/WeeklyOrder').then((module) => ({ default: module.OrderHistory })));
-const DeliveryOrders = lazy(() => import('./pages/customer/DeliveryOrders').then((module) => ({ default: module.DeliveryOrders })));
-const MealSectionsManagement = lazy(() => import('./pages/admin/MealSectionsManagement').then((module) => ({ default: module.MealSectionsManagement })));
-const WhatsAppSettings = lazy(() => import('./pages/admin/WhatsAppSettings').then((module) => ({ default: module.WhatsAppSettings })));
-const AuditLog = lazy(() => import('./pages/admin/AuditLog').then((module) => ({ default: module.AuditLog })));
+const DashboardOverview = lazyWithReload('DashboardOverview', () => import('./pages/admin/DashboardOverview').then((module) => ({ default: module.DashboardOverview })));
+const CustomerManagement = lazyWithReload('CustomerManagement', () => import('./pages/admin/CustomerManagement').then((module) => ({ default: module.CustomerManagement })));
+const StaffManagement = lazyWithReload('StaffManagement', () => import('./pages/admin/StaffManagement').then((module) => ({ default: module.StaffManagement })));
+const PackageManagement = lazyWithReload('PackageManagement', () => import('./pages/admin/PackageManagement').then((module) => ({ default: module.PackageManagement })));
+const ClientMenuLibrary = lazyWithReload('ClientMenuLibrary', () => import('./pages/admin/ClientMenuLibrary').then((module) => ({ default: module.ClientMenuLibrary })));
+const OrderCalendar = lazyWithReload('OrderCalendar', () => import('./pages/admin/OrderCalendar').then((module) => ({ default: module.OrderCalendar })));
+const InvoiceManagement = lazyWithReload('InvoiceManagement', () => import('./pages/admin/InvoiceManagement').then((module) => ({ default: module.InvoiceManagement })));
+const DailyOrderStatus = lazyWithReload('DailyOrderStatus', () => import('./pages/admin/DailyOrderStatus').then((module) => ({ default: module.DailyOrderStatus })));
+const MatrixOrder = lazyWithReload('MatrixOrder', () => import('./pages/customer/MatrixOrder').then((module) => ({ default: module.MatrixOrder })));
+const OrderHistory = lazyWithReload('OrderHistory', () => import('./pages/customer/WeeklyOrder').then((module) => ({ default: module.OrderHistory })));
+const DeliveryOrders = lazyWithReload('DeliveryOrders', () => import('./pages/customer/DeliveryOrders').then((module) => ({ default: module.DeliveryOrders })));
+const MealSectionsManagement = lazyWithReload('MealSectionsManagement', () => import('./pages/admin/MealSectionsManagement').then((module) => ({ default: module.MealSectionsManagement })));
+const WhatsAppSettings = lazyWithReload('WhatsAppSettings', () => import('./pages/admin/WhatsAppSettings').then((module) => ({ default: module.WhatsAppSettings })));
+const AuditLog = lazyWithReload('AuditLog', () => import('./pages/admin/AuditLog').then((module) => ({ default: module.AuditLog })));
 
 const { Header, Content, Sider, Footer } = Layout;
 const { Title } = Typography;
@@ -36,6 +37,33 @@ const PageLoading: React.FC = () => (
     <Spin size="large" />
   </div>
 );
+
+class PageErrorBoundary extends React.Component<React.PropsWithChildren, { error: Error | null }> {
+  state = { error: null };
+
+  static getDerivedStateFromError(error: Error) {
+    return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    console.error('Page module failed to load', error);
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <Result
+          status="warning"
+          title="系统页面已更新 / New version available"
+          subTitle="页面资源加载失败，请刷新载入最新版本。 / Refresh to load the latest version."
+          extra={<Button type="primary" onClick={() => window.location.reload()}>刷新页面 / Refresh</Button>}
+        />
+      );
+    }
+
+    return this.props.children;
+  }
+}
 
 export const App: React.FC = () => {
   const { t, i18n } = useTranslation();
@@ -188,6 +216,7 @@ export const App: React.FC = () => {
 
           <Layout style={{ background: '#f8fafc' }}>
             <Content style={{ padding: '16px', minHeight: 'calc(100vh - 68px - 70px)', width: '100%' }}>
+              <PageErrorBoundary key={activeMenu}>
               <Suspense fallback={<PageLoading />}>
                 <div style={{ width: '100%' }}>
                 {activeMenu === 'dashboard' && <DashboardOverview onNavigate={(key) => setActiveMenu(key)} />}
@@ -225,6 +254,7 @@ export const App: React.FC = () => {
                 {activeMenu === 'deliveryOrders' && <DeliveryOrders />}
                 </div>
               </Suspense>
+              </PageErrorBoundary>
             </Content>
             <Footer style={{ textAlign: 'left', color: '#64748b', fontSize: 11, background: 'transparent', padding: '16px 24px', letterSpacing: '0.5px' }}>
               COPY RIGHT by KIM LONG CATERING SDN BHD <br />
