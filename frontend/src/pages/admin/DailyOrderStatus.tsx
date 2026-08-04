@@ -331,6 +331,8 @@ export const DailyOrderStatus: React.FC = () => {
     permanentDeleteSuccess: isEn ? 'Cancelled DO deleted; audit snapshot retained' : '已删除取消 DO，并保留完整审计快照',
     permanentDeleteFailed: isEn ? 'Failed to delete cancelled DO' : '删除已取消 DO 失败',
     filterAll: isEn ? 'All Statuses' : '全状态',
+    filterAllCustomers: isEn ? 'All Customers' : '全部客户',
+    filterCustomerPlaceholder: isEn ? 'Search customer' : '选择或搜索客户',
     statusSubmitted: isEn ? 'Submitted' : '已提交',
     statusConfirmed: isEn ? 'Confirmed' : '已确认',
     statusInProduction: isEn ? 'In Production' : '生产中',
@@ -367,6 +369,8 @@ export const DailyOrderStatus: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [customerFilter, setCustomerFilter] = useState<number | null>(null);
+  const [filterCustomers, setFilterCustomers] = useState<any[]>([]);
   const [billOrderId, setBillOrderId] = useState<number | null>(null);
   const tablePanRef = useRef<HTMLDivElement>(null);
   const tablePanStateRef = useRef<{
@@ -447,13 +451,14 @@ export const DailyOrderStatus: React.FC = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
+      const params: Record<string, string | number> = {};
+      if (dateRange) {
+        params.start_date = dateRange[0].format('YYYY-MM-DD');
+        params.end_date = dateRange[1].format('YYYY-MM-DD');
+      }
+      if (customerFilter !== null) params.customer_id = customerFilter;
       const res = await axiosInstance.get('/admin/all-orders', {
-        params: dateRange
-          ? {
-              start_date: dateRange[0].format('YYYY-MM-DD'),
-              end_date: dateRange[1].format('YYYY-MM-DD'),
-            }
-          : undefined,
+        params,
       });
       setOrders(res.data || []);
     } catch (err) {
@@ -465,7 +470,22 @@ export const DailyOrderStatus: React.FC = () => {
 
   useEffect(() => {
     fetchOrders();
-  }, [dateRange]);
+  }, [dateRange, customerFilter]);
+
+  useEffect(() => {
+    let cancelled = false;
+    axiosInstance
+      .get('/admin/customers')
+      .then((response) => {
+        if (!cancelled) setFilterCustomers(response.data || []);
+      })
+      .catch(() => {
+        if (!cancelled) setFilterCustomers([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleStatusChange = async (orderId: number, newStatus: string) => {
     const record = orders.find(order => order.id === orderId);
@@ -1103,6 +1123,21 @@ export const DailyOrderStatus: React.FC = () => {
                 }}
                 allowClear
                 placeholder={isEn ? ['Start date (optional)', 'End date (optional)'] : ['开始日期（选填）', '结束日期（选填）']}
+              />
+              <Select
+                showSearch
+                allowClear
+                value={customerFilter ?? undefined}
+                placeholder={labels.filterAllCustomers}
+                aria-label={labels.filterCustomerPlaceholder}
+                optionFilterProp="label"
+                onChange={(value) => setCustomerFilter(value ?? null)}
+                options={filterCustomers.map((customer) => ({
+                  value: customer.id,
+                  label: customer.company_name,
+                }))}
+                style={{ width: 220 }}
+                notFoundContent={isEn ? 'No customer found' : '找不到客户'}
               />
               <Select value={statusFilter} onChange={(val) => setStatusFilter(val)} style={{ width: 140 }}>
                 <Option value="all">{labels.filterAll}</Option>

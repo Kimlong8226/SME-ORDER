@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { App, Card, Calendar, Badge, Modal, Button, Table, Tag, Typography, Row, Col, Select, Space } from 'antd';
 import { PrinterOutlined, FilterOutlined, EnvironmentOutlined, UserOutlined, PhoneOutlined } from '@ant-design/icons';
 import dayjs, { Dayjs } from 'dayjs';
@@ -188,17 +188,106 @@ export const OrderCalendar: React.FC = () => {
       style.id = styleId;
       document.head.appendChild(style);
     }
+    const pageOrientation = selectedFilterCustomer ? 'portrait' : 'landscape';
     style.innerHTML = `
+      @page { size: A4 ${pageOrientation}; margin: 8mm; }
       @media print {
+        html, body {
+          margin: 0 !important;
+          padding: 0 !important;
+          background: #fff !important;
+          overflow: visible !important;
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+        }
         body * { visibility: hidden !important; }
         #print-content, #print-content * { visibility: visible !important; }
         #print-content {
-          position: fixed !important;
-          top: 0; left: 0;
-          width: 100%;
-          padding: 32px 40px !important;
+          position: absolute !important;
+          top: 0 !important;
+          left: 0 !important;
+          width: 100% !important;
+          max-width: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          box-sizing: border-box !important;
+          overflow: visible !important;
           background: #fff !important;
         }
+        #print-content .print-document-header {
+          margin-bottom: 4mm !important;
+          padding-bottom: 3mm !important;
+        }
+        #print-content .print-document-header h2 {
+          font-size: 16pt !important;
+          line-height: 1.2 !important;
+        }
+        #print-content .print-customer-card {
+          margin-bottom: 3mm !important;
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        #print-content .print-customer-card .ant-card-body { padding: 6px 8px !important; }
+        #print-content .ant-table-wrapper,
+        #print-content .ant-spin-nested-loading,
+        #print-content .ant-spin-container,
+        #print-content .ant-table,
+        #print-content .ant-table-container,
+        #print-content .ant-table-content {
+          width: 100% !important;
+          max-width: 100% !important;
+          overflow: visible !important;
+        }
+        #print-content .ant-table-content table {
+          width: 100% !important;
+          min-width: 0 !important;
+          table-layout: fixed !important;
+        }
+        #print-content .ant-table-content::-webkit-scrollbar { display: none !important; }
+        #print-content col { width: auto !important; }
+        #print-content th,
+        #print-content td {
+          padding: 4px 6px !important;
+          font-size: 8.5pt !important;
+          line-height: 1.2 !important;
+          vertical-align: middle !important;
+          white-space: normal !important;
+          word-break: break-word !important;
+          overflow-wrap: anywhere !important;
+        }
+        #print-content th { font-weight: 700 !important; }
+        #print-content .ant-typography { font-size: inherit !important; white-space: normal !important; }
+        #print-content .ant-tag {
+          margin: 0 !important;
+          padding: 0 4px !important;
+          font-size: 8pt !important;
+          line-height: 16px !important;
+          white-space: normal !important;
+        }
+        #print-content.print-all-customers col:nth-child(1) { width: 18% !important; }
+        #print-content.print-all-customers col:nth-child(2) { width: 25% !important; }
+        #print-content.print-all-customers col:nth-child(3) { width: 12% !important; }
+        #print-content.print-all-customers col:nth-child(4) { width: 23% !important; }
+        #print-content.print-all-customers col:nth-child(5) { width: 9% !important; }
+        #print-content.print-all-customers col:nth-child(6) { width: 13% !important; }
+        #print-content.print-single-customer col:nth-child(1) { width: 28% !important; }
+        #print-content.print-single-customer col:nth-child(2) { width: 15% !important; }
+        #print-content.print-single-customer col:nth-child(3) { width: 30% !important; }
+        #print-content.print-single-customer col:nth-child(4) { width: 10% !important; }
+        #print-content.print-single-customer col:nth-child(5) { width: 17% !important; }
+        #print-content thead { display: table-header-group !important; }
+        #print-content tfoot { display: table-footer-group !important; }
+        #print-content tr {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        #print-content .print-total,
+        #print-content .print-signatures {
+          break-inside: avoid !important;
+          page-break-inside: avoid !important;
+        }
+        #print-content .print-total { margin-top: 3mm !important; }
+        #print-content .print-signatures { margin-top: 7mm !important; padding-top: 4mm !important; }
       }
     `;
     window.print();
@@ -208,17 +297,43 @@ export const OrderCalendar: React.FC = () => {
   const selectedCustomerObj = customers.find(c => c.id === selectedFilterCustomer);
   const totalPortionsSum = printSummaryData?.delivery_breakdown?.reduce((acc: number, item: any) => acc + item.quantity, 0) || 0;
 
+  const printTableData = useMemo(() => {
+    const rows = (printSummaryData?.delivery_breakdown || []).map((row: any, index: number) => ({
+      ...row,
+      _printKey: [row.company_name, row.site_name, row.meal_section, row.package_name, index].join('_'),
+      _customerRowSpan: 1,
+      _siteRowSpan: 1,
+    }));
+
+    const applyRowSpans = (keys: string[], target: '_customerRowSpan' | '_siteRowSpan') => {
+      let start = 0;
+      while (start < rows.length) {
+        let end = start + 1;
+        while (end < rows.length && keys.every((key) => rows[end][key] === rows[start][key])) end += 1;
+        rows[start][target] = end - start;
+        for (let index = start + 1; index < end; index += 1) rows[index][target] = 0;
+        start = end;
+      }
+    };
+
+    if (!selectedFilterCustomer) applyRowSpans(['company_name'], '_customerRowSpan');
+    applyRowSpans(['company_name', 'site_name', 'address'], '_siteRowSpan');
+    return rows;
+  }, [printSummaryData, selectedFilterCustomer]);
+
   const tableColumns = [
     ...(!selectedFilterCustomer ? [{
       title: labels.colCustomer,
       dataIndex: 'company_name',
       width: 200,
+      onCell: (record: any) => ({ rowSpan: record._customerRowSpan }),
       render: (text: any) => <Text strong style={{ whiteSpace: 'nowrap', fontSize: 14 }}>{text}</Text>
     }] : []),
     {
       title: labels.colSite,
       dataIndex: 'site_name',
       width: 200,
+      onCell: (record: any) => ({ rowSpan: record._siteRowSpan }),
       render: (text: any, record: any) => (
         <div style={{ minWidth: 160 }}>
           <Text strong style={{ fontSize: 15, whiteSpace: 'nowrap', display: 'block' }}>{text}</Text>
@@ -305,8 +420,8 @@ export const OrderCalendar: React.FC = () => {
 
         {/* 打印区域 */}
         {printSummaryData && (
-          <div id="print-content" style={{ padding: '32px 40px', background: '#ffffff' }}>
-            <div style={{ textAlign: 'center', marginBottom: 24, borderBottom: '2px solid #dc2626', paddingBottom: 16 }}>
+          <div id="print-content" className={selectedFilterCustomer ? 'print-document print-single-customer' : 'print-document print-all-customers'} style={{ padding: '32px 40px', background: '#ffffff' }}>
+            <div className="print-document-header" style={{ textAlign: 'center', marginBottom: 24, borderBottom: '2px solid #dc2626', paddingBottom: 16 }}>
               <Title level={2} style={{ margin: 0, color: '#dc2626', fontWeight: 900, letterSpacing: '1px' }}>
                 {labels.doSlipTitle}
               </Title>
@@ -319,7 +434,7 @@ export const OrderCalendar: React.FC = () => {
               </div>
             </div>
 
-            <Card size="small" style={{ marginBottom: 20, background: '#f8fafc', borderColor: '#cbd5e1' }}>
+            <Card className="print-customer-card" size="small" style={{ marginBottom: 20, background: '#f8fafc', borderColor: '#cbd5e1' }}>
               <Row gutter={24} align="middle">
                 <Col span={14}>
                   <div><Text strong style={{ fontSize: 16 }}>{labels.orderingUnit}{selectedFilterCustomer ? (printSummaryData?.customer_info?.company_name || selectedCustomerObj?.company_name) : labels.allClientsSummary}</Text></div>
@@ -339,21 +454,22 @@ export const OrderCalendar: React.FC = () => {
             </Card>
 
             <Table
-              dataSource={printSummaryData?.delivery_breakdown || []}
-              rowKey={(r) => r.id || [r.company_name, r.site_name, r.meal_section_name, r.package_name].join('_')}
+              className="print-delivery-table"
+              dataSource={printTableData}
+              rowKey="_printKey"
               pagination={false}
               bordered
-              size="middle"
+              size="small"
               columns={tableColumns}
               style={{ width: '100%' }}
               scroll={{ x: 'max-content' }}
             />
 
-            <div style={{ marginTop: 20, textAlign: 'right', paddingRight: 12 }}>
+            <div className="print-total" style={{ marginTop: 20, textAlign: 'right', paddingRight: 12 }}>
               <Text style={{ fontSize: 16 }}>{labels.totalPortionsLabel}<Text strong style={{ fontSize: 24, color: '#dc2626' }}>{totalPortionsSum}{labels.portionsSuffix}</Text></Text>
             </div>
 
-            <div style={{ marginTop: 44, paddingTop: 24, borderTop: '1px dashed #94a3b8' }}>
+            <div className="print-signatures" style={{ marginTop: 44, paddingTop: 24, borderTop: '1px dashed #94a3b8' }}>
               <Row gutter={32} style={{ textAlign: 'center' }}>
                 <Col span={8}>
                   <div style={{ minHeight: 60, borderBottom: '1px solid #000', marginBottom: 8 }}></div>
