@@ -570,6 +570,9 @@ def get_customer_restriction_history(customer_id: int, db: Session = Depends(get
         AUDIT_ACTION_CUSTOMER_UNBLOCK,
         AUDIT_ACTION_CUSTOMER_TEMP_ACCESS,
         AUDIT_ACTION_CUSTOMER_TEMP_ACCESS_END,
+        AUDIT_ACTION_CUSTOMER_CUTOFF_UPDATE,
+        AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE,
+        AUDIT_ACTION_ORDER_CUTOFF_OVERRIDE_END,
     ]
     logs = (
         db.query(AuditLog)

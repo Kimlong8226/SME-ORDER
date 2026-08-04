@@ -569,6 +569,50 @@ export const CustomerManagement: React.FC = () => {
         </Form>
       </Modal>
 
+      <Modal
+        title={`${isEn ? 'Order Cutoff Settings' : '下单截止时间设置'}${cutoffCustomer ? ` — ${cutoffCustomer.company_name}` : ''}`}
+        open={cutoffVisible}
+        onCancel={() => setCutoffVisible(false)}
+        footer={<Button onClick={() => setCutoffVisible(false)}>{labels.btnCancel}</Button>}
+        width={780}
+      >
+        <Card size="small" title={isEn ? 'Customer default rule' : '客户长期默认规则'}>
+          <Text type="secondary">{isEn ? 'Only staff can change this rule. New customers default to 6:00 PM on the previous day.' : '只有后台员工可以修改。新客户默认配送前一天18:00截止。'}</Text>
+          <Form form={cutoffForm} layout="vertical" onFinish={saveDefaultCutoff} style={{ marginTop: 12 }}>
+            <Row gutter={12}>
+              <Col span={8}>
+                <Form.Item name="day_offset" label={isEn ? 'Cutoff day' : '截止日期'} rules={[{ required: true }]}>
+                  <Select options={[{ value: 1, label: isEn ? 'Previous day' : '配送前一天' }, { value: 0, label: isEn ? 'Delivery day' : '配送当天' }]} />
+                </Form.Item>
+              </Col>
+              <Col span={8}><Form.Item name="cutoff_time" label={isEn ? 'Cutoff time' : '截止时间'} rules={[{ required: true }]}><Input type="time" /></Form.Item></Col>
+              <Col span={8}><Form.Item name="reason" label={isEn ? 'Reason' : '修改原因'} rules={[{ required: true, min: 3 }]}><Input /></Form.Item></Col>
+            </Row>
+            <Button type="primary" htmlType="submit">{isEn ? 'Save default rule' : '保存默认规则'}</Button>
+          </Form>
+        </Card>
+
+        <Card size="small" title={isEn ? 'Manual cutoff for one delivery date' : '指定配送日期手动设置'} style={{ marginTop: 16 }}>
+          <Form form={overrideForm} layout="vertical" onFinish={saveCutoffOverride}>
+            <Row gutter={12}>
+              <Col span={8}><Form.Item name="delivery_date" label={isEn ? 'Delivery date' : '配送日期'} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" /></Form.Item></Col>
+              <Col span={8}><Form.Item name="cutoff_date" label={isEn ? 'Allow ordering until date' : '允许下单至日期'} rules={[{ required: true }]}><DatePicker style={{ width: '100%' }} format="YYYY-MM-DD" /></Form.Item></Col>
+              <Col span={8}><Form.Item name="cutoff_time" label={isEn ? 'Allow ordering until time' : '允许下单至时间'} rules={[{ required: true }]}><Input type="time" /></Form.Item></Col>
+            </Row>
+            <Form.Item name="reason" label={isEn ? 'Reason' : '开放原因'} rules={[{ required: true, min: 3 }]}><Input.TextArea rows={2} /></Form.Item>
+            <Button type="primary" htmlType="submit">{isEn ? 'Set manual cutoff' : '设置手动截止时间'}</Button>
+          </Form>
+          <Divider />
+          <Table size="small" rowKey="id" pagination={false} dataSource={cutoffOverrides} columns={[
+            { title: isEn ? 'Delivery date' : '配送日期', dataIndex: 'delivery_date' },
+            { title: isEn ? 'Manual cutoff' : '手动截止时间', dataIndex: 'cutoff_at', render: (value: string) => dayjs(value).format('YYYY-MM-DD HH:mm') },
+            { title: isEn ? 'Reason' : '原因', dataIndex: 'reason' },
+            { title: isEn ? 'Operator' : '操作人', dataIndex: 'updated_by' },
+            { title: '', render: (record: any) => <Button danger size="small" onClick={() => cancelCutoffOverride(record)}>{isEn ? 'Cancel override' : '取消手动设置'}</Button> },
+          ]} />
+        </Card>
+      </Modal>
+
       {/* 新增/编辑送餐地点 Modal */}
       <Modal
         title={editingSite ? labels.editSiteTitle : labels.modalSiteTitle}

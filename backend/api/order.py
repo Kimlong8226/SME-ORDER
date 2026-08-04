@@ -49,6 +49,8 @@ def _get_customer_and_access(db: Session, customer_id: int) -> tuple[Customer, d
 
 def _access_payload(customer: Customer, access: dict) -> dict:
     return {
+        "order_cutoff_day_offset": customer.order_cutoff_day_offset,
+        "order_cutoff_time": customer.order_cutoff_time,
         "is_blocked": access["is_blocked"],
         "effective_is_blocked": access["effective_is_blocked"],
         "block_source": access["block_source"],

@@ -17,6 +17,7 @@ from api.order_rules import (
     MALAYSIA_TZ,
     calculate_customer_financials,
     calculate_customers_financials,
+    customer_order_cutoff_window,
     malaysia_now,
     order_cutoff_window,
     sync_customer_access,
@@ -26,6 +27,7 @@ from model.models import (
     Customer,
     CustomerPackage,
     CustomerMealSection,
+    CustomerOrderCutoffOverride,
     DeliverySite,
     MealSection,
     Order,
@@ -82,6 +84,36 @@ class OrderRestrictionTests(unittest.TestCase):
         self.assertEqual(order_cutoff_window(delivery, datetime(2026, 7, 31, 18, 0, tzinfo=MALAYSIA_TZ))["phase"], "grace")
         self.assertEqual(order_cutoff_window(delivery, datetime(2026, 7, 31, 18, 10, tzinfo=MALAYSIA_TZ))["phase"], "grace")
         self.assertEqual(order_cutoff_window(delivery, datetime(2026, 7, 31, 18, 10, 1, tzinfo=MALAYSIA_TZ))["phase"], "closed")
+
+    def test_customer_can_use_delivery_day_nine_am_cutoff(self):
+        self.customer.order_cutoff_day_offset = 0
+        self.customer.order_cutoff_time = "09:00"
+        self.db.commit()
+        delivery = date(2026, 8, 4)
+        window = customer_order_cutoff_window(
+            self.db, self.customer, delivery,
+            datetime(2026, 8, 4, 8, 59, tzinfo=MALAYSIA_TZ),
+        )
+        self.assertEqual(window["phase"], "open")
+        self.assertFalse(window["is_delivery_day_or_past"])
+        self.assertEqual(window["cutoff_source"], "customer_default")
+
+    def test_manual_delivery_date_override_wins_over_customer_default(self):
+        delivery = date(2026, 8, 4)
+        self.db.add(CustomerOrderCutoffOverride(
+            customer_id=self.customer.id,
+            delivery_date=delivery,
+            cutoff_at=datetime(2026, 8, 4, 9, 30, tzinfo=timezone.utc),
+            reason="Customer confirmation delayed",
+            updated_by="Admin",
+        ))
+        self.db.commit()
+        window = customer_order_cutoff_window(
+            self.db, self.customer, delivery,
+            datetime(2026, 8, 4, 17, 20, tzinfo=MALAYSIA_TZ),
+        )
+        self.assertEqual(window["phase"], "open")
+        self.assertEqual(window["cutoff_source"], "manual_override")
 
     def test_temporary_access_uses_two_calendar_days(self):
         opened = datetime(2026, 7, 31, 23, 50, tzinfo=MALAYSIA_TZ)

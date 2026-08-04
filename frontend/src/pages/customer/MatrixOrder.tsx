@@ -239,6 +239,9 @@ export const MatrixOrder: React.FC = () => {
       // NOTE: 使用客户专用接口获取自身资料和送货地址，避免不安全地加载所有客户列表
       const resCust = await profileRequest;
       setAccessStatus(resCust.data?.access_status || null);
+      if (!editingRaw && resCust.data?.access_status?.order_cutoff_day_offset === 0) {
+        setSelectedDate(dayjs().format('YYYY-MM-DD'));
+      }
       if (resCust.data?.sites) {
         setSites(resCust.data.sites);
         if (!editingRaw && resCust.data.sites.length > 0) {
@@ -507,6 +510,16 @@ export const MatrixOrder: React.FC = () => {
         <Alert title={labels.cutoffClosed} type="error" showIcon style={{ marginBottom: 16, borderRadius: 12 }} />
       )}
 
+      {orderWindow?.cutoff_at && (
+        <Alert
+          title={isEn ? 'Your ordering cutoff' : '您的最后下单时间'}
+          description={dayjs(orderWindow.cutoff_at).format('YYYY-MM-DD HH:mm')}
+          type={selectedDateBlocked ? 'warning' : 'info'}
+          showIcon
+          style={{ marginBottom: 16, borderRadius: 12 }}
+        />
+      )}
+
       {isYilian && isSunday && (
         <Alert
           title={labels.sundayReminderTitle}
@@ -546,7 +559,7 @@ export const MatrixOrder: React.FC = () => {
                 disabled={isEditing}
                 disabledDate={(current) => {
                   if (!current) return false;
-                  if (current.isSame(dayjs(), 'day') || current.isBefore(dayjs(), 'day')) return true;
+                  if (current.isBefore(dayjs(), 'day')) return true;
                   if (accessStatus?.temporary_access_active && accessStatus?.max_order_delivery_date) {
                     return current.isAfter(dayjs(accessStatus.max_order_delivery_date), 'day');
                   }
