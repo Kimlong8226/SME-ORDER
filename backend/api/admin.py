@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 from database import get_db
 from model.models import (
     Customer, CustomerUser, DeliverySite, PackageTemplate, AddonTemplate,
-    CustomerPackage, CustomerAddon, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection,
+    CustomerPackage, CustomerAddon, CustomerAddonPackage, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection,
     AuditLog, PaymentRecord, WhatsAppDelivery,
     AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_DELETE, AUDIT_ACTION_ORDER_CANCEL,
     AUDIT_ACTION_ORDER_STATUS_CHANGE, AUDIT_ACTION_CUSTOMER_UPDATE,
@@ -58,7 +58,9 @@ router = APIRouter(prefix="/admin", tags=["Admin Management"], dependencies=[Dep
 class OrderItemEdit(BaseModel):
     id: Optional[int] = None
     meal_section_id: int
-    customer_package_id: int
+    customer_package_id: Optional[int] = None
+    customer_addon_id: Optional[int] = None
+    parent_package_id: Optional[int] = None
     quantity: int
     remark: Optional[str] = ""
 
@@ -801,7 +803,8 @@ def create_order_by_admin(
 
     assigned_rows = db.query(CustomerMealSection).filter(CustomerMealSection.customer_id == req.customer_id).all()
     assigned_sections = {row.meal_section_id: row.meal_section for row in assigned_rows}
-    package_ids = {item.customer_package_id for item in req.items if item.quantity > 0}
+    package_ids = {item.customer_package_id for item in req.items if item.quantity > 0 and item.customer_package_id is not None}
+    addon_ids = {item.customer_addon_id for item in req.items if item.quantity > 0 and item.customer_addon_id is not None}
     packages = db.query(CustomerPackage).filter(
         CustomerPackage.id.in_(package_ids),
         CustomerPackage.customer_id == req.customer_id,
@@ -810,6 +813,13 @@ def create_order_by_admin(
     package_map = {row.id: row for row in packages}
     if len(package_map) != len(package_ids):
         raise HTTPException(status_code=400, detail="订单包含未分配给该客户的套餐")
+    addons = db.query(CustomerAddon).filter(
+        CustomerAddon.id.in_(addon_ids),
+        CustomerAddon.customer_id == req.customer_id,
+    ).all()
+    addon_map = {row.id: row for row in addons}
+    if len(addon_map) != len(addon_ids):
+        raise HTTPException(status_code=400, detail="订单包含未分配给该客户的 Add-on")
 
     window = order_cutoff_window(req.delivery_date)
     late_override = window["phase"] != "open" or window["is_delivery_day_or_past"]
@@ -833,21 +843,43 @@ def create_order_by_admin(
         section = assigned_sections.get(item.meal_section_id)
         if not section:
             raise HTTPException(status_code=400, detail=f"餐次 ID {item.meal_section_id} 未向该客户开放")
-        cp = package_map[item.customer_package_id]
-        allowed_categories = effective_meal_section_categories(section)
-        if cp.template.category not in allowed_categories:
-            raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
-        db.add(OrderDetail(
-            order_id=order.id,
-            meal_section_id=item.meal_section_id,
-            customer_package_id=cp.id,
-            quantity=item.quantity,
-            final_unit_price=cp.agreement_price,
-            remark=item.remark or "",
-        ))
+        has_package = item.customer_package_id is not None
+        has_addon = item.customer_addon_id is not None
+        if has_package == has_addon:
+            raise HTTPException(status_code=400, detail="每项订单明细必须且只能选择套餐或 Add-on")
+        if has_package:
+            cp = package_map[item.customer_package_id]
+            allowed_categories = effective_meal_section_categories(section)
+            if cp.template.category not in allowed_categories:
+                raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
+            detail = OrderDetail(
+                order_id=order.id,
+                meal_section_id=item.meal_section_id,
+                customer_package_id=cp.id,
+                quantity=item.quantity,
+                final_unit_price=cp.agreement_price,
+                remark=item.remark or "",
+            )
+            snapshot_item = {"customer_package_id": cp.id}
+        else:
+            addon = addon_map[item.customer_addon_id]
+            if addon.template.is_customer_visible:
+                parent_cp = package_map.get(item.parent_package_id)
+                if not parent_cp or not any(link.customer_package_id == parent_cp.id for link in addon.package_links):
+                    raise HTTPException(status_code=400, detail="该 Add-on 未向所选客户专属套餐开放")
+            detail = OrderDetail(
+                order_id=order.id,
+                meal_section_id=item.meal_section_id,
+                customer_addon_id=addon.id,
+                quantity=item.quantity,
+                final_unit_price=addon.agreement_price,
+                remark=item.remark or "",
+            )
+            snapshot_item = {"customer_addon_id": addon.id, "parent_package_id": item.parent_package_id}
+        db.add(detail)
         snapshot.append({
             "meal_section_id": item.meal_section_id,
-            "customer_package_id": cp.id,
+            **snapshot_item,
             "quantity": item.quantity,
             "remark": item.remark or "",
         })
@@ -904,9 +936,11 @@ def get_all_orders(
         total_price = 0.0
 
         for d in o.details:
-            pkg_name = d.customer_package.template.name if d.customer_package else "未知"
+            pkg_name = d.customer_package.template.name if d.customer_package else None
+            addon_name = d.customer_addon.template.name if d.customer_addon else None
             meal_name = d.meal_section.name if d.meal_section else ""
-            total_portions += d.quantity
+            if d.customer_package:
+                total_portions += d.quantity
             total_price += (d.quantity * d.final_unit_price)
 
             details_list.append({
@@ -914,7 +948,9 @@ def get_all_orders(
                 "meal_section_id": d.meal_section_id,
                 "meal_section": meal_name,
                 "customer_package_id": d.customer_package_id,
+                "customer_addon_id": d.customer_addon_id,
                 "package_name": pkg_name,
+                "addon_name": addon_name,
                 "quantity": d.quantity,
                 "unit_price": d.final_unit_price,
                 "subtotal": d.quantity * d.final_unit_price,
@@ -979,6 +1015,7 @@ def edit_order_by_admin(
     old_details = [{
         "meal_section_id": detail.meal_section_id,
         "customer_package_id": detail.customer_package_id,
+        "customer_addon_id": detail.customer_addon_id,
         "quantity": detail.quantity,
         "remark": detail.remark or "",
     } for detail in order.details]
@@ -996,28 +1033,58 @@ def edit_order_by_admin(
             section = assigned_sections.get(item.meal_section_id)
             if not section:
                 raise HTTPException(status_code=400, detail=f"餐次 ID {item.meal_section_id} 未向该客户开放")
-            cp = db.query(CustomerPackage).filter(
-                CustomerPackage.id == item.customer_package_id,
-                CustomerPackage.customer_id == order.customer_id,
-                CustomerPackage.is_active == True,
-            ).first()
-            if not cp:
-                raise HTTPException(status_code=400, detail="订单包含未分配给该客户的套餐")
-            allowed_categories = effective_meal_section_categories(section)
-            if cp.template.category not in allowed_categories:
-                raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
-
-            db.add(OrderDetail(
-                order_id=order_id,
-                meal_section_id=item.meal_section_id,
-                customer_package_id=item.customer_package_id,
-                quantity=item.quantity,
-                final_unit_price=cp.agreement_price,
-                remark=item.remark or ""
-            ))
+            has_package = item.customer_package_id is not None
+            has_addon = item.customer_addon_id is not None
+            if has_package == has_addon:
+                raise HTTPException(status_code=400, detail="每项订单明细必须且只能选择套餐或 Add-on")
+            if has_package:
+                cp = db.query(CustomerPackage).filter(
+                    CustomerPackage.id == item.customer_package_id,
+                    CustomerPackage.customer_id == order.customer_id,
+                    CustomerPackage.is_active == True,
+                ).first()
+                if not cp:
+                    raise HTTPException(status_code=400, detail="订单包含未分配给该客户的套餐")
+                allowed_categories = effective_meal_section_categories(section)
+                if cp.template.category not in allowed_categories:
+                    raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
+                detail = OrderDetail(
+                    order_id=order_id,
+                    meal_section_id=item.meal_section_id,
+                    customer_package_id=item.customer_package_id,
+                    quantity=item.quantity,
+                    final_unit_price=cp.agreement_price,
+                    remark=item.remark or "",
+                )
+                snapshot_item = {"customer_package_id": item.customer_package_id}
+            else:
+                addon = db.query(CustomerAddon).filter(
+                    CustomerAddon.id == item.customer_addon_id,
+                    CustomerAddon.customer_id == order.customer_id,
+                ).first()
+                if not addon:
+                    raise HTTPException(status_code=400, detail="订单包含未分配给该客户的 Add-on")
+                if addon.template.is_customer_visible:
+                    parent_cp = db.query(CustomerPackage).filter(
+                        CustomerPackage.id == item.parent_package_id,
+                        CustomerPackage.customer_id == order.customer_id,
+                        CustomerPackage.is_active == True,
+                    ).first()
+                    if not parent_cp or not any(link.customer_package_id == parent_cp.id for link in addon.package_links):
+                        raise HTTPException(status_code=400, detail="该 Add-on 未向所选客户专属套餐开放")
+                detail = OrderDetail(
+                    order_id=order_id,
+                    meal_section_id=item.meal_section_id,
+                    customer_addon_id=addon.id,
+                    quantity=item.quantity,
+                    final_unit_price=addon.agreement_price,
+                    remark=item.remark or "",
+                )
+                snapshot_item = {"customer_addon_id": addon.id, "parent_package_id": item.parent_package_id}
+            db.add(detail)
             new_details.append({
                 "meal_section_id": item.meal_section_id,
-                "customer_package_id": item.customer_package_id,
+                **snapshot_item,
                 "quantity": item.quantity,
                 "remark": item.remark or "",
             })
@@ -1197,6 +1264,7 @@ def cancel_order_by_admin(
     old_details = [{
         "meal_section_id": detail.meal_section_id,
         "customer_package_id": detail.customer_package_id,
+        "customer_addon_id": detail.customer_addon_id,
         "quantity": detail.quantity,
         "remark": detail.remark or "",
     } for detail in order.details]
@@ -2503,7 +2571,7 @@ def create_addon_template(req: AddonTemplateCreate, db: Session = Depends(get_db
     addon = AddonTemplate(**req.dict())
     db.add(addon)
     db.flush()
-    _write_admin_audit(db, auth, "ADDON_TEMPLATE_CREATE", f"创建 Add-on 模板 {addon.name}", addon.id, addon.name, {"default_price": addon.default_price})
+    _write_admin_audit(db, auth, "ADDON_TEMPLATE_CREATE", f"创建 Add-on 模板 {addon.name}", addon.id, addon.name, {"default_price": addon.default_price, "is_customer_visible": addon.is_customer_visible})
     db.commit()
     db.refresh(addon)
     return addon
@@ -2515,7 +2583,12 @@ def update_addon_template(addon_id: int, req: AddonTemplateCreate, db: Session =
     addon = db.query(AddonTemplate).filter(AddonTemplate.id == addon_id).first()
     if not addon:
         raise HTTPException(status_code=404, detail="Add-on 模板不存在")
-    before = {"name": addon.name, "default_price": addon.default_price, "description": addon.description}
+    before = {
+        "name": addon.name,
+        "default_price": addon.default_price,
+        "description": addon.description,
+        "is_customer_visible": addon.is_customer_visible,
+    }
     for key, value in req.dict().items():
         setattr(addon, key, value)
     _write_admin_audit(db, auth, "ADDON_TEMPLATE_UPDATE", f"更新 Add-on 模板 {addon.name}", addon.id, addon.name, {"before": before, "after": req.dict()})
@@ -2561,10 +2634,45 @@ def delete_addon_template(addon_id: int, db: Session = Depends(get_db), auth: di
 class CustomerAddonAssignRequest(BaseModel):
     addon_template_id: int
     agreement_price: float
+    customer_package_ids: List[int] = Field(default_factory=list)
 
 
 class CustomerAddonUpdateRequest(BaseModel):
     agreement_price: float
+    customer_package_ids: List[int] = Field(default_factory=list)
+
+
+def _replace_customer_addon_package_links(
+    db: Session,
+    customer_addon: CustomerAddon,
+    customer_id: int,
+    customer_package_ids: List[int],
+) -> List[int]:
+    unique_ids = sorted(set(customer_package_ids))
+    if not customer_addon.template.is_customer_visible:
+        unique_ids = []
+
+    if unique_ids:
+        valid_ids = {
+            row.id for row in db.query(CustomerPackage).filter(
+                CustomerPackage.id.in_(unique_ids),
+                CustomerPackage.customer_id == customer_id,
+                CustomerPackage.is_active == True,
+            ).all()
+        }
+        if valid_ids != set(unique_ids):
+            raise HTTPException(status_code=400, detail="Add-on 包含无效或不属于该客户的专属套餐")
+
+    db.query(CustomerAddonPackage).filter(
+        CustomerAddonPackage.customer_addon_id == customer_addon.id
+    ).delete(synchronize_session=False)
+    for customer_package_id in unique_ids:
+        db.add(CustomerAddonPackage(
+            customer_addon_id=customer_addon.id,
+            customer_package_id=customer_package_id,
+        ))
+    db.flush()
+    return unique_ids
 
 
 @router.get("/customers/{customer_id}/addons")
@@ -2583,6 +2691,9 @@ def get_customer_addons(customer_id: int, db: Session = Depends(get_db)):
             "description": ca.template.description,
             "default_price": ca.template.default_price,
             "agreement_price": ca.agreement_price,
+            "is_customer_visible": ca.template.is_customer_visible,
+            "customer_package_ids": [link.customer_package_id for link in ca.package_links],
+            "customer_package_names": [link.customer_package.template.name for link in ca.package_links],
         })
     return result
 
@@ -2621,8 +2732,11 @@ def assign_addon_to_customer(
         )
         db.add(ca)
     db.flush()
+    package_ids = _replace_customer_addon_package_links(
+        db, ca, customer_id, req.customer_package_ids
+    )
     customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    _write_admin_audit(db, auth, "CUSTOMER_ADDON_ASSIGN", f"为客户 {customer.company_name if customer else customer_id} 分配 Add-on {template.name}", ca.id, template.name, {"customer_id": customer_id, "agreement_price": ca.agreement_price})
+    _write_admin_audit(db, auth, "CUSTOMER_ADDON_ASSIGN", f"为客户 {customer.company_name if customer else customer_id} 分配 Add-on {template.name}", ca.id, template.name, {"customer_id": customer_id, "agreement_price": ca.agreement_price, "customer_package_ids": package_ids})
     db.commit()
     db.refresh(ca)
 
@@ -2632,6 +2746,8 @@ def assign_addon_to_customer(
         "addon_template_id": ca.addon_template_id,
         "addon_name": template.name,
         "agreement_price": ca.agreement_price,
+        "is_customer_visible": template.is_customer_visible,
+        "customer_package_ids": package_ids,
     }
 
 
@@ -2652,8 +2768,12 @@ def update_customer_addon_price(
         raise HTTPException(status_code=404, detail="该专属 Add-on 不存在")
 
     old_price = ca.agreement_price
+    old_package_ids = [link.customer_package_id for link in ca.package_links]
     ca.agreement_price = req.agreement_price
-    _write_admin_audit(db, auth, "CUSTOMER_ADDON_UPDATE", f"更新客户 Add-on {ca.template.name} 协议价", ca.id, ca.template.name, {"customer_id": customer_id, "before": old_price, "after": ca.agreement_price})
+    package_ids = _replace_customer_addon_package_links(
+        db, ca, customer_id, req.customer_package_ids
+    )
+    _write_admin_audit(db, auth, "CUSTOMER_ADDON_UPDATE", f"更新客户 Add-on {ca.template.name} 协议价及适用套餐", ca.id, ca.template.name, {"customer_id": customer_id, "before": {"agreement_price": old_price, "customer_package_ids": old_package_ids}, "after": {"agreement_price": ca.agreement_price, "customer_package_ids": package_ids}})
     db.commit()
     db.refresh(ca)
     return {
@@ -2662,6 +2782,8 @@ def update_customer_addon_price(
         "addon_template_id": ca.addon_template_id,
         "addon_name": ca.template.name,
         "agreement_price": ca.agreement_price,
+        "is_customer_visible": ca.template.is_customer_visible,
+        "customer_package_ids": package_ids,
     }
 
 

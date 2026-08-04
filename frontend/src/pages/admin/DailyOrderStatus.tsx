@@ -374,10 +374,12 @@ export const DailyOrderStatus: React.FC = () => {
   const [createSiteId, setCreateSiteId] = useState<number | null>(null);
   const [createDate, setCreateDate] = useState<dayjs.Dayjs>(dayjs().add(1, 'day'));
   const [createPackages, setCreatePackages] = useState<any[]>([]);
+  const [createCustomerAddons, setCreateCustomerAddons] = useState<any[]>([]);
   const [allCreateSections, setAllCreateSections] = useState<any[]>([]);
   const [createSections, setCreateSections] = useState<any[]>([]);
   const [createItems, setCreateItems] = useState<any[]>([]);
   const [createAddons, setCreateAddons] = useState<Record<string, number>>({});
+  const [createAdminAddonSections, setCreateAdminAddonSections] = useState<Record<number, number>>({});
   const [createRemark, setCreateRemark] = useState('');
   const [createReason, setCreateReason] = useState('');
 
@@ -539,6 +541,8 @@ export const DailyOrderStatus: React.FC = () => {
         items: editDetails.map((d: any) => ({
           meal_section_id: d.meal_section_id,
           customer_package_id: d.customer_package_id,
+          customer_addon_id: d.customer_addon_id,
+          parent_package_id: d.parent_package_id || Number((d.remark || '').match(/\[addon_for_customer_package:(\d+)\]/)?.[1]) || undefined,
           quantity: d.quantity,
           remark: d.remark || ""
         }))
@@ -563,9 +567,11 @@ export const DailyOrderStatus: React.FC = () => {
       setCreateSites([]);
       setCreateSiteId(null);
       setCreatePackages([]);
+      setCreateCustomerAddons([]);
       setCreateSections([]);
       setCreateItems([]);
       setCreateAddons({});
+      setCreateAdminAddonSections({});
       setCreateRemark('');
       setCreateDate(dayjs().add(1, 'day'));
       setCreateReason('');
@@ -583,15 +589,23 @@ export const DailyOrderStatus: React.FC = () => {
     setCreateSites(sites);
     setCreateSiteId(sites[0]?.id || null);
     try {
-      const [packagesRes, sectionIdsRes] = await Promise.all([
+      const [packagesRes, sectionIdsRes, addonsRes] = await Promise.all([
         axiosInstance.get(`/admin/customers/${customerId}/packages`),
         axiosInstance.get(`/admin/customers/${customerId}/meal-sections`),
+        axiosInstance.get(`/admin/customers/${customerId}/addons`),
       ]);
       const packages = (packagesRes.data || []).filter((pkg: any) => pkg.is_shown_to_customer !== false);
       const allowedIds = new Set<number>(sectionIdsRes.data || []);
       const sections = allCreateSections.filter(section => allowedIds.has(section.id));
       setCreatePackages(packages);
       setCreateSections(sections);
+      setCreateCustomerAddons(addonsRes.data || []);
+      const defaultSectionId = sections[0]?.id;
+      setCreateAdminAddonSections(Object.fromEntries(
+        (addonsRes.data || [])
+          .filter((addon: any) => addon.is_customer_visible === false && defaultSectionId)
+          .map((addon: any) => [addon.id, defaultSectionId])
+      ));
       setCreateItems([]);
     } catch (err: any) {
       message.error(err.response?.data?.detail || labels.loadFailed);
@@ -599,7 +613,7 @@ export const DailyOrderStatus: React.FC = () => {
   };
 
   const handleCreateOrder = async () => {
-    if (!createCustomerId || !createSiteId || createItems.length === 0) {
+    if (!createCustomerId || !createSiteId || (createItems.length === 0 && !Object.values(createAddons).some(quantity => quantity > 0))) {
       message.error(isEn ? 'Select a customer, site and at least one meal item.' : '请选择顾客、送餐地点及至少一项餐品');
       return;
     }
@@ -608,17 +622,33 @@ export const DailyOrderStatus: React.FC = () => {
       return;
     }
     try {
+      const addonItems: any[] = [];
+      createSections.forEach(section => {
+        getCreatePackagesForSection(section).forEach(pkg => {
+          getCreateAddonsForPackage(pkg.id).forEach(addon => {
+            const quantity = createAddons[`package:${section.id}:${pkg.id}:${addon.id}`] || 0;
+            if (quantity > 0) {
+              addonItems.push({ meal_section_id: section.id, customer_addon_id: addon.id, parent_package_id: pkg.id, quantity, remark: `[addon_for_customer_package:${pkg.id}] 附加于：${pkg.template_name}` });
+            }
+          });
+        });
+      });
+      createCustomerAddons.filter(addon => addon.is_customer_visible === false).forEach(addon => {
+        const quantity = createAddons[`admin:${addon.id}`] || 0;
+        const mealSectionId = createAdminAddonSections[addon.id];
+        if (quantity > 0 && mealSectionId) {
+          addonItems.push({ meal_section_id: mealSectionId, customer_addon_id: addon.id, quantity, remark: '后台另外加单' });
+        }
+      });
+
       const res = await axiosInstance.post('/admin/orders', {
         customer_id: createCustomerId,
         site_id: createSiteId,
         delivery_date: createDate.format('YYYY-MM-DD'),
-        items: createItems.map(item => {
-          const extraRice = createAddons[`${item.meal_section_id}-${item.customer_package_id}`] || 0;
-          return {
-            ...item,
-            remark: [extraRice > 0 ? `加白饭 ${extraRice} 份` : '', createRemark.trim()].filter(Boolean).join(' | '),
-          };
-        }),
+        items: [
+          ...createItems.map(item => ({ ...item, remark: createRemark.trim() })),
+          ...addonItems,
+        ],
         reason: createReason.trim(),
       });
       message.success(res.data?.late_override ? `${labels.saveSuccess} (${labels.lateOverride})` : labels.saveSuccess);
@@ -633,6 +663,12 @@ export const DailyOrderStatus: React.FC = () => {
     const allowedCategories = getEffectiveMealSectionCategories(section?.name, section?.allowed_categories);
     return createPackages.filter(pkg => allowedCategories.includes(pkg.category));
   };
+
+  const getCreateAddonsForPackage = (customerPackageId: number) =>
+    createCustomerAddons.filter(addon =>
+      addon.is_customer_visible !== false
+      && (addon.customer_package_ids || []).includes(customerPackageId)
+    );
 
   const getEditPackagesForSection = (item: any) => {
     const section = editMealSectionsById.get(item.meal_section_id);
@@ -649,7 +685,12 @@ export const DailyOrderStatus: React.FC = () => {
   const setCreateQuantity = (mealSectionId: number, customerPackageId: number, quantity: number) => {
     const safeQuantity = Math.max(0, quantity || 0);
     if (safeQuantity === 0) {
-      setCreateAddonQuantity(mealSectionId, customerPackageId, 0);
+      setCreateAddons(current => Object.fromEntries(
+        Object.entries(current).map(([key, value]) => [
+          key,
+          key.startsWith(`package:${mealSectionId}:${customerPackageId}:`) ? 0 : value,
+        ])
+      ));
     }
     setCreateItems(current => {
       const remaining = current.filter(item => !(item.meal_section_id === mealSectionId && item.customer_package_id === customerPackageId));
@@ -659,8 +700,7 @@ export const DailyOrderStatus: React.FC = () => {
     });
   };
 
-  const setCreateAddonQuantity = (mealSectionId: number, customerPackageId: number, quantity: number) => {
-    const key = `${mealSectionId}-${customerPackageId}`;
+  const setCreateAddonQuantity = (key: string, quantity: number) => {
     setCreateAddons(current => ({ ...current, [key]: Math.max(0, quantity || 0) }));
   };
 
@@ -1037,9 +1077,7 @@ export const DailyOrderStatus: React.FC = () => {
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                             {sectionPackages.map(pkg => {
                               const quantity = getCreateQuantity(section.id, pkg.id);
-                              const addonKey = `${section.id}-${pkg.id}`;
-                              const addonQuantity = createAddons[addonKey] || 0;
-                              const supportsExtraRice = ['饭盒', '大型供餐'].includes(pkg.category);
+                              const packageAddons = getCreateAddonsForPackage(pkg.id);
                               return (
                                 <div key={pkg.id} style={{ padding: 11, borderRadius: 10, border: quantity > 0 ? '1px solid #10b981' : '1px solid #e2e8f0', background: quantity > 0 ? '#fff' : '#f8fafc' }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
@@ -1053,16 +1091,20 @@ export const DailyOrderStatus: React.FC = () => {
                                       <Button type="text" shape="circle" size="small" icon={<PlusOutlined />} onClick={() => setCreateQuantity(section.id, pkg.id, quantity + 1)} />
                                     </div>
                                   </div>
-                                  {supportsExtraRice && quantity > 0 && (
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 8, marginTop: 8 }}>
-                                      <Text type="secondary" style={{ fontSize: 12 }}>{labels.extraRice}</Text>
-                                      <div style={{ display: 'flex', alignItems: 'center', background: '#fffbeb', padding: '1px 4px', borderRadius: 16 }}>
-                                        <Button type="text" shape="circle" size="small" disabled={addonQuantity <= 0} icon={<MinusOutlined />} onClick={() => setCreateAddonQuantity(section.id, pkg.id, addonQuantity - 1)} />
-                                        <InputNumber min={0} max={999} variant="borderless" controls={false} value={addonQuantity} onChange={value => setCreateAddonQuantity(section.id, pkg.id, value || 0)} style={{ width: 42, textAlign: 'center', fontWeight: 700 }} />
-                                        <Button type="text" shape="circle" size="small" icon={<PlusOutlined />} onClick={() => setCreateAddonQuantity(section.id, pkg.id, addonQuantity + 1)} />
+                                  {packageAddons.map(addon => {
+                                    const addonKey = `package:${section.id}:${pkg.id}:${addon.id}`;
+                                    const addonQuantity = createAddons[addonKey] || 0;
+                                    return (
+                                      <div key={addon.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 8, marginTop: 8 }}>
+                                        <div><Text type="secondary" style={{ fontSize: 12 }}>{addon.addon_name}</Text><Text type="secondary" style={{ fontSize: 11, marginLeft: 5 }}>RM {Number(addon.agreement_price || 0).toFixed(2)}</Text></div>
+                                        <div style={{ display: 'flex', alignItems: 'center', background: '#fffbeb', padding: '1px 4px', borderRadius: 16 }}>
+                                          <Button type="text" shape="circle" size="small" disabled={addonQuantity <= 0} icon={<MinusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, addonQuantity - 1)} />
+                                          <InputNumber min={0} max={999} variant="borderless" controls={false} disabled={quantity <= 0} value={addonQuantity} onChange={value => setCreateAddonQuantity(addonKey, value || 0)} style={{ width: 42, textAlign: 'center', fontWeight: 700 }} />
+                                          <Button type="text" shape="circle" size="small" disabled={quantity <= 0} icon={<PlusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, addonQuantity + 1)} />
+                                        </div>
                                       </div>
-                                    </div>
-                                  )}
+                                    );
+                                  })}
                                 </div>
                               );
                             })}
@@ -1072,18 +1114,43 @@ export const DailyOrderStatus: React.FC = () => {
                     );
                   })}
                 </Row>
+                {createCustomerAddons.some(addon => addon.is_customer_visible === false) && (
+                  <Card size="small" title={isEn ? 'Admin-only Add-ons' : '后台另外加单'} style={{ marginTop: 14, borderRadius: 12, border: '1px solid #c4b5fd', background: '#faf5ff' }}>
+                    <Space orientation="vertical" style={{ width: '100%' }} size={10}>
+                      {createCustomerAddons.filter(addon => addon.is_customer_visible === false).map(addon => {
+                        const addonKey = `admin:${addon.id}`;
+                        const quantity = createAddons[addonKey] || 0;
+                        return (
+                          <div key={addon.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(130px, 1fr) 150px auto', gap: 8, alignItems: 'center' }}>
+                            <div><Text strong>{addon.addon_name}</Text><Text type="secondary" style={{ display: 'block', fontSize: 11 }}>RM {Number(addon.agreement_price || 0).toFixed(2)}</Text></div>
+                            <Select size="small" value={createAdminAddonSections[addon.id]} onChange={sectionId => setCreateAdminAddonSections(current => ({ ...current, [addon.id]: sectionId }))} options={createSections.map(section => ({ value: section.id, label: translateMealSection(section.name) }))} />
+                            <Space.Compact>
+                              <Button size="small" disabled={quantity <= 0} icon={<MinusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, quantity - 1)} />
+                              <InputNumber size="small" min={0} controls={false} value={quantity} onChange={value => setCreateAddonQuantity(addonKey, value || 0)} style={{ width: 48 }} />
+                              <Button size="small" icon={<PlusOutlined />} onClick={() => setCreateAddonQuantity(addonKey, quantity + 1)} />
+                            </Space.Compact>
+                          </div>
+                        );
+                      })}
+                    </Space>
+                  </Card>
+                )}
               </Col>
               <Col xs={24} lg={8}>
                 <Card size="small" style={{ borderRadius: 14, position: 'sticky', top: 0 }} styles={{ body: { padding: 16 } }}>
                   <Text strong style={{ fontSize: 16 }}>{labels.orderSummary}</Text>
                   <Divider style={{ margin: '12px 0' }} />
-                  {createItems.length === 0 ? (
+                  {createItems.length === 0 && !Object.values(createAddons).some(quantity => quantity > 0) ? (
                     <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={labels.noItems} />
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxHeight: 220, overflowY: 'auto' }}>
                       {createItems.map(item => {
                         const section = createSections.find(value => value.id === item.meal_section_id);
                         const pkg = createPackages.find(value => value.id === item.customer_package_id);
+                        const selectedAddons = getCreateAddonsForPackage(item.customer_package_id).flatMap(addon => {
+                          const quantity = createAddons[`package:${item.meal_section_id}:${item.customer_package_id}:${addon.id}`] || 0;
+                          return quantity > 0 ? [{ addon, quantity }] : [];
+                        });
                         return (
                           <div key={`${item.meal_section_id}-${item.customer_package_id}`} style={{ background: '#f8fafc', borderRadius: 9, padding: '9px 10px' }}>
                             <Text strong style={{ display: 'block', fontSize: 12 }}>{translateMealSection(section?.name || '')}</Text>
@@ -1091,12 +1158,18 @@ export const DailyOrderStatus: React.FC = () => {
                               <Text type="secondary" ellipsis style={{ fontSize: 12 }}>{translatePackageTemplateName(pkg?.template_name || '')}</Text>
                               <Tag color="blue" style={{ margin: 0 }}>{item.quantity} {labels.portions}</Tag>
                             </div>
-                            {(createAddons[`${item.meal_section_id}-${item.customer_package_id}`] || 0) > 0 && (
-                              <Text style={{ color: '#b45309', fontSize: 11 }}>{labels.extraRice} +{createAddons[`${item.meal_section_id}-${item.customer_package_id}`]}</Text>
-                            )}
+                            {selectedAddons.map(({ addon, quantity }) => (
+                              <Text key={addon.id} style={{ color: '#b45309', fontSize: 11, display: 'block' }}>{addon.addon_name} +{quantity}</Text>
+                            ))}
                           </div>
                         );
                       })}
+                      {createCustomerAddons.filter(addon => addon.is_customer_visible === false && (createAddons[`admin:${addon.id}`] || 0) > 0).map(addon => (
+                        <div key={`admin-${addon.id}`} style={{ background: '#faf5ff', borderRadius: 9, padding: '9px 10px' }}>
+                          <Text strong style={{ fontSize: 12 }}>{addon.addon_name}</Text>
+                          <Tag color="purple" style={{ float: 'right', margin: 0 }}>{createAddons[`admin:${addon.id}`]}</Tag>
+                        </div>
+                      ))}
                     </div>
                   )}
                   <Divider style={{ margin: '12px 0' }} />
@@ -1165,7 +1238,9 @@ export const DailyOrderStatus: React.FC = () => {
                         <Text strong>{translateMealSection(item.meal_section)}</Text>
                       </td>
                       <td>
-                        <Select
+                        {item.customer_addon_id ? (
+                          <Tag color="orange">{item.addon_name || (isEn ? 'Add-on' : '附加项')}</Tag>
+                        ) : <Select
                           value={item.customer_package_id}
                           onChange={(val) => {
                             const updated = [...editDetails];
@@ -1182,7 +1257,7 @@ export const DailyOrderStatus: React.FC = () => {
                             .map(p => (
                               <Option key={p.id} value={p.id}>{translatePackageTemplateName(p.template_name)}</Option>
                             ))}
-                        </Select>
+                        </Select>}
                       </td>
                       <td>
                         <InputNumber

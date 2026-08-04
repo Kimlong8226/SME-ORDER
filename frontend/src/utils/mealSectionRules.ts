@@ -16,6 +16,22 @@ export const getMealSectionCategoryRule = (name: string): readonly string[] | nu
   return null;
 };
 
+export const getDefaultMealSectionCategories = (name: string): string[] => {
+  const normalizedName = String(name || '').trim().toLowerCase();
+  if (normalizedName.includes('早餐') || normalizedName.includes('breakfast')) {
+    return ['早餐'];
+  }
+  if (
+    normalizedName.includes('午餐')
+    || normalizedName.includes('lunch')
+    || normalizedName.includes('晚餐')
+    || normalizedName.includes('dinner')
+  ) {
+    return ['大型供餐'];
+  }
+  return [];
+};
+
 export const parseMealSectionCategories = (value: string | string[] | null | undefined): string[] => {
   const values = Array.isArray(value) ? value : String(value || '').split(',');
   return [...new Set(values.map(item => item.trim()).filter(Boolean))];

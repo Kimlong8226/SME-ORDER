@@ -36,6 +36,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
 import {
+  getDefaultMealSectionCategories,
   getInvalidMealSectionCategories,
   getMealSectionCategoryRule,
   parseMealSectionCategories,
@@ -180,11 +181,19 @@ export const MealSectionsManagement: React.FC = () => {
     const catArray = record.allowed_categories
       ? record.allowed_categories.split(',').map((c: string) => c.trim()).filter(Boolean)
       : [];
+    const invalidCategories = getInvalidMealSectionCategories(record.name, catArray);
+    const validCategories = catArray.filter((category: string) => !invalidCategories.includes(category));
+    const correctedCategories = validCategories.length > 0
+      ? validCategories
+      : getDefaultMealSectionCategories(record.name);
     form.setFieldsValue({
       name: record.name,
       sort_order: record.sort_order,
-      allowed_categories: catArray
+      allowed_categories: correctedCategories
     });
+    if (invalidCategories.length > 0) {
+      message.warning(`已移除不匹配分类：${invalidCategories.join('、')}；请确认新的餐次分类后更新。`);
+    }
     setModalVisible(true);
   };
 
@@ -209,6 +218,7 @@ export const MealSectionsManagement: React.FC = () => {
       setModalVisible(false);
       fetchSections();
     } catch (err: any) {
+      if (err?.errorFields) return;
       message.error(err.response?.data?.detail || '保存失败，请检查输入');
     }
   };

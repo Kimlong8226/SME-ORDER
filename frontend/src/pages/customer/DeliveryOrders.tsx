@@ -200,7 +200,7 @@ export const DeliveryOrders: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           {(details || []).map((d: any) => (
             <div key={d.id} style={{ fontSize: 12, color: '#475569' }}>
-              <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{translateMealSection(d.meal_section)}:</span> {translatePackageTemplateName(d.package_name)} x {d.quantity}{isEn ? ' pax' : '人'}
+              <span style={{ fontWeight: 'bold', color: '#1e293b' }}>{translateMealSection(d.meal_section)}:</span> {translatePackageTemplateName(d.addon_name || d.package_name)} x {d.quantity}{d.addon_name ? (isEn ? ' units' : ' 份') : (isEn ? ' pax' : '人')}
             </div>
           ))}
         </div>
@@ -420,7 +420,7 @@ export const DeliveryOrders: React.FC = () => {
                 {(selectedDo.details || []).map((d: any) => (
                   <tr key={d.id} style={{ borderBottom: '1px solid #e2e8f0' }}>
                     <td style={{ padding: '10px 4px' }}><Text strong>{translateMealSection(d.meal_section)}</Text></td>
-                    <td style={{ padding: '10px 4px' }}>{translatePackageTemplateName(d.package_name)}</td>
+                    <td style={{ padding: '10px 4px' }}>{translatePackageTemplateName(d.addon_name || d.package_name)}</td>
                     <td style={{ padding: '10px 4px', textAlign: 'right', fontWeight: 'bold' }}>{d.quantity}</td>
                   </tr>
                 ))}

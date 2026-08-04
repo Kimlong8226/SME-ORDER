@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date, datetime, timezone
 from uuid import uuid4
+import re
 
 from pydantic import BaseModel
 
 from database import get_db
 from model.models import (
-    Order, OrderDetail, Customer, CustomerUser, CustomerPackage,
+    Order, OrderDetail, Customer, CustomerUser, CustomerPackage, CustomerAddon, AddonTemplate,
     MealSection, DeliverySite, CustomerMealSection, OrderEditSession,
     AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_CANCEL
 )
@@ -70,11 +71,11 @@ def _access_payload(customer: Customer, access: dict) -> dict:
     }
 
 
-def _snapshot_payload(snapshot: dict[tuple[int, int], int]) -> list[dict]:
+def _snapshot_payload(snapshot: dict[tuple[int, str, int], int]) -> list[dict]:
     return [
         {
             "meal_section_id": key[0],
-            "package_template_id": key[1],
+            f"{key[1]}_id": key[2],
             "quantity": quantity,
         }
         for key, quantity in sorted(snapshot.items())
@@ -271,12 +272,25 @@ def submit_matrix_orders(
                 CustomerPackage.is_shown_to_customer == True,
             ).all()
             packages_by_template = {row.package_template_id: row for row in customer_packages}
+            customer_addons = db.query(CustomerAddon).join(AddonTemplate).filter(
+                CustomerAddon.customer_id == customer_id,
+                AddonTemplate.is_customer_visible == True,
+            ).all()
+            addons_by_id = {row.id: row for row in customer_addons}
+            package_item_keys = {
+                (item.meal_section_id, item.customer_package_id)
+                for item in items
+                if item.customer_package_id is not None and item.quantity > 0
+            }
 
             old_snapshot = {}
             if existing_order:
                 for detail in existing_order.details:
                     if detail.customer_package:
-                        key = (detail.meal_section_id, detail.customer_package.package_template_id)
+                        key = (detail.meal_section_id, "package_template", detail.customer_package.package_template_id)
+                        old_snapshot[key] = old_snapshot.get(key, 0) + detail.quantity
+                    elif detail.customer_addon:
+                        key = (detail.meal_section_id, "customer_addon", detail.customer_addon_id)
                         old_snapshot[key] = old_snapshot.get(key, 0) + detail.quantity
 
             new_snapshot = {}
@@ -284,13 +298,29 @@ def submit_matrix_orders(
                 section = assigned_sections.get(item.meal_section_id)
                 if not section:
                     raise HTTPException(status_code=400, detail=f"餐次 ID {item.meal_section_id} 未向该客户开放")
-                cp = packages_by_template.get(item.customer_package_id)
-                if not cp:
-                    raise HTTPException(status_code=400, detail="所选套餐未向该客户开放或已隐藏")
-                allowed_categories = effective_meal_section_categories(section)
-                if cp.template.category not in allowed_categories:
-                    raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
-                key = (item.meal_section_id, item.customer_package_id)
+                has_package = item.customer_package_id is not None
+                has_addon = item.customer_addon_id is not None
+                if has_package == has_addon:
+                    raise HTTPException(status_code=400, detail="每项订单明细必须且只能选择套餐或 Add-on")
+
+                if has_package:
+                    cp = packages_by_template.get(item.customer_package_id)
+                    if not cp:
+                        raise HTTPException(status_code=400, detail="所选套餐未向该客户开放或已隐藏")
+                    allowed_categories = effective_meal_section_categories(section)
+                    if cp.template.category not in allowed_categories:
+                        raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
+                    key = (item.meal_section_id, "package_template", item.customer_package_id)
+                else:
+                    addon = addons_by_id.get(item.customer_addon_id)
+                    parent_cp = packages_by_template.get(item.parent_package_id)
+                    if not addon or not parent_cp:
+                        raise HTTPException(status_code=400, detail="所选 Add-on 或对应套餐未向该客户开放")
+                    if (item.meal_section_id, item.parent_package_id) not in package_item_keys:
+                        raise HTTPException(status_code=400, detail="Add-on 必须附加在本次已选择的套餐卡片下")
+                    if not any(link.customer_package_id == parent_cp.id for link in addon.package_links):
+                        raise HTTPException(status_code=400, detail="该 Add-on 未向所选客户专属套餐开放")
+                    key = (item.meal_section_id, "customer_addon", item.customer_addon_id)
                 new_snapshot[key] = new_snapshot.get(key, 0) + item.quantity
 
             if access["effective_is_blocked"]:
@@ -320,16 +350,26 @@ def submit_matrix_orders(
                 is_new_order = True
 
             for item in items:
-                cp = packages_by_template[item.customer_package_id]
-
-                detail = OrderDetail(
-                    order_id=order.id,
-                    meal_section_id=item.meal_section_id,
-                    customer_package_id=cp.id,
-                    quantity=item.quantity,
-                    final_unit_price=cp.agreement_price,
-                    remark=item.remark
-                )
+                if item.customer_package_id is not None:
+                    cp = packages_by_template[item.customer_package_id]
+                    detail = OrderDetail(
+                        order_id=order.id,
+                        meal_section_id=item.meal_section_id,
+                        customer_package_id=cp.id,
+                        quantity=item.quantity,
+                        final_unit_price=cp.agreement_price,
+                        remark=item.remark,
+                    )
+                else:
+                    addon = addons_by_id[item.customer_addon_id]
+                    detail = OrderDetail(
+                        order_id=order.id,
+                        meal_section_id=item.meal_section_id,
+                        customer_addon_id=addon.id,
+                        quantity=item.quantity,
+                        final_unit_price=addon.agreement_price,
+                        remark=item.remark,
+                    )
                 db.add(detail)
             created_orders.append(order)
 
@@ -372,12 +412,14 @@ def submit_matrix_orders(
         site = db.query(DeliverySite).filter(DeliverySite.id == order.delivery_site_id).first()
         details_resp = []
         for d in order.details:
-            pkg_name = d.customer_package.template.name if d.customer_package else "未知"
+            pkg_name = d.customer_package.template.name if d.customer_package else None
+            addon_name = d.customer_addon.template.name if d.customer_addon else None
             meal_name = d.meal_section.name if d.meal_section else ""
             details_resp.append(OrderDetailResponse(
                 id=d.id,
                 meal_section_name=meal_name,
                 package_name=pkg_name,
+                addon_name=addon_name,
                 quantity=d.quantity,
                 remark=d.remark
             ))
@@ -456,17 +498,25 @@ def get_customer_order_history(customer_id: int, db: Session = Depends(get_db)):
     for order in orders:
         details_list = []
         for d in order.details:
-            pkg_name = d.customer_package.template.name if d.customer_package else "未知"
+            pkg_name = d.customer_package.template.name if d.customer_package else None
+            addon_name = d.customer_addon.template.name if d.customer_addon else None
             meal_name = d.meal_section.name if d.meal_section else ""
+            raw_detail_remark = d.remark or ""
+            parent_match = re.search(r"\[addon_for_package:(\d+)\]", raw_detail_remark)
+            parent_package_id = int(parent_match.group(1)) if parent_match else None
+            display_remark = re.sub(r"\s*\[addon_for_package:\d+\]\s*", " ", raw_detail_remark).strip() or None
             details_list.append({
                 "id": d.id,
                 "meal_section_id": d.meal_section_id,
                 "meal_section": meal_name,
                 "meal_section_name": meal_name,
                 "package_name": pkg_name,
+                "addon_name": addon_name,
                 "customer_package_id": d.customer_package.template.id if d.customer_package and d.customer_package.template else None,
+                "customer_addon_id": d.customer_addon_id,
+                "parent_package_id": parent_package_id,
                 "quantity": d.quantity,
-                "remark": d.remark
+                "remark": display_remark
             })
         window = order_cutoff_window(order.delivery_date)
         financial = balance_by_order.get(order.id)
@@ -518,6 +568,10 @@ def get_meal_sections_public(customer_id: int, db: Session = Depends(get_db)):
         CustomerPackage.is_active == True,
         CustomerPackage.is_shown_to_customer == True,
     ).all()
+    customer_addons = db.query(CustomerAddon).join(AddonTemplate).filter(
+        CustomerAddon.customer_id == customer_id,
+        AddonTemplate.is_customer_visible == True,
+    ).all()
 
     results = []
     for s in sections:
@@ -536,7 +590,17 @@ def get_meal_sections_public(customer_id: int, db: Session = Depends(get_db)):
                 "name": t.name,
                 "category": t.category,
                 "price": cp.agreement_price,
-                "description": t.description
+                "description": t.description,
+                "addons": [
+                    {
+                        "id": addon.id,
+                        "name": addon.template.name,
+                        "price": addon.agreement_price,
+                        "description": addon.template.description,
+                    }
+                    for addon in customer_addons
+                    if any(link.customer_package_id == cp.id for link in addon.package_links)
+                ],
             })
 
         results.append({

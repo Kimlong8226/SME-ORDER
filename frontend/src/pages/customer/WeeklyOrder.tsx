@@ -191,10 +191,10 @@ export const OrderHistory: React.FC<OrderHistoryProps> = ({ onEditOrder }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {(details || []).map((d: any) => (
             <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13 }}>🍽️</span>
+              <span style={{ fontSize: 13 }}>{d.addon_name ? '＋' : '🍽️'}</span>
               <Text strong style={{ fontSize: 13, minWidth: 80 }}>{translateMealSection(d.meal_section)}:</Text>
               <Text style={{ fontSize: 13, color: '#475569' }}>
-                {translatePackageTemplateName(d.package_name || d.template_name)} <strong style={{ color: '#2563eb' }}>x {d.quantity}</strong> {labels.pax}
+                {translatePackageTemplateName(d.addon_name || d.package_name || d.template_name)} <strong style={{ color: '#2563eb' }}>x {d.quantity}</strong> {d.addon_name ? (isEn ? 'units' : '份') : labels.pax}
               </Text>
               {d.remark && (
                 <Tag color="warning" style={{ fontSize: 11, margin: 0 }}>

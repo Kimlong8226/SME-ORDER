@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 const { Title, Text } = Typography;
 const { Option } = Select;
 
+type AddonMatrix = Record<string, Record<number, Record<number, number>>>;
+
 export const MatrixOrder: React.FC = () => {
   const { message } = App.useApp();
   const { i18n } = useTranslation();
@@ -40,14 +42,14 @@ export const MatrixOrder: React.FC = () => {
     portions: isEn ? 'portions' : '份',
     selectTemplate: isEn ? 'Select Package Template:' : '选择配餐套餐：',
     orderPax: isEn ? 'Order Pax / Portions' : '报餐人数/份数',
-    extraRice: isEn ? 'Extra White Rice (Portions)' : '加白饭 (份数)',
+    extraRice: isEn ? 'Add-ons' : '附加项',
     orderSummary: isEn ? 'Order Summary' : '已选',
     clearAll: isEn ? 'Clear Selections' : '清空选择',
     emptyCartTitle: isEn ? 'Your Cart is Empty' : '购物车为空',
     emptyCartDesc: isEn ? 'Please click meal cards to add order quantities.' : '',
     defaultPkg: isEn ? 'Default Package' : '默认配餐',
     pax: isEn ? 'Pax' : '人',
-    extraRiceShort: isEn ? 'Extra Rice' : '加白饭需求',
+    extraRiceShort: isEn ? 'Add-ons' : '附加项',
     remarkTitle: isEn ? 'Order Remarks (Preferences, etc.)' : '备注',
     remarkPlaceholder: isEn ? 'e.g. Day shift 71, Night shift 40. Extra rice 5, no coriander...' : '例: 早班71份，夜班40份。加饭 5 份，不要香菜...',
     factory: isEn ? 'Delivery Site' : '工厂/分点',
@@ -93,7 +95,7 @@ export const MatrixOrder: React.FC = () => {
   const [editingOrderVersion, setEditingOrderVersion] = useState<number | null>(null);
   const [isEditing, setIsEditing] = useState(false);
   const [originalMatrixData, setOriginalMatrixData] = useState<Record<string, Record<number, number>>>({});
-  const [originalMatrixAddons, setOriginalMatrixAddons] = useState<Record<string, Record<number, number>>>({});
+  const [originalMatrixAddons, setOriginalMatrixAddons] = useState<AddonMatrix>({});
   const [serverClockOffset, setServerClockOffset] = useState(0);
   const [configurationLoaded, setConfigurationLoaded] = useState(false);
   const [, setClockTick] = useState(0);
@@ -107,8 +109,8 @@ export const MatrixOrder: React.FC = () => {
   // 矩阵输入数据: { [sectionName]: { [pkgId: number]: quantity: number } }
   const [matrixData, setMatrixData] = useState<Record<string, Record<number, number>>>({});
 
-  // 加白饭数量数据: { [sectionName]: { [pkgId: number]: addonQty: number } }
-  const [matrixAddons, setMatrixAddons] = useState<Record<string, Record<number, number>>>({});
+  // Add-on 数量: { [sectionName]: { [packageTemplateId]: { [customerAddonId]: quantity } } }
+  const [matrixAddons, setMatrixAddons] = useState<AddonMatrix>({});
 
   const [remark, setRemark] = useState<string>('');
   const [submitting, setSubmitting] = useState(false);
@@ -173,13 +175,16 @@ export const MatrixOrder: React.FC = () => {
 
       // 初始化矩阵状态的结构
       const initialData: Record<string, Record<number, number>> = {};
-      const initialAddons: Record<string, Record<number, number>> = {};
+      const initialAddons: AddonMatrix = {};
       sectionsList.forEach((s: any) => {
         initialData[s.name] = {};
         initialAddons[s.name] = {};
         (s.packages || []).forEach((p: any) => {
           initialData[s.name][p.id] = 0;
-          initialAddons[s.name][p.id] = 0;
+          initialAddons[s.name][p.id] = {};
+          (p.addons || []).forEach((addon: any) => {
+            initialAddons[s.name][p.id][addon.id] = 0;
+          });
         });
       });
 
@@ -197,11 +202,21 @@ export const MatrixOrder: React.FC = () => {
           const name = d.meal_section_name || d.meal_section;
           if (newQuantities[name] && d.customer_package_id) {
             newQuantities[name][d.customer_package_id] = d.quantity;
-            if (d.remark) {
-              const match = d.remark.match(/加白饭\s*(\d+)\s*份/);
-              if (match) {
-                newAddons[name][d.customer_package_id] = parseInt(match[1], 10);
+            const legacyRiceMatch = String(d.remark || '').match(/加白饭\s*(\d+)\s*份/);
+            if (legacyRiceMatch) {
+              const sectionPackage = sectionsList
+                .find((section: any) => section.name === name)?.packages
+                ?.find((pkg: any) => pkg.id === d.customer_package_id);
+              const riceAddon = (sectionPackage?.addons || []).find((addon: any) => /白饭|米饭/.test(addon.name));
+              if (riceAddon && newAddons[name][d.customer_package_id]?.[riceAddon.id] !== undefined) {
+                newAddons[name][d.customer_package_id][riceAddon.id] = Number(legacyRiceMatch[1]);
               }
+            }
+          } else if (newAddons[name] && d.customer_addon_id) {
+            const parentMatch = String(d.remark || '').match(/\[addon_for_package:(\d+)\]/);
+            const parentPackageId = Number(d.parent_package_id || (parentMatch ? parentMatch[1] : 0));
+            if (parentPackageId && newAddons[name][parentPackageId]?.[d.customer_addon_id] !== undefined) {
+              newAddons[name][parentPackageId][d.customer_addon_id] = d.quantity;
             }
           }
         });
@@ -266,13 +281,16 @@ export const MatrixOrder: React.FC = () => {
   // 清空选择
   const handleClearOrder = () => {
     const cleared: Record<string, Record<number, number>> = {};
-    const clearedAddons: Record<string, Record<number, number>> = {};
+    const clearedAddons: AddonMatrix = {};
     Object.keys(matrixData).forEach(sec => {
       cleared[sec] = {};
       clearedAddons[sec] = {};
       Object.keys(matrixData[sec] || {}).forEach(pkgId => {
         cleared[sec][Number(pkgId)] = 0;
-        clearedAddons[sec][Number(pkgId)] = 0;
+        clearedAddons[sec][Number(pkgId)] = {};
+        Object.keys(matrixAddons[sec]?.[Number(pkgId)] || {}).forEach(addonId => {
+          clearedAddons[sec][Number(pkgId)][Number(addonId)] = 0;
+        });
       });
     });
     setMatrixData(cleared);
@@ -302,18 +320,24 @@ export const MatrixOrder: React.FC = () => {
       Object.entries(pkgMap || {}).forEach(([pkgIdStr, qty]) => {
         const pkgId = Number(pkgIdStr);
         if ((qty as number) > 0) {
-          const extraRiceQty = matrixAddons[sectionName]?.[pkgId] || 0;
-          const itemRemark = [
-            extraRiceQty > 0 ? `加白饭 ${extraRiceQty} 份` : '',
-            remark ? remark : ''
-          ].filter(Boolean).join(' | ');
-
           items.push({
             delivery_site_id: selectedSiteId!,
             meal_section_id: actualSectionId,
             customer_package_id: pkgId,
             quantity: qty as number,
-            remark: itemRemark
+            remark: remark || ''
+          });
+          Object.entries(matrixAddons[sectionName]?.[pkgId] || {}).forEach(([addonId, addonQty]) => {
+            if ((addonQty as number) > 0) {
+              items.push({
+                delivery_site_id: selectedSiteId!,
+                meal_section_id: actualSectionId,
+                customer_addon_id: Number(addonId),
+                parent_package_id: pkgId,
+                quantity: addonQty as number,
+                remark: `[addon_for_package:${pkgId}]`,
+              });
+            }
           });
         }
       });
@@ -355,7 +379,7 @@ export const MatrixOrder: React.FC = () => {
   }, 0);
 
   // 获取购物车已选中的明细列表
-  const activeCartItems: Array<{ sectionName: string; pkg: any; qty: number; extraRice: number }> = [];
+  const activeCartItems: Array<{ sectionName: string; pkg: any; qty: number; addons: Array<{ addon: any; qty: number }> }> = [];
   dbMealSections.forEach((sec: any) => {
     (sec.packages || []).forEach((pkg: any) => {
       const qty = matrixData[sec.name]?.[pkg.id] || 0;
@@ -364,7 +388,10 @@ export const MatrixOrder: React.FC = () => {
           sectionName: sec.name,
           pkg: pkg,
           qty: qty,
-          extraRice: matrixAddons[sec.name]?.[pkg.id] || 0
+          addons: (pkg.addons || []).flatMap((addon: any) => {
+            const addonQty = matrixAddons[sec.name]?.[pkg.id]?.[addon.id] || 0;
+            return addonQty > 0 ? [{ addon, qty: addonQty }] : [];
+          }),
         });
       }
     });
@@ -569,10 +596,6 @@ export const MatrixOrder: React.FC = () => {
                 const sectionTotalQty = Object.values(sectionPkgMap).reduce((a, b) => a + (b || 0), 0);
                 const isSelected = sectionTotalQty > 0;
                 
-                const matchedSecObj = dbMealSections.find(s => s.name === sectionName);
-                const allowedCategories = matchedSecObj ? (matchedSecObj.allowed_categories || "") : "";
-                const supportsExtraRice = allowedCategories.includes("饭盒") || allowedCategories.includes("大型供餐");
-
                 return (
                   <Col xs={24} sm={12} key={sectionName}>
                     <Card
@@ -601,11 +624,22 @@ export const MatrixOrder: React.FC = () => {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                         {sectionPkgs.map((pkg: any) => {
                           const qty = matrixData[sectionName]?.[pkg.id] || 0;
-                          const addonQty = matrixAddons[sectionName]?.[pkg.id] || 0;
+                          const packageAddons = pkg.addons || [];
                           
                           const updatePkgQty = (newVal: number) => {
                             const maximum = originalMatrixData[sectionName]?.[pkg.id] ?? 0;
                             const safeValue = reduceOnly ? Math.min(maximum, newVal) : newVal;
+                            if (safeValue <= 0) {
+                              setMatrixAddons(prev => ({
+                                ...prev,
+                                [sectionName]: {
+                                  ...(prev[sectionName] || {}),
+                                  [pkg.id]: Object.fromEntries(
+                                    Object.keys(prev[sectionName]?.[pkg.id] || {}).map(addonId => [addonId, 0])
+                                  ),
+                                },
+                              }));
+                            }
                             setMatrixData(prev => ({
                               ...prev,
                               [sectionName]: {
@@ -615,14 +649,17 @@ export const MatrixOrder: React.FC = () => {
                             }));
                           };
 
-                          const updateAddonQty = (newVal: number) => {
-                            const maximum = originalMatrixAddons[sectionName]?.[pkg.id] ?? 0;
+                          const updateAddonQty = (addonId: number, newVal: number) => {
+                            const maximum = originalMatrixAddons[sectionName]?.[pkg.id]?.[addonId] ?? 0;
                             const safeValue = reduceOnly ? Math.min(maximum, newVal) : newVal;
                             setMatrixAddons(prev => ({
                               ...prev,
                               [sectionName]: {
                                 ...(prev[sectionName] || {}),
-                                [pkg.id]: Math.max(0, safeValue)
+                                [pkg.id]: {
+                                  ...(prev[sectionName]?.[pkg.id] || {}),
+                                  [addonId]: Math.max(0, safeValue),
+                                },
                               }
                             }));
                           };
@@ -679,44 +716,22 @@ export const MatrixOrder: React.FC = () => {
                                 </div>
                               </div>
 
-                              {supportsExtraRice && (
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 6, marginTop: 6 }}>
-                                  <Text style={{ fontSize: 12, color: '#64748b' }}>{labels.extraRice}</Text>
-                                  
-                                  <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
-                                    <Button
-                                      type="text"
-                                      shape="circle"
-                                      size="small"
-                                      disabled={addonQty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)}
-                                      icon={<MinusOutlined style={{ fontSize: 9, color: addonQty > 0 ? '#0f172a' : '#94a3b8' }} />}
-                                      onClick={() => updateAddonQty(addonQty - 1)}
-                                      style={{ width: 22, height: 22, background: addonQty > 0 ? '#ffffff' : 'transparent' }}
-                                    />
-                                    
-                                    <InputNumber
-                                      min={0}
-                                      max={reduceOnly ? (originalMatrixAddons[sectionName]?.[pkg.id] ?? 0) : 999}
-                                      variant="borderless"
-                                      controls={false}
-                                      value={addonQty}
-                                      onChange={(val) => updateAddonQty(val || 0)}
-                                      disabled={(isBlocked && !isEditing) || (isYilian && isSunday)}
-                                      style={{ width: 32, textAlign: 'center', fontWeight: 'bold', fontSize: 12, background: 'transparent' }}
-                                    />
-                                    
-                                    <Button
-                                      type="text"
-                                      shape="circle"
-                                      size="small"
-                                      disabled={isBlocked || (isYilian && isSunday)}
-                                      icon={<PlusOutlined style={{ fontSize: 9, color: '#0f172a' }} />}
-                                      onClick={() => updateAddonQty(addonQty + 1)}
-                                      style={{ width: 22, height: 22, background: '#ffffff' }}
-                                    />
+                              {packageAddons.map((addon: any) => {
+                                const addonQty = matrixAddons[sectionName]?.[pkg.id]?.[addon.id] || 0;
+                                return (
+                                  <div key={addon.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed #e2e8f0', paddingTop: 6, marginTop: 6 }}>
+                                    <div>
+                                      <Text style={{ fontSize: 12, color: '#64748b' }}>{addon.name}</Text>
+                                      <Text type="secondary" style={{ fontSize: 11, marginLeft: 6 }}>RM {Number(addon.price || 0).toFixed(2)}</Text>
+                                    </div>
+                                    <div style={{ display: 'flex', alignItems: 'center', background: '#f1f5f9', padding: '2px 4px', borderRadius: 20 }}>
+                                      <Button type="text" shape="circle" size="small" disabled={addonQty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)} icon={<MinusOutlined style={{ fontSize: 9 }} />} onClick={() => updateAddonQty(addon.id, addonQty - 1)} style={{ width: 22, height: 22 }} />
+                                      <InputNumber min={0} max={reduceOnly ? (originalMatrixAddons[sectionName]?.[pkg.id]?.[addon.id] ?? 0) : 999} variant="borderless" controls={false} value={addonQty} onChange={(val) => updateAddonQty(addon.id, val || 0)} disabled={qty <= 0 || (isBlocked && !isEditing) || (isYilian && isSunday)} style={{ width: 32, textAlign: 'center', fontWeight: 'bold', fontSize: 12, background: 'transparent' }} />
+                                      <Button type="text" shape="circle" size="small" disabled={qty <= 0 || isBlocked || (isYilian && isSunday)} icon={<PlusOutlined style={{ fontSize: 9 }} />} onClick={() => updateAddonQty(addon.id, addonQty + 1)} style={{ width: 22, height: 22, background: '#fff' }} />
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                );
+                              })}
                             </div>
                           );
                         })}
@@ -789,12 +804,12 @@ export const MatrixOrder: React.FC = () => {
                       </span>
                     </div>
 
-                    {item.extraRice > 0 && (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>
-                        <Text style={{ fontSize: 12, color: '#b45309' }}>{labels.extraRiceShort}</Text>
-                        <Text strong style={{ fontSize: 12, color: '#b45309' }}>+{item.extraRice} {labels.portions}</Text>
+                    {item.addons.map(({ addon, qty: addonQty }) => (
+                      <div key={addon.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '3px 8px' }}>
+                        <Text style={{ fontSize: 12, color: '#b45309' }}>{addon.name}</Text>
+                        <Text strong style={{ fontSize: 12, color: '#b45309' }}>+{addonQty} {labels.portions}</Text>
                       </div>
-                    )}
+                    ))}
                   </div>
                 ))}
               </div>

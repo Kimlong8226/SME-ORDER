@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Date, Text
+from sqlalchemy import Column, Integer, String, Boolean, Float, DateTime, ForeignKey, Date, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from database import Base
@@ -131,6 +131,8 @@ class AddonTemplate(Base):
     name = Column(String(100), nullable=False)
     default_price = Column(Float, default=0.0)
     description = Column(Text, nullable=True)  # 可选描述，如：熟鸡蛋 1 粒
+    # False 代表仅后台人员可加单，例如运输费。
+    is_customer_visible = Column(Boolean, nullable=False, default=True)
 
 
 class CustomerPackage(Base):
@@ -163,6 +165,22 @@ class CustomerAddon(Base):
 
     customer = relationship("Customer", back_populates="addons")
     template = relationship("AddonTemplate")
+    package_links = relationship("CustomerAddonPackage", cascade="all, delete-orphan", back_populates="customer_addon")
+
+
+class CustomerAddonPackage(Base):
+    """指定一个客户 Add-on 可以显示在哪些客户专属套餐卡片下。"""
+    __tablename__ = "customer_addon_packages"
+    __table_args__ = (
+        UniqueConstraint("customer_addon_id", "customer_package_id", name="uq_customer_addon_package"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    customer_addon_id = Column(Integer, ForeignKey("customer_addons.id", ondelete="CASCADE"), nullable=False)
+    customer_package_id = Column(Integer, ForeignKey("customer_packages.id", ondelete="CASCADE"), nullable=False)
+
+    customer_addon = relationship("CustomerAddon", back_populates="package_links")
+    customer_package = relationship("CustomerPackage")
 
 class CustomerMealSection(Base):
     """

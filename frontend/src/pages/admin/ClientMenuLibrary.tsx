@@ -158,6 +158,8 @@ export const ClientMenuLibrary: React.FC = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [addonAssignForm] = Form.useForm();
   const [addonPriceForm] = Form.useForm();
+  const selectedAddonTemplateId = Form.useWatch('addon_template_id', addonAssignForm);
+  const selectedAddonTemplate = allAddons.find(addon => addon.id === selectedAddonTemplateId);
 
   const normalizedKeyword = searchKeyword.trim().toLowerCase();
   const filteredPackages = assignedPackages.filter((pkg) =>
@@ -380,7 +382,10 @@ export const ClientMenuLibrary: React.FC = () => {
 
   const handleOpenEditAddonPrice = (record: any) => {
     setEditingAddon(record);
-    addonPriceForm.setFieldsValue({ agreement_price: record.agreement_price });
+    addonPriceForm.setFieldsValue({
+      agreement_price: record.agreement_price,
+      customer_package_ids: record.customer_package_ids || [],
+    });
     setAddonPriceModalVisible(true);
   };
 
@@ -389,7 +394,10 @@ export const ClientMenuLibrary: React.FC = () => {
     try {
       await axiosInstance.put(
         `/admin/customers/${selectedCustomerId}/addons/${editingAddon.id}`,
-        { agreement_price: values.agreement_price }
+        {
+          agreement_price: values.agreement_price,
+          customer_package_ids: values.customer_package_ids || [],
+        }
       );
       message.success(labels.addonPriceSuccess);
       setAddonPriceModalVisible(false);
@@ -535,6 +543,19 @@ export const ClientMenuLibrary: React.FC = () => {
           RM {val.toFixed(2)}
         </Tag>
       ),
+    },
+    {
+      title: isEn ? 'Enabled package cards' : '已开启套餐卡片',
+      dataIndex: 'customer_package_names',
+      key: 'customer_package_names',
+      render: (names: string[], record: any) => record.is_customer_visible === false
+        ? <Tag color="purple">{isEn ? 'Admin only' : '仅后台加单'}</Tag>
+        : (
+          <Space size={[4, 4]} wrap>
+            {(names || []).map(name => <Tag key={name} color="blue">{translatePkgName(name)}</Tag>)}
+            {(names || []).length === 0 && <Tag color="warning">{isEn ? 'Not enabled' : '未开启'}</Tag>}
+          </Space>
+        ),
     },
     {
       title: labels.colAddonAction,
@@ -916,6 +937,26 @@ export const ClientMenuLibrary: React.FC = () => {
               ))}
             </Select>
           </Form.Item>
+          {selectedAddonTemplate?.is_customer_visible !== false && (
+            <Form.Item
+              name="customer_package_ids"
+              label={isEn ? 'Show under these customer package cards' : '开启显示的客户专属套餐'}
+              tooltip={isEn ? 'Checked means visible; unchecked means hidden. Leaving all unchecked keeps this Add-on disabled for the customer.' : '勾选即开启显示，取消勾选即关闭；全部不勾选时，该客户前台不会看到此 Add-on。'}
+            >
+              <Checkbox.Group style={{ width: '100%' }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {assignedPackages.map(pkg => (
+                    <Checkbox key={pkg.id} value={pkg.id}>
+                      {translatePkgName(pkg.template_name)} <Tag color="blue">{translateCategory(pkg.category)}</Tag>
+                    </Checkbox>
+                  ))}
+                  {assignedPackages.length === 0 && (
+                    <Text type="secondary">{isEn ? 'Assign customer packages first.' : '请先为客户分配套餐。'}</Text>
+                  )}
+                </Space>
+              </Checkbox.Group>
+            </Form.Item>
+          )}
           <Form.Item
             name="agreement_price"
             label={labels.formAddonAgreementPrice}
@@ -949,6 +990,23 @@ export const ClientMenuLibrary: React.FC = () => {
           >
             <InputNumber style={{ width: '100%' }} precision={2} size="large" prefix="RM" min={0} />
           </Form.Item>
+          {editingAddon?.is_customer_visible !== false && (
+            <Form.Item
+              name="customer_package_ids"
+              label={isEn ? 'Show under these customer package cards' : '开启显示的客户专属套餐'}
+              tooltip={isEn ? 'Checked means visible; unchecked means hidden.' : '勾选即开启，取消勾选即关闭；全部关闭后顾客前台不显示。'}
+            >
+              <Checkbox.Group style={{ width: '100%' }}>
+                <Space direction="vertical" style={{ width: '100%' }}>
+                  {assignedPackages.map(pkg => (
+                    <Checkbox key={pkg.id} value={pkg.id}>
+                      {translatePkgName(pkg.template_name)} <Tag color="blue">{translateCategory(pkg.category)}</Tag>
+                    </Checkbox>
+                  ))}
+                </Space>
+              </Checkbox.Group>
+            </Form.Item>
+          )}
         </Form>
       </Modal>
     </div>

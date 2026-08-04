@@ -17,7 +17,7 @@ os.environ["SEED_DEMO_DATA"] = "false"
 from fastapi.testclient import TestClient
 from database import Base, SessionLocal, engine
 from main import app
-from model.models import Customer, CustomerMealSection, CustomerPackage, CustomerUser, DeliverySite, MealSection, PackageTemplate, StaffUser
+from model.models import AddonTemplate, Customer, CustomerAddon, CustomerAddonPackage, CustomerMealSection, CustomerPackage, CustomerUser, DeliverySite, MealSection, PackageTemplate, StaffUser
 
 def legacy_hash(password: str) -> str:
     return hashlib.sha256((password + "central_kitchen_salt_2026").encode("utf-8")).hexdigest()
@@ -35,20 +35,32 @@ customer_user_two = CustomerUser(customer_id=customer_two.id, username="two@test
 section = MealSection(name="Lunch", sort_order=1, allowed_categories="大型供餐")
 package = PackageTemplate(name="Test Meal", category="大型供餐", default_price=12.5)
 inactive_package = PackageTemplate(name="Inactive Test Meal", category="Meal", default_price=9.5)
-db.add_all([site, customer_user_one, customer_user_two, section, package, inactive_package])
+rice_addon = AddonTemplate(name="Extra Rice", default_price=1.5, is_customer_visible=True)
+transport_addon = AddonTemplate(name="Transport", default_price=20, is_customer_visible=False)
+db.add_all([site, customer_user_one, customer_user_two, section, package, inactive_package, rice_addon, transport_addon])
 db.commit()
+customer_package = CustomerPackage(customer_id=customer_one.id, package_template_id=package.id, agreement_price=12.5, is_active=True, is_shown_to_customer=True)
+customer_rice = CustomerAddon(customer_id=customer_one.id, addon_template_id=rice_addon.id, agreement_price=1.0)
+customer_transport = CustomerAddon(customer_id=customer_one.id, addon_template_id=transport_addon.id, agreement_price=18.0)
 db.add_all([
     CustomerMealSection(customer_id=customer_one.id, meal_section_id=section.id),
-    CustomerPackage(customer_id=customer_one.id, package_template_id=package.id, agreement_price=12.5, is_active=True, is_shown_to_customer=True),
+    customer_package,
+    customer_rice,
+    customer_transport,
     CustomerPackage(customer_id=customer_two.id, package_template_id=inactive_package.id, agreement_price=9.5, is_active=False, is_shown_to_customer=False),
 ])
+db.flush()
+db.add(CustomerAddonPackage(customer_addon_id=customer_rice.id, customer_package_id=customer_package.id))
 db.commit()
 customer_one_id = customer_one.id
 customer_two_id = customer_two.id
 site_id = site.id
 section_id = section.id
 package_id = package.id
+customer_package_record_id = customer_package.id
 inactive_package_id = inactive_package.id
+customer_rice_id = customer_rice.id
+customer_transport_id = customer_transport.id
 db.close()
 
 client = TestClient(app)
@@ -116,10 +128,48 @@ assert client.get(f"/orders/customer-profile/{customer_one_id}", headers=other_c
 assert client.get(f"/orders/customer-profile/{customer_one_id}", headers=customer_headers).status_code == 200
 assert client.get("/admin/customers", headers=customer_headers).status_code == 403
 
+menu_response = client.get(f"/orders/meal-sections?customer_id={customer_one_id}", headers=customer_headers)
+assert menu_response.status_code == 200, menu_response.text
+menu_addons = menu_response.json()[0]["packages"][0]["addons"]
+assert [addon["name"] for addon in menu_addons] == ["Extra Rice"]
+
+disable_rice = client.put(
+    f"/admin/customers/{customer_one_id}/addons/{customer_rice_id}",
+    headers=admin_headers,
+    json={"agreement_price": 1.0, "customer_package_ids": []},
+)
+assert disable_rice.status_code == 200, disable_rice.text
+disabled_menu = client.get(f"/orders/meal-sections?customer_id={customer_one_id}", headers=customer_headers)
+assert disabled_menu.status_code == 200, disabled_menu.text
+assert disabled_menu.json()[0]["packages"][0]["addons"] == []
+
+enable_rice = client.put(
+    f"/admin/customers/{customer_one_id}/addons/{customer_rice_id}",
+    headers=admin_headers,
+    json={"agreement_price": 1.0, "customer_package_ids": [customer_package_record_id]},
+)
+assert enable_rice.status_code == 200, enable_rice.text
+enabled_menu = client.get(f"/orders/meal-sections?customer_id={customer_one_id}", headers=customer_headers)
+assert enabled_menu.status_code == 200, enabled_menu.text
+assert [addon["name"] for addon in enabled_menu.json()[0]["packages"][0]["addons"]] == ["Extra Rice"]
+
+hidden_addon_response = client.post(
+    f"/orders/matrix-submit?customer_id={customer_one_id}",
+    headers=customer_headers,
+    json={"delivery_date": str(date.today() + timedelta(days=3)), "items": [
+        {"delivery_site_id": site_id, "meal_section_id": section_id, "customer_package_id": package_id, "quantity": 1},
+        {"delivery_site_id": site_id, "meal_section_id": section_id, "customer_addon_id": customer_transport_id, "parent_package_id": package_id, "quantity": 1},
+    ]},
+)
+assert hidden_addon_response.status_code == 400, hidden_addon_response.text
+
 order_response = client.post(
     f"/orders/matrix-submit?customer_id={customer_one_id}",
     headers=customer_headers,
-    json={"delivery_date": str(date.today() + timedelta(days=2)), "items": [{"delivery_site_id": site_id, "meal_section_id": section_id, "customer_package_id": package_id, "quantity": 8, "remark": "release check"}]},
+    json={"delivery_date": str(date.today() + timedelta(days=2)), "items": [
+        {"delivery_site_id": site_id, "meal_section_id": section_id, "customer_package_id": package_id, "quantity": 8, "remark": "release check"},
+        {"delivery_site_id": site_id, "meal_section_id": section_id, "customer_addon_id": customer_rice_id, "parent_package_id": package_id, "quantity": 3, "remark": f"[addon_for_package:{package_id}]"},
+    ]},
 )
 assert order_response.status_code == 200, order_response.text
 order_id = order_response.json()[0]["id"]

@@ -123,6 +123,7 @@ class AddonTemplateBase(BaseModel):
     name: str
     default_price: float = 0.0
     description: Optional[str] = None  # 可选描述，例如：散装白饭、煮熟鸡蛋
+    is_customer_visible: bool = True
 
 class AddonTemplateCreate(AddonTemplateBase):
     pass
@@ -159,6 +160,8 @@ class CustomerAddonResponse(BaseModel):
     addon_template_id: int
     agreement_price: float
     addon_name: str
+    is_customer_visible: bool = True
+    customer_package_ids: List[int] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -181,6 +184,8 @@ class MatrixItem(BaseModel):
     delivery_site_id: int
     meal_section_id: int
     customer_package_id: Optional[int] = None
+    customer_addon_id: Optional[int] = None
+    parent_package_id: Optional[int] = None
     quantity: int
     remark: Optional[str] = None
 

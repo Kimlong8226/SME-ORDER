@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Card, Table, Button, Modal, Form, Input, InputNumber, Select, message,
-  Tag, Typography, Space, Popconfirm, Divider
+  Tag, Typography, Space, Popconfirm, Divider, Switch
 } from 'antd';
 import {
   PlusOutlined, EditOutlined, DeleteOutlined
@@ -306,6 +306,7 @@ export const PackageManagement: React.FC = () => {
       name: record.name,
       default_price: record.default_price,
       description: record.description,
+      is_customer_visible: record.is_customer_visible !== false,
     });
     setAddonModalVisible(true);
   };
@@ -313,6 +314,7 @@ export const PackageManagement: React.FC = () => {
   const handleOpenCreateAddon = () => {
     setEditingAddon(null);
     addonForm.resetFields();
+    addonForm.setFieldsValue({ is_customer_visible: true, default_price: 1.5 });
     setAddonModalVisible(true);
   };
 
@@ -418,6 +420,17 @@ export const PackageManagement: React.FC = () => {
         <Text type="secondary" style={{ fontSize: 13 }}>
           {val || '—'}
         </Text>
+      ),
+    },
+    {
+      title: isEn ? 'Ordering Scope' : '下单范围',
+      dataIndex: 'is_customer_visible',
+      key: 'is_customer_visible',
+      width: 140,
+      render: (visible: boolean) => (
+        <Tag color={visible === false ? 'purple' : 'green'}>
+          {visible === false ? (isEn ? 'Admin only' : '仅后台加单') : (isEn ? 'Customer selectable' : '顾客可选')}
+        </Tag>
       ),
     },
     {
@@ -604,6 +617,14 @@ export const PackageManagement: React.FC = () => {
           </Form.Item>
           <Form.Item name="description" label={labels.formAddonDescription}>
             <Input.TextArea rows={2} placeholder={labels.placeholderAddonDesc} />
+          </Form.Item>
+          <Form.Item
+            name="is_customer_visible"
+            label={isEn ? 'Customer ordering visibility' : '顾客下单显示'}
+            valuePropName="checked"
+            tooltip={isEn ? 'Turn off for admin-only charges such as transport.' : '运输费等仅由后台添加的项目请关闭。'}
+          >
+            <Switch checkedChildren={isEn ? 'Visible' : '顾客可见'} unCheckedChildren={isEn ? 'Admin only' : '仅后台'} />
           </Form.Item>
         </Form>
       </Modal>
