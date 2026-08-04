@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   App, Card, Table, DatePicker, Select, Tag, Typography, Space, Button,
   Badge, Modal, Form, InputNumber, Input, Row, Col, Divider,
@@ -6,12 +6,13 @@ import {
 } from 'antd';
 import {
   ReloadOutlined, EditOutlined, DeleteOutlined, HistoryOutlined, PlusOutlined,
-  MinusOutlined, UserOutlined, WhatsAppOutlined
+  MinusOutlined, UserOutlined, WhatsAppOutlined, FileTextOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
 import { getEffectiveMealSectionCategories } from '../../utils/mealSectionRules';
+import { OrderBillModal } from '../../components/OrderBillModal';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
@@ -321,6 +322,7 @@ export const DailyOrderStatus: React.FC = () => {
     btnEdit: isEn ? 'Edit' : '编辑',
     btnDelete: isEn ? 'Cancel DO' : '取消 DO',
     btnHistory: isEn ? 'History' : '操作记录',
+    btnViewBill: isEn ? 'View Bill' : '查看账单',
     confirmDeleteTitle: isEn ? 'Confirm DO Cancellation' : '确认取消 DO',
     confirmDeleteDesc: isEn ? 'Cancel this DO? The record and details will be retained in the audit history.' : '确定取消这张 DO 吗？系统会保留 DO、明细及审计记录。',
     btnPermanentDelete: isEn ? 'Delete cancelled DO' : '删除已取消 DO',
@@ -365,6 +367,47 @@ export const DailyOrderStatus: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [billOrderId, setBillOrderId] = useState<number | null>(null);
+  const tablePanRef = useRef<HTMLDivElement>(null);
+  const tablePanStateRef = useRef<{
+    pointerId: number;
+    startX: number;
+    startScrollLeft: number;
+    scroller: HTMLDivElement;
+  } | null>(null);
+
+  const stopTablePan = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!tablePanStateRef.current || tablePanStateRef.current.pointerId !== event.pointerId) return;
+    tablePanStateRef.current = null;
+    event.currentTarget.classList.remove('is-panning');
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
+
+  const handleTablePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.pointerType !== 'mouse' || event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, [role="button"], [role="combobox"], .ant-select, .ant-picker, .ant-pagination')) return;
+    const scroller = tablePanRef.current?.querySelector<HTMLDivElement>('.ant-table-content');
+    if (!scroller || scroller.scrollWidth <= scroller.clientWidth) return;
+    tablePanStateRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startScrollLeft: scroller.scrollLeft,
+      scroller,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    event.currentTarget.classList.add('is-panning');
+  };
+
+  const handleTablePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const panState = tablePanStateRef.current;
+    if (!panState || panState.pointerId !== event.pointerId) return;
+    const distance = event.clientX - panState.startX;
+    if (Math.abs(distance) > 2) event.preventDefault();
+    panState.scroller.scrollLeft = panState.startScrollLeft - distance;
+  };
 
   // 编辑订单 Modal 状态
   const [editModalVisible, setEditModalVisible] = useState(false);
@@ -980,8 +1023,7 @@ export const DailyOrderStatus: React.FC = () => {
     {
       title: labels.colAction,
       key: 'actions',
-      width: 160,
-      fixed: 'right' as const,
+      width: 195,
       align: 'center' as const,
       // NOTE: 无 dataIndex 时，render 第一参数为 undefined，第二参数为整行 record
       render: (_: any, record: any) => (
@@ -993,6 +1035,16 @@ export const DailyOrderStatus: React.FC = () => {
               icon={<HistoryOutlined />}
               onClick={() => handleOpenAuditDrawer(record)}
               aria-label={isEn ? 'View status and operation history' : '查看状态与操作历史'}
+            />
+          </Tooltip>
+          <Tooltip title={labels.btnViewBill}>
+            <Button
+              size="small"
+              shape="circle"
+              icon={<FileTextOutlined />}
+              style={{ color: '#2563eb', borderColor: '#93c5fd' }}
+              onClick={() => setBillOrderId(record.id)}
+              aria-label={labels.btnViewBill}
             />
           </Tooltip>
           <Tooltip title={labels.btnEdit}>
@@ -1067,7 +1119,16 @@ export const DailyOrderStatus: React.FC = () => {
           </div>
         }
       >
-        <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 1700 }} />
+        <div
+          ref={tablePanRef}
+          className="order-table-pan"
+          onPointerDown={handleTablePointerDown}
+          onPointerMove={handleTablePointerMove}
+          onPointerUp={stopTablePan}
+          onPointerCancel={stopTablePan}
+        >
+          <Table columns={columns} dataSource={filteredOrders} rowKey="id" loading={loading} scroll={{ x: 1700 }} />
+        </div>
 
         <Modal
           title={labels.btnCreate}
@@ -1360,6 +1421,11 @@ export const DailyOrderStatus: React.FC = () => {
         open={auditDrawerOpen}
         onClose={() => setAuditDrawerOpen(false)}
         isEn={isEn}
+      />
+      <OrderBillModal
+        orderId={billOrderId}
+        open={billOrderId !== null}
+        onClose={() => setBillOrderId(null)}
       />
     </>
   );

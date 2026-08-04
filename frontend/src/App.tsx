@@ -13,6 +13,7 @@ import './index.css';
 import { brightTheme } from './theme/themeConfig';
 import { Login } from './pages/Login';
 import { lazyWithReload } from './utils/lazyWithReload';
+import { AdminOrderNotificationBell } from './components/AdminOrderNotificationBell';
 
 const DashboardOverview = lazyWithReload('DashboardOverview', () => import('./pages/admin/DashboardOverview').then((module) => ({ default: module.DashboardOverview })));
 const CustomerManagement = lazyWithReload('CustomerManagement', () => import('./pages/admin/CustomerManagement').then((module) => ({ default: module.CustomerManagement })));
@@ -166,6 +167,9 @@ export const App: React.FC = () => {
           </div>
 
           <Space size="middle">
+            {isAdmin && (
+              <AdminOrderNotificationBell currentUser={currentUser} onNavigate={setActiveMenu} />
+            )}
             <Tooltip title={i18n.language === 'zh' ? 'Switch to English' : '切换为中文'}>
               <Button
                 icon={<GlobalOutlined />}

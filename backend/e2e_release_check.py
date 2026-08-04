@@ -154,6 +154,11 @@ enabled_menu = client.get(f"/orders/meal-sections?customer_id={customer_one_id}"
 assert enabled_menu.status_code == 200, enabled_menu.text
 assert [addon["name"] for addon in enabled_menu.json()[0]["packages"][0]["addons"]] == ["Extra Rice"]
 
+notification_baseline = client.get("/admin/order-notifications", headers=admin_headers)
+assert notification_baseline.status_code == 200, notification_baseline.text
+assert notification_baseline.json() == {"latest_order_id": 0, "unread_count": 0, "orders": []}
+assert client.get("/admin/order-notifications", headers=customer_headers).status_code == 403
+
 standalone_addon_response = client.post(
     f"/orders/matrix-submit?customer_id={customer_one_id}",
     headers=customer_headers,
@@ -164,6 +169,22 @@ standalone_addon_response = client.post(
 assert standalone_addon_response.status_code == 200, standalone_addon_response.text
 assert standalone_addon_response.json()[0]["details"][0]["addon_name"] == "Extra Rice"
 standalone_order_id = standalone_addon_response.json()[0]["id"]
+new_order_notifications = client.get(
+    "/admin/order-notifications?after_id=0",
+    headers=admin_headers,
+)
+assert new_order_notifications.status_code == 200, new_order_notifications.text
+assert new_order_notifications.json()["latest_order_id"] == standalone_order_id
+assert new_order_notifications.json()["unread_count"] == 1
+assert new_order_notifications.json()["orders"][0]["company_name"] == "Customer One"
+order_bill = client.get(f"/admin/orders/{standalone_order_id}/bill", headers=admin_headers)
+assert order_bill.status_code == 200, order_bill.text
+assert order_bill.json()["do_number"]
+assert order_bill.json()["customer"]["company_name"] == "Customer One"
+assert order_bill.json()["invoice"] is None
+assert order_bill.json()["items"][0]["item_type"] == "addon"
+assert order_bill.json()["total_amount"] == 2.0
+assert client.get(f"/admin/orders/{standalone_order_id}/bill", headers=customer_headers).status_code == 403
 
 cancel_standalone = client.post(
     f"/admin/orders/{standalone_order_id}/cancel",

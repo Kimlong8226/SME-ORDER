@@ -56,3 +56,24 @@ html, body, #root {
   flex-shrink: 0;
 }
 
+.order-table-pan .ant-table-content {
+  cursor: grab;
+  overscroll-behavior-x: contain;
+  scrollbar-gutter: stable;
+  -webkit-overflow-scrolling: touch;
+}
+
+.order-table-pan.is-panning,
+.order-table-pan.is-panning .ant-table-content {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.order-table-pan button,
+.order-table-pan input,
+.order-table-pan textarea,
+.order-table-pan .ant-select,
+.order-table-pan .ant-picker,
+.order-table-pan .ant-pagination {
+  cursor: auto;
+}

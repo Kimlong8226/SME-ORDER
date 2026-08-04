@@ -986,6 +986,54 @@ def get_all_orders(
 
     return results
 
+
+@router.get("/order-notifications")
+def get_order_notifications(
+    after_id: Optional[int] = None,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+):
+    """Return a lightweight unread-order summary for the admin header bell."""
+    latest_order_id = db.query(func.max(Order.id)).scalar() or 0
+
+    # The first request establishes a baseline, so existing history is not
+    # incorrectly presented as a burst of new orders.
+    if after_id is None:
+        return {
+            "latest_order_id": latest_order_id,
+            "unread_count": 0,
+            "orders": [],
+        }
+
+    normalized_after_id = max(after_id, 0)
+    unread_query = db.query(Order).filter(Order.id > normalized_after_id)
+    unread_count = unread_query.count()
+    notification_orders = (
+        db.query(Order)
+        .options(joinedload(Order.customer), joinedload(Order.site))
+        .filter(Order.id > normalized_after_id)
+        .order_by(Order.id.desc())
+        .limit(max(1, min(limit, 20)))
+        .all()
+    )
+
+    return {
+        "latest_order_id": latest_order_id,
+        "unread_count": unread_count,
+        "orders": [
+            {
+                "id": order.id,
+                "do_number": display_do_number(order),
+                "company_name": order.customer.company_name,
+                "site_name": order.site.site_name if order.site else "",
+                "delivery_date": order.delivery_date.strftime("%Y-%m-%d"),
+                "status": order.status,
+                "created_at": order.created_at.strftime("%Y-%m-%d %H:%M") if order.created_at else "",
+            }
+            for order in notification_orders
+        ],
+    }
+
 @router.put("/orders/{order_id}")
 def edit_order_by_admin(
     order_id: int,
@@ -2113,6 +2161,75 @@ def calc_detail_price(d) -> float:
         if d.customer_addon.template and d.customer_addon.template.price:
             return d.customer_addon.template.price
     return 0.0
+
+
+@router.get("/orders/{order_id}/bill")
+def get_order_bill(order_id: int, db: Session = Depends(get_db)):
+    """Return one DO's bill preview using the same price rules as invoice generation."""
+    order = (
+        db.query(Order)
+        .options(*get_order_eager_options())
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在")
+
+    invoice = (
+        db.query(Invoice).filter(Invoice.id == order.invoice_id).first()
+        if order.invoice_id
+        else None
+    )
+    items = []
+    total_amount = 0.0
+    for detail in order.details:
+        package_name = (
+            detail.customer_package.template.name
+            if detail.customer_package and detail.customer_package.template
+            else detail.customer_addon.template.name
+            if detail.customer_addon and detail.customer_addon.template
+            else "自定义餐食"
+        )
+        unit_price = float(calc_detail_price(detail) or 0)
+        subtotal = detail.quantity * unit_price
+        total_amount += subtotal
+        items.append({
+            "id": detail.id,
+            "meal_section": detail.meal_section.name if detail.meal_section else "普通餐项",
+            "item_name": package_name,
+            "item_type": "addon" if detail.customer_addon_id else "package",
+            "quantity": detail.quantity,
+            "unit_price": round(unit_price, 2),
+            "subtotal": round(subtotal, 2),
+            "remark": detail.remark or "",
+        })
+
+    customer = order.customer
+    return {
+        "order_id": order.id,
+        "do_number": display_do_number(order),
+        "delivery_date": order.delivery_date.strftime("%Y-%m-%d"),
+        "status": order.status,
+        "site_name": order.site.site_name if order.site else "",
+        "order_remark": order.remark or "",
+        "customer": {
+            "id": customer.id,
+            "company_name": customer.company_name,
+            "company_reg_no": customer.company_reg_no or "",
+            "tax_number": customer.tax_number or "",
+            "company_address": customer.company_address or "",
+            "billing_cycle": customer.billing_cycle or "",
+        },
+        "invoice": ({
+            "id": invoice.id,
+            "invoice_number": invoice.invoice_number,
+            "payment_status": invoice.payment_status,
+            "start_date": invoice.start_date.strftime("%Y-%m-%d"),
+            "end_date": invoice.end_date.strftime("%Y-%m-%d"),
+        } if invoice else None),
+        "items": items,
+        "total_amount": round(total_amount, 2),
+    }
 
 
 @router.get("/invoices/daily-dos")
