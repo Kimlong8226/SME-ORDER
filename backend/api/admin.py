@@ -12,7 +12,7 @@ from database import get_db
 from model.models import (
     Customer, CustomerUser, DeliverySite, PackageTemplate, AddonTemplate,
     CustomerPackage, CustomerAddon, CustomerAddonPackage, StaffUser, Order, OrderDetail, MealSection, Invoice, CustomerMealSection,
-    AuditLog, PaymentRecord, WhatsAppDelivery,
+    AuditLog, PaymentRecord, WhatsAppDelivery, OrderEditSession,
     AUDIT_ACTION_ORDER_CREATE, AUDIT_ACTION_ORDER_UPDATE, AUDIT_ACTION_ORDER_DELETE, AUDIT_ACTION_ORDER_CANCEL,
     AUDIT_ACTION_ORDER_STATUS_CHANGE, AUDIT_ACTION_CUSTOMER_UPDATE,
     AUDIT_ACTION_CUSTOMER_BLOCK, AUDIT_ACTION_CUSTOMER_UNBLOCK,
@@ -87,6 +87,11 @@ class OrderStatusChangeRequest(BaseModel):
 
 
 class AdminCancelOrderRequest(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+    expected_order_version: Optional[int] = None
+
+
+class AdminDeleteOrderRequest(BaseModel):
     reason: str = Field(min_length=3, max_length=500)
     expected_order_version: Optional[int] = None
 
@@ -1318,6 +1323,105 @@ def cancel_order_by_admin(
         "order_id": order_id,
         "version": order.version,
         "whatsapp_delivery": serialize_delivery(delivery_result),
+    }
+
+
+@router.post("/orders/{order_id}/delete")
+def delete_cancelled_order_by_admin(
+    order_id: int,
+    req: AdminDeleteOrderRequest,
+    db: Session = Depends(get_db),
+    auth: dict = Depends(require_staff),
+):
+    """永久删除已取消订单，并在 Audit Log 保留完整删除快照。"""
+    reason = _required_reason(req.reason)
+    order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="订单不存在或已被删除")
+    if req.expected_order_version is not None and order.version != req.expected_order_version:
+        raise HTTPException(status_code=409, detail="订单已被其他人员修改，请刷新后重试")
+    if order.status != "cancelled":
+        raise HTTPException(status_code=409, detail="只有已取消的订单可以永久删除；请先取消订单")
+    if order.invoice_id is not None:
+        raise HTTPException(status_code=409, detail="该订单仍关联账单，无法删除；请先在账单管理中解除关联")
+
+    delivery_rows = db.query(WhatsAppDelivery).filter(
+        WhatsAppDelivery.order_id == order_id
+    ).order_by(WhatsAppDelivery.id.asc()).all()
+    deleted_snapshot = {
+        "id": order.id,
+        "do_number": display_do_number(order),
+        "customer_id": order.customer_id,
+        "company_name": order.customer.company_name if order.customer else None,
+        "delivery_site_id": order.delivery_site_id,
+        "site_name": order.site.site_name if order.site else None,
+        "delivery_date": order.delivery_date.isoformat(),
+        "status": order.status,
+        "version": order.version or 1,
+        "remark": order.remark,
+        "invoice_id": order.invoice_id,
+        "created_at": order.created_at.isoformat() if order.created_at else None,
+        "details": [
+            {
+                "id": detail.id,
+                "meal_section_id": detail.meal_section_id,
+                "meal_section": detail.meal_section.name if detail.meal_section else None,
+                "customer_package_id": detail.customer_package_id,
+                "package_name": detail.customer_package.template.name if detail.customer_package else None,
+                "customer_addon_id": detail.customer_addon_id,
+                "addon_name": detail.customer_addon.template.name if detail.customer_addon else None,
+                "quantity": detail.quantity,
+                "final_unit_price": detail.final_unit_price,
+                "subtotal": detail.quantity * detail.final_unit_price,
+                "remark": detail.remark,
+            }
+            for detail in order.details
+        ],
+        "whatsapp_deliveries": [
+            {
+                "id": delivery.id,
+                "event_type": delivery.event_type,
+                "status": delivery.status,
+                "group_name": delivery.group_name,
+                "message_text": delivery.message_text,
+                "requested_by": delivery.requested_by,
+                "request_reason": delivery.request_reason,
+                "gateway_message_id": delivery.gateway_message_id,
+                "created_at": delivery.created_at.isoformat() if delivery.created_at else None,
+                "sent_at": delivery.sent_at.isoformat() if delivery.sent_at else None,
+            }
+            for delivery in delivery_rows
+        ],
+    }
+
+    operator_name, operator_role = _operator(auth)
+    write_audit_log(
+        db=db,
+        action_type=AUDIT_ACTION_ORDER_DELETE,
+        description=f"永久删除已取消订单 {display_do_number(order)}",
+        operator_name=operator_name,
+        operator_role=operator_role,
+        target_id=order.id,
+        target_label=display_do_number(order),
+        extra_data={
+            "reason": reason,
+            "deleted_order": deleted_snapshot,
+            "permanent_delete": True,
+        },
+    )
+
+    db.query(OrderEditSession).filter(OrderEditSession.order_id == order_id).update(
+        {OrderEditSession.order_id: None},
+        synchronize_session=False,
+    )
+    db.query(WhatsAppDelivery).filter(WhatsAppDelivery.order_id == order_id).delete(
+        synchronize_session=False
+    )
+    db.delete(order)
+    db.commit()
+    return {
+        "message": "已取消订单已永久删除；完整快照保留在 Audit Log",
+        "order_id": order_id,
     }
 
 # ============================================================

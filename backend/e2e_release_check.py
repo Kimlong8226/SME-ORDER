@@ -1,5 +1,6 @@
 """Isolated release smoke test. Never points at the production database."""
 import hashlib
+import json
 import os
 import tempfile
 from datetime import date, timedelta
@@ -162,6 +163,47 @@ standalone_addon_response = client.post(
 )
 assert standalone_addon_response.status_code == 200, standalone_addon_response.text
 assert standalone_addon_response.json()[0]["details"][0]["addon_name"] == "Extra Rice"
+standalone_order_id = standalone_addon_response.json()[0]["id"]
+
+cancel_standalone = client.post(
+    f"/admin/orders/{standalone_order_id}/cancel",
+    headers=admin_headers,
+    json={"reason": "Release check cancellation", "expected_order_version": 1},
+)
+assert cancel_standalone.status_code == 200, cancel_standalone.text
+
+replacement_order = client.post(
+    f"/orders/matrix-submit?customer_id={customer_one_id}",
+    headers=customer_headers,
+    json={"delivery_date": str(date.today() + timedelta(days=4)), "items": [
+        {"delivery_site_id": site_id, "meal_section_id": section_id, "customer_addon_id": customer_rice_id, "parent_package_id": package_id, "quantity": 1, "remark": f"[addon_for_package:{package_id}]"},
+    ]},
+)
+assert replacement_order.status_code == 200, replacement_order.text
+assert replacement_order.json()[0]["id"] != standalone_order_id
+reject_active_delete = client.post(
+    f"/admin/orders/{replacement_order.json()[0]['id']}/delete",
+    headers=admin_headers,
+    json={"reason": "Must reject active order deletion", "expected_order_version": 1},
+)
+assert reject_active_delete.status_code == 409, reject_active_delete.text
+
+delete_standalone = client.post(
+    f"/admin/orders/{standalone_order_id}/delete",
+    headers=admin_headers,
+    json={"reason": "Release check permanent deletion", "expected_order_version": 2},
+)
+assert delete_standalone.status_code == 200, delete_standalone.text
+delete_audit = client.get(
+    "/admin/audit-logs?action_type=ORDER_DELETE",
+    headers=admin_headers,
+)
+assert delete_audit.status_code == 200, delete_audit.text
+assert delete_audit.json()["total"] == 1
+assert delete_audit.json()["items"][0]["target_id"] == standalone_order_id
+deleted_audit_payload = json.loads(delete_audit.json()["items"][0]["extra_data"])
+assert deleted_audit_payload["deleted_order"]["details"][0]["addon_name"] == "Extra Rice"
+assert deleted_audit_payload["permanent_delete"] is True
 
 hidden_addon_response = client.post(
     f"/orders/matrix-submit?customer_id={customer_one_id}",

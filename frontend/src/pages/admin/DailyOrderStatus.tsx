@@ -323,6 +323,11 @@ export const DailyOrderStatus: React.FC = () => {
     btnHistory: isEn ? 'History' : '操作记录',
     confirmDeleteTitle: isEn ? 'Confirm DO Cancellation' : '确认取消 DO',
     confirmDeleteDesc: isEn ? 'Cancel this DO? The record and details will be retained in the audit history.' : '确定取消这张 DO 吗？系统会保留 DO、明细及审计记录。',
+    btnPermanentDelete: isEn ? 'Delete cancelled DO' : '删除已取消 DO',
+    confirmPermanentDeleteTitle: isEn ? 'Permanently delete cancelled DO?' : '确认永久删除已取消 DO？',
+    confirmPermanentDeleteDesc: isEn ? 'The order row will be removed so a new same-day order can be placed. A complete snapshot remains in the Audit Log.' : '删除后可重新建立同客户、同地点、同日期订单；原 DO、餐品、金额及发送记录的完整快照会保留在 Audit Log。',
+    permanentDeleteSuccess: isEn ? 'Cancelled DO deleted; audit snapshot retained' : '已删除取消 DO，并保留完整审计快照',
+    permanentDeleteFailed: isEn ? 'Failed to delete cancelled DO' : '删除已取消 DO 失败',
     filterAll: isEn ? 'All Statuses' : '全状态',
     statusSubmitted: isEn ? 'Submitted' : '已提交',
     statusConfirmed: isEn ? 'Confirmed' : '已确认',
@@ -358,7 +363,7 @@ export const DailyOrderStatus: React.FC = () => {
 
   const [orders, setOrders] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
-  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs]>([dayjs(), dayjs()]);
+  const [dateRange, setDateRange] = useState<[dayjs.Dayjs, dayjs.Dayjs] | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // 编辑订单 Modal 状态
@@ -399,8 +404,14 @@ export const DailyOrderStatus: React.FC = () => {
   const fetchOrders = async () => {
     setLoading(true);
     try {
-      let url = `/admin/all-orders?start_date=${dateRange[0].format('YYYY-MM-DD')}&end_date=${dateRange[1].format('YYYY-MM-DD')}`;
-      const res = await axiosInstance.get(url);
+      const res = await axiosInstance.get('/admin/all-orders', {
+        params: dateRange
+          ? {
+              start_date: dateRange[0].format('YYYY-MM-DD'),
+              end_date: dateRange[1].format('YYYY-MM-DD'),
+            }
+          : undefined,
+      });
       setOrders(res.data || []);
     } catch (err) {
       message.error(labels.loadFailed);
@@ -443,6 +454,50 @@ export const DailyOrderStatus: React.FC = () => {
   };
 
   const handleDeleteOrder = (record: any) => {
+    if (record.status === 'cancelled') {
+      let reason = '';
+      Modal.confirm({
+        title: labels.confirmPermanentDeleteTitle,
+        content: (
+          <div>
+            <Alert
+              type="warning"
+              showIcon
+              title={record.do_number || `#${record.id}`}
+              description={labels.confirmPermanentDeleteDesc}
+            />
+            <Input.TextArea
+              rows={3}
+              placeholder={labels.reasonPlaceholder}
+              onChange={(event) => { reason = event.target.value; }}
+              style={{ marginTop: 12 }}
+            />
+          </div>
+        ),
+        okText: labels.btnPermanentDelete,
+        okType: 'danger',
+        cancelText: labels.btnCancel,
+        onOk: async () => {
+          if (reason.trim().length < 3) {
+            message.error(labels.reasonRequired);
+            throw new Error('reason_required');
+          }
+          try {
+            await axiosInstance.post(`/admin/orders/${record.id}/delete`, {
+              reason: reason.trim(),
+              expected_order_version: record.version,
+            });
+            message.success(labels.permanentDeleteSuccess);
+            await fetchOrders();
+          } catch (err: any) {
+            message.error(err.response?.data?.detail || labels.permanentDeleteFailed);
+            throw err;
+          }
+        },
+      });
+      return;
+    }
+
     let reason = '';
     Modal.confirm({
       title: labels.confirmDeleteTitle,
@@ -965,15 +1020,15 @@ export const DailyOrderStatus: React.FC = () => {
             />
           </Tooltip>
 
-          <Tooltip title={labels.btnDelete}>
+          <Tooltip title={record.status === 'cancelled' ? labels.btnPermanentDelete : labels.btnDelete}>
             <Button
               size="small"
               danger
               shape="circle"
               icon={<DeleteOutlined />}
               onClick={() => handleDeleteOrder(record)}
-              disabled={['billed', 'paid', 'cancelled'].includes(record.status)}
-              aria-label={labels.btnDelete}
+              disabled={['billed', 'paid'].includes(record.status)}
+              aria-label={record.status === 'cancelled' ? labels.btnPermanentDelete : labels.btnDelete}
             />
           </Tooltip>
         </Space>
@@ -992,11 +1047,10 @@ export const DailyOrderStatus: React.FC = () => {
               <DatePicker.RangePicker
                 value={dateRange}
                 onChange={(dates) => {
-                  if (dates && dates[0] && dates[1]) {
-                    setDateRange([dates[0], dates[1]]);
-                  }
+                  setDateRange(dates?.[0] && dates?.[1] ? [dates[0], dates[1]] : null);
                 }}
-                allowClear={false}
+                allowClear
+                placeholder={isEn ? ['Start date (optional)', 'End date (optional)'] : ['开始日期（选填）', '结束日期（选填）']}
               />
               <Select value={statusFilter} onChange={(val) => setStatusFilter(val)} style={{ width: 140 }}>
                 <Option value="all">{labels.filterAll}</Option>

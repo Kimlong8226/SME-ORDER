@@ -253,7 +253,8 @@ def submit_matrix_orders(
             existing_order = db.query(Order).filter(
                 Order.customer_id == customer_id,
                 Order.delivery_site_id == site_id,
-                Order.delivery_date == req.delivery_date
+                Order.delivery_date == req.delivery_date,
+                Order.status != "cancelled",
             ).with_for_update().first()
 
             if existing_order and existing_order.status != "submitted":
