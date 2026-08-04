@@ -7,7 +7,7 @@ import {
 import {
   PlusOutlined, EditOutlined, EyeOutlined, EyeInvisibleOutlined,
   LockOutlined, UnlockOutlined,
-  PlusSquareOutlined, DeleteOutlined
+  PlusSquareOutlined, DeleteOutlined, SearchOutlined
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
@@ -154,8 +154,21 @@ export const ClientMenuLibrary: React.FC = () => {
   const [addonAssignModalVisible, setAddonAssignModalVisible] = useState(false);
   const [addonPriceModalVisible, setAddonPriceModalVisible] = useState(false);
   const [editingAddon, setEditingAddon] = useState<any | null>(null);
+  const [activeTab, setActiveTab] = useState('packages');
+  const [searchKeyword, setSearchKeyword] = useState('');
   const [addonAssignForm] = Form.useForm();
   const [addonPriceForm] = Form.useForm();
+
+  const normalizedKeyword = searchKeyword.trim().toLowerCase();
+  const filteredPackages = assignedPackages.filter((pkg) =>
+    [pkg.template_name, pkg.category]
+      .some((value) => String(value || '').toLowerCase().includes(normalizedKeyword))
+  );
+  const filteredAddons = assignedAddons.filter((addon) =>
+    [addon.addon_name, addon.description]
+      .some((value) => String(value || '').toLowerCase().includes(normalizedKeyword))
+  );
+  const visiblePackageCount = assignedPackages.filter((pkg) => pkg.is_shown_to_customer).length;
 
   // ── 获取数据 ──
   const fetchMealSections = async () => {
@@ -638,9 +651,12 @@ export const ClientMenuLibrary: React.FC = () => {
     <div style={{ maxWidth: 1200, margin: '0 auto' }}>
       {/* 页面标题栏 */}
       <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
-        <Title level={3} style={{ margin: 0, color: '#1e293b' }}>
-          {labels.pageTitle}
-        </Title>
+        <div>
+          <Title level={3} style={{ margin: 0, color: '#1e293b' }}>{labels.pageTitle}</Title>
+          <Text type="secondary">
+            {isEn ? 'Configure meal shifts, negotiated prices and customer-visible items.' : '集中配置客户餐次、协议价与下单页可见内容'}
+          </Text>
+        </div>
       </div>
 
       <Card
@@ -658,6 +674,24 @@ export const ClientMenuLibrary: React.FC = () => {
             showIcon
             style={{ marginBottom: 16, borderRadius: 8 }}
           />
+        )}
+
+        {selectedCustomerId && (
+          <Row gutter={[12, 12]} style={{ marginBottom: 20 }}>
+            {[
+              { label: isEn ? 'Meal shifts enabled' : '已开通餐次', value: assignedSectionIds.length, color: '#2563eb' },
+              { label: isEn ? 'Packages assigned' : '已配置套餐', value: assignedPackages.length, color: '#7c3aed' },
+              { label: isEn ? 'Visible packages' : '前端显示套餐', value: visiblePackageCount, color: '#16a34a' },
+              { label: isEn ? 'Add-ons assigned' : '已配置 Add-on', value: assignedAddons.length, color: '#ea580c' },
+            ].map((item) => (
+              <Col xs={12} md={6} key={item.label}>
+                <div style={{ padding: '14px 16px', border: '1px solid #e2e8f0', borderRadius: 10, background: '#fff' }}>
+                  <Text type="secondary" style={{ fontSize: 12 }}>{item.label}</Text>
+                  <div style={{ color: item.color, fontSize: 24, lineHeight: 1.2, fontWeight: 700, marginTop: 4 }}>{item.value}</div>
+                </div>
+              </Col>
+            ))}
+          </Row>
         )}
 
         {/* ── 开通下单餐次控制面板 ── */}
@@ -679,14 +713,24 @@ export const ClientMenuLibrary: React.FC = () => {
                 <Row gutter={[16, 16]}>
                   {allMealSections.map((sec) => (
                     <Col key={sec.id} xs={12} sm={8} md={6}>
-                      <Checkbox value={sec.id}>
-                        <Text strong={assignedSectionIds.includes(sec.id)}>{sec.name}</Text>
-                        {sec.allowed_categories && (
-                          <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 4 }}>
-                            ({sec.allowed_categories})
-                          </span>
-                        )}
-                      </Checkbox>
+                      <div style={{
+                        minHeight: 58,
+                        padding: '10px 12px',
+                        borderRadius: 8,
+                        border: assignedSectionIds.includes(sec.id) ? '1px solid #60a5fa' : '1px solid #e2e8f0',
+                        background: assignedSectionIds.includes(sec.id) ? '#eff6ff' : '#fff',
+                      }}>
+                        <Checkbox value={sec.id} style={{ width: '100%' }}>
+                          <div>
+                            <Text strong={assignedSectionIds.includes(sec.id)}>{sec.name}</Text>
+                            {sec.allowed_categories && (
+                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                                {isEn ? 'Categories: ' : '适用分类：'}{sec.allowed_categories}
+                              </div>
+                            )}
+                          </div>
+                        </Checkbox>
+                      </div>
                     </Col>
                   ))}
                 </Row>
@@ -697,7 +741,8 @@ export const ClientMenuLibrary: React.FC = () => {
 
         {/* ── Tabs：套餐 / Add-on ── */}
         <Tabs
-          defaultActiveKey="packages"
+          activeKey={activeTab}
+          onChange={(key) => { setActiveTab(key); setSearchKeyword(''); }}
           type="card"
           tabBarExtraContent={{
             right: (
@@ -712,7 +757,15 @@ export const ClientMenuLibrary: React.FC = () => {
               label: labels.tabPackages,
               children: (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <Input
+                      allowClear
+                      prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                      placeholder={isEn ? 'Search package name or category' : '搜索套餐名称或分类'}
+                      value={searchKeyword}
+                      onChange={(event) => setSearchKeyword(event.target.value)}
+                      style={{ width: 300, maxWidth: '100%' }}
+                    />
                     <Button
                       type="primary"
                       icon={<PlusOutlined />}
@@ -725,7 +778,7 @@ export const ClientMenuLibrary: React.FC = () => {
                   </div>
                   <Table
                     columns={assignedColumns}
-                    dataSource={assignedPackages}
+                    dataSource={filteredPackages}
                     rowKey="id"
                     pagination={{ pageSize: 8, showSizeChanger: false }}
                     locale={{ emptyText: labels.emptyMenuHint }}
@@ -741,7 +794,15 @@ export const ClientMenuLibrary: React.FC = () => {
               label: labels.tabAddons,
               children: (
                 <>
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+                    <Input
+                      allowClear
+                      prefix={<SearchOutlined style={{ color: '#94a3b8' }} />}
+                      placeholder={isEn ? 'Search Add-on name or description' : '搜索 Add-on 名称或描述'}
+                      value={searchKeyword}
+                      onChange={(event) => setSearchKeyword(event.target.value)}
+                      style={{ width: 300, maxWidth: '100%' }}
+                    />
                     <Button
                       type="primary"
                       icon={<PlusSquareOutlined />}
@@ -754,7 +815,7 @@ export const ClientMenuLibrary: React.FC = () => {
                   </div>
                   <Table
                     columns={addonColumns}
-                    dataSource={assignedAddons}
+                    dataSource={filteredAddons}
                     rowKey="id"
                     pagination={{ pageSize: 8, showSizeChanger: false }}
                     locale={{ emptyText: labels.emptyAddonHint }}
