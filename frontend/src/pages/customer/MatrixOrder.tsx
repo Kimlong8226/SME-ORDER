@@ -506,10 +506,6 @@ export const MatrixOrder: React.FC = () => {
         />
       )}
 
-      {selectedDateBlocked && (
-        <Alert title={labels.cutoffClosed} type="error" showIcon style={{ marginBottom: 16, borderRadius: 12 }} />
-      )}
-
       {isYilian && isSunday && (
         <Alert
           title={labels.sundayReminderTitle}
