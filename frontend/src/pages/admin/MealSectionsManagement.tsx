@@ -34,20 +34,25 @@ import {
 } from '@ant-design/icons';
 import { useTranslation } from 'react-i18next';
 import { axiosInstance } from '../../api/axiosInstance';
+import {
+  getInvalidMealSectionCategories,
+  getMealSectionCategoryRule,
+  parseMealSectionCategories,
+} from '../../utils/mealSectionRules';
 
 const { Title, Text } = Typography;
 
 // 常用餐次预设模版，方便用户一键极速快捷创建
 const PRESET_TEMPLATES = [
-  { name: '早班早餐', sort_order: 10, categories: ['饭盒', '早点'] },
-  { name: '早班午餐', sort_order: 20, categories: ['饭盒', '大型供餐', 'Buffet'] },
+  { name: '早班早餐', sort_order: 10, categories: ['早餐', '早点'] },
+  { name: '早班午餐', sort_order: 20, categories: ['饭盒', '大型供餐'] },
   { name: '下午茶点', sort_order: 30, categories: ['茶点', 'Buffet'] },
-  { name: '晚班晚餐', sort_order: 40, categories: ['饭盒', 'Buffet'] },
+  { name: '晚班晚餐', sort_order: 40, categories: ['饭盒', '大型供餐'] },
   { name: '深夜宵夜', sort_order: 50, categories: ['饭盒', '宵夜'] }
 ];
 
 // 常用套餐分类推荐标签
-const COMMON_CATEGORIES = ['饭盒', '大型供餐', 'Buffet', '茶点', '清真餐', '早点', '宵夜', '高管桌餐'];
+const COMMON_CATEGORIES = ['早餐', '早点', '饭盒', '大型供餐', 'Buffet', '茶点', '清真餐', '宵夜', '高管桌餐'];
 
 export const MealSectionsManagement: React.FC = () => {
   const { message } = App.useApp();
@@ -88,6 +93,11 @@ export const MealSectionsManagement: React.FC = () => {
   const [form] = Form.useForm();
   
   const formCategoriesValue = Form.useWatch('allowed_categories', form);
+  const formNameValue = Form.useWatch('name', form);
+  const selectableCategories = useMemo(() => {
+    const rule = getMealSectionCategoryRule(formNameValue || '');
+    return rule ? [...rule] : availableCategories;
+  }, [availableCategories, formNameValue]);
 
   // 获取餐次列表数据
   const fetchSections = async () => {
@@ -259,7 +269,10 @@ export const MealSectionsManagement: React.FC = () => {
         });
       }
     });
-    return { total, configured, unconfigured: total - configured, categoriesCount: allCats.size };
+    const conflicts = sections.filter(s =>
+      getInvalidMealSectionCategories(s.name, s.allowed_categories).length > 0
+    ).length;
+    return { total, configured, unconfigured: total - configured, categoriesCount: allCats.size, conflicts };
   }, [sections]);
 
   // 表格列定义
@@ -340,26 +353,32 @@ export const MealSectionsManagement: React.FC = () => {
         }
 
         const categories = t.split(',').map(c => c.trim()).filter(Boolean);
+        const invalidCategories = getInvalidMealSectionCategories(record.name, categories);
         return (
           <Space size={[4, 6]} wrap align="center">
             {categories.map((cat, idx) => (
               <Tag 
                 key={idx} 
-                color="geekblue"
+                color={invalidCategories.includes(cat) ? 'error' : 'geekblue'}
                 style={{ 
                   borderRadius: 12, 
                   padding: '2px 10px', 
                   fontSize: 12, 
                   fontWeight: 500,
                   border: '1px solid #bfdbfe',
-                  background: '#eff6ff',
-                  color: '#1e40af'
+                  background: invalidCategories.includes(cat) ? '#fff1f0' : '#eff6ff',
+                  color: invalidCategories.includes(cat) ? '#cf1322' : '#1e40af'
                 }}
               >
                 <TagsOutlined style={{ marginRight: 4, fontSize: 10 }} />
                 {cat}
               </Tag>
             ))}
+            {invalidCategories.length > 0 && (
+              <Tooltip title={`请编辑并移除冲突分类：${invalidCategories.join('、')}`}>
+                <Tag icon={<ExclamationCircleOutlined />} color="error">分类冲突</Tag>
+              </Tooltip>
+            )}
           </Space>
         );
       }
@@ -472,6 +491,15 @@ export const MealSectionsManagement: React.FC = () => {
           </Card>
         </Col>
       </Row>
+
+      {stats.conflicts > 0 && (
+        <Alert
+          type="error"
+          showIcon
+          title={`发现 ${stats.conflicts} 个餐次存在名称与分类冲突，请编辑红色标记的分类后再下单。`}
+          style={{ marginBottom: 20, borderRadius: 10 }}
+        />
+      )}
 
       {/* 极速预设餐次工具栏 */}
       <Card
@@ -609,12 +637,26 @@ export const MealSectionsManagement: React.FC = () => {
               </Space>
             }
             tooltip="只有客户关联协议中包含这些分类的套餐，才能在该餐次下点餐。可多选或直接输入自定义分类。"
+            rules={[
+              {
+                validator: (_, value) => {
+                  const categories = parseMealSectionCategories(value);
+                  if (categories.length === 0) {
+                    return Promise.reject(new Error('请至少选择一个套餐分类'));
+                  }
+                  const invalid = getInvalidMealSectionCategories(formNameValue || '', categories);
+                  return invalid.length > 0
+                    ? Promise.reject(new Error(`餐次名称与分类不匹配：${invalid.join('、')}`))
+                    : Promise.resolve();
+                },
+              },
+            ]}
           >
             <Select
               mode="tags"
               style={{ width: '100%' }}
               placeholder="请选择或输入套餐分类 (如: 饭盒, Buffet, 大型供餐)"
-              options={availableCategories.map((c) => ({ label: c, value: c }))}
+              options={selectableCategories.map((c) => ({ label: c, value: c }))}
               tokenSeparators={[',', '，', ' ']}
               maxTagCount="responsive"
             />
@@ -624,7 +666,7 @@ export const MealSectionsManagement: React.FC = () => {
           <div style={{ marginTop: -8, marginBottom: 20 }}>
             <Text type="secondary" style={{ fontSize: 12, marginRight: 8 }}>快捷选择推荐分类:</Text>
             <Space wrap size={[0, 4]}>
-              {availableCategories.map((cat) => {
+              {selectableCategories.map((cat) => {
                 const currentVals = (formCategoriesValue || []) as string[];
                 const isSelected = currentVals.includes(cat);
                 return (

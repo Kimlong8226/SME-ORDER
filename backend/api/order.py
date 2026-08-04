@@ -15,6 +15,7 @@ from model.models import (
 from schema.schemas import OrderCreateMatrix, OrderResponse, OrderDetailResponse
 from api.audit_utils import write_audit_log
 from api.auth import require_customer_access
+from api.meal_section_rules import effective_meal_section_categories
 from api.order_rules import (
     MALAYSIA_TZ,
     TEMP_ACCESS_DELIVERY_DAYS,
@@ -286,8 +287,8 @@ def submit_matrix_orders(
                 cp = packages_by_template.get(item.customer_package_id)
                 if not cp:
                     raise HTTPException(status_code=400, detail="所选套餐未向该客户开放或已隐藏")
-                allowed_categories = {value.strip() for value in (section.allowed_categories or "").split(",") if value.strip()}
-                if allowed_categories and cp.template.category not in allowed_categories:
+                allowed_categories = effective_meal_section_categories(section)
+                if cp.template.category not in allowed_categories:
                     raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
                 key = (item.meal_section_id, item.customer_package_id)
                 new_snapshot[key] = new_snapshot.get(key, 0) + item.quantity
@@ -520,7 +521,8 @@ def get_meal_sections_public(customer_id: int, db: Session = Depends(get_db)):
 
     results = []
     for s in sections:
-        allowed_cats = [cat.strip() for cat in s.allowed_categories.split(",") if cat.strip()]
+        # 防止后台误把午餐/大型供餐分类绑定到早餐，导致客户在错误餐次下单。
+        allowed_cats = sorted(effective_meal_section_categories(s))
         
         section_packages = []
         for cp in cust_pkgs:
@@ -541,6 +543,7 @@ def get_meal_sections_public(customer_id: int, db: Session = Depends(get_db)):
             "id": s.id,
             "name": s.name,
             "sort_order": s.sort_order,
+            "allowed_categories": ",".join(allowed_cats),
             "packages": section_packages
         })
         

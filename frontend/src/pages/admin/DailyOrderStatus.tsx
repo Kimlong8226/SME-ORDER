@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   App, Card, Table, DatePicker, Select, Tag, Typography, Space, Button,
   Badge, Modal, Form, InputNumber, Input, Row, Col, Divider,
@@ -11,26 +11,10 @@ import {
 import dayjs from 'dayjs';
 import { axiosInstance } from '../../api/axiosInstance';
 import { useTranslation } from 'react-i18next';
+import { getEffectiveMealSectionCategories } from '../../utils/mealSectionRules';
 
 const { Title, Text } = Typography;
 const { Option } = Select;
-
-// NOTE: 定义餐次与套餐分类的对应关系，用于编辑订单时过滤可选套餐
-const MEAL_SECTION_CATEGORIES: Record<string, string[]> = {
-  '早餐': ['早餐'],
-  'Breakfast': ['早餐'],
-  '早班午餐': ['饭盒', '大型供餐'],
-  'Day Shift Lunch': ['饭盒', '大型供餐'],
-  '早班晚餐': ['饭盒', '大型供餐'],
-  'Day Shift Dinner': ['饭盒', '大型供餐'],
-  '客户/顾问加餐饭盒': ['饭盒', '大型供餐'],
-  'Visitor Bento': ['饭盒', '大型供餐'],
-  '夜班餐食 10pm Buffet': ['Buffet'],
-  'Night Shift 10pm Buffet': ['Buffet'],
-  '夜班餐食 3am 宵夜': ['宵夜'],
-  'Night Shift 3am Supper': ['宵夜'],
-};
-
 
 /** 订单操作记录 Modal（参照截图设计：深色顶栏 + 时间线 + diff 变更视图） */
 const OrderAuditDrawer: React.FC<{
@@ -399,6 +383,11 @@ export const DailyOrderStatus: React.FC = () => {
 
   const [customerSites, setCustomerSites] = useState<any[]>([]);
   const [customerPackages, setCustomerPackages] = useState<any[]>([]);
+  const [editMealSections, setEditMealSections] = useState<any[]>([]);
+  const editMealSectionsById = useMemo(
+    () => new Map(editMealSections.map(section => [section.id, section])),
+    [editMealSections],
+  );
 
   // NOTE: 操作记录抽屉状态
   const [auditDrawerOpen, setAuditDrawerOpen] = useState(false);
@@ -496,9 +485,10 @@ export const DailyOrderStatus: React.FC = () => {
     setEditReason('');
 
     try {
-      const [resCusts, resPkgs] = await Promise.all([
+      const [resCusts, resPkgs, resSections] = await Promise.all([
         axiosInstance.get('/admin/customers'),
         axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/packages`),
+        axiosInstance.get('/admin/meal-sections'),
       ]);
       const cur = resCusts.data.find((c: any) => c.id === orderRecord.customer_id);
       if (cur && cur.sites) {
@@ -506,6 +496,7 @@ export const DailyOrderStatus: React.FC = () => {
       }
 
       setCustomerPackages(resPkgs.data);
+      setEditMealSections(resSections.data || []);
     } catch (err) {
       console.error(err);
     }
@@ -639,13 +630,17 @@ export const DailyOrderStatus: React.FC = () => {
   };
 
   const getCreatePackagesForSection = (section: any) => {
-    const allowedCategories = String(section?.allowed_categories || '')
-      .split(',')
-      .map((value: string) => value.trim())
-      .filter(Boolean);
-    return allowedCategories.length
-      ? createPackages.filter(pkg => allowedCategories.includes(pkg.category))
-      : createPackages;
+    const allowedCategories = getEffectiveMealSectionCategories(section?.name, section?.allowed_categories);
+    return createPackages.filter(pkg => allowedCategories.includes(pkg.category));
+  };
+
+  const getEditPackagesForSection = (item: any) => {
+    const section = editMealSectionsById.get(item.meal_section_id);
+    const allowedCategories = getEffectiveMealSectionCategories(
+      section?.name || item.meal_section,
+      section?.allowed_categories,
+    );
+    return customerPackages.filter(pkg => allowedCategories.includes(pkg.category));
   };
 
   const getCreateQuantity = (mealSectionId: number, customerPackageId: number) =>
@@ -1183,8 +1178,7 @@ export const DailyOrderStatus: React.FC = () => {
                           }}
                           style={{ width: '90%' }}
                         >
-                          {customerPackages
-                            .filter(p => MEAL_SECTION_CATEGORIES[item.meal_section]?.includes(p.category))
+                          {getEditPackagesForSection(item)
                             .map(p => (
                               <Option key={p.id} value={p.id}>{translatePackageTemplateName(p.template_name)}</Option>
                             ))}

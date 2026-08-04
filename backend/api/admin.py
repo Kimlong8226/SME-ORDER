@@ -28,6 +28,11 @@ from schema.schemas import (
 )
 from api.auth import get_password_hash, require_staff, require_superadmin
 from api.audit_utils import write_audit_log
+from api.meal_section_rules import (
+    effective_meal_section_categories,
+    invalid_meal_section_categories,
+    parse_categories,
+)
 from api.order_rules import (
     MALAYSIA_TZ,
     MONEY_EPSILON,
@@ -829,8 +834,8 @@ def create_order_by_admin(
         if not section:
             raise HTTPException(status_code=400, detail=f"餐次 ID {item.meal_section_id} 未向该客户开放")
         cp = package_map[item.customer_package_id]
-        allowed_categories = {value.strip() for value in (section.allowed_categories or "").split(",") if value.strip()}
-        if allowed_categories and cp.template.category not in allowed_categories:
+        allowed_categories = effective_meal_section_categories(section)
+        if cp.template.category not in allowed_categories:
             raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
         db.add(OrderDetail(
             order_id=order.id,
@@ -998,8 +1003,8 @@ def edit_order_by_admin(
             ).first()
             if not cp:
                 raise HTTPException(status_code=400, detail="订单包含未分配给该客户的套餐")
-            allowed_categories = {value.strip() for value in (section.allowed_categories or "").split(",") if value.strip()}
-            if allowed_categories and cp.template.category not in allowed_categories:
+            allowed_categories = effective_meal_section_categories(section)
+            if cp.template.category not in allowed_categories:
                 raise HTTPException(status_code=400, detail="所选套餐不属于该餐次允许的分类")
 
             db.add(OrderDetail(
@@ -2700,6 +2705,11 @@ def create_meal_section(req: MealSectionCreate, db: Session = Depends(get_db), a
     existing = db.query(MealSection).filter(MealSection.name == req.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="餐次名称已存在")
+    if not parse_categories(req.allowed_categories):
+        raise HTTPException(status_code=400, detail="请至少选择一个套餐分类")
+    invalid_categories = invalid_meal_section_categories(req.name, req.allowed_categories)
+    if invalid_categories:
+        raise HTTPException(status_code=400, detail=f"餐次分类不匹配：{', '.join(sorted(invalid_categories))}")
     
     sec = MealSection(
         name=req.name,
@@ -2725,6 +2735,11 @@ def update_meal_section(sec_id: int, req: MealSectionCreate, db: Session = Depen
     existing = db.query(MealSection).filter(MealSection.name == req.name, MealSection.id != sec_id).first()
     if existing:
         raise HTTPException(status_code=400, detail="餐次名称已存在")
+    if not parse_categories(req.allowed_categories):
+        raise HTTPException(status_code=400, detail="请至少选择一个套餐分类")
+    invalid_categories = invalid_meal_section_categories(req.name, req.allowed_categories)
+    if invalid_categories:
+        raise HTTPException(status_code=400, detail=f"餐次分类不匹配：{', '.join(sorted(invalid_categories))}")
 
     before = {"name": sec.name, "sort_order": sec.sort_order, "allowed_categories": sec.allowed_categories}
     sec.name = req.name
