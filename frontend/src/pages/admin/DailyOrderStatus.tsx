@@ -348,6 +348,10 @@ export const DailyOrderStatus: React.FC = () => {
     colModalPkg: isEn ? 'Package Name' : '套餐名称',
     colModalQty: isEn ? 'Order Quantity' : '预订份数',
     colModalRemark: isEn ? 'Detail Remark' : '明细备注',
+    btnAddMealItem: isEn ? 'Add temporary meal item' : '临时增加餐次',
+    btnRemoveMealItem: isEn ? 'Remove' : '移除',
+    selectMealSection: isEn ? 'Select shift' : '选择餐次',
+    selectPackage: isEn ? 'Select package' : '选择套餐',
     btnRefresh: isEn ? 'Refresh' : '刷新数据',
     reason: isEn ? 'Operation Reason' : '操作原因',
     reasonPlaceholder: isEn ? 'Required. This will be stored in the audit log.' : '必填，内容将写入 Audit Log',
@@ -605,18 +609,20 @@ export const DailyOrderStatus: React.FC = () => {
     setEditReason('');
 
     try {
-      const [resCusts, resPkgs, resSections] = await Promise.all([
+      const [resCusts, resPkgs, resSections, resAssignedSectionIds] = await Promise.all([
         axiosInstance.get('/admin/customers'),
         axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/packages`),
         axiosInstance.get('/admin/meal-sections'),
+        axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/meal-sections`),
       ]);
       const cur = resCusts.data.find((c: any) => c.id === orderRecord.customer_id);
       if (cur && cur.sites) {
         setCustomerSites(cur.sites);
       }
 
-      setCustomerPackages(resPkgs.data);
-      setEditMealSections(resSections.data || []);
+      setCustomerPackages(resPkgs.data || []);
+      const assignedSectionIds = new Set<number>(resAssignedSectionIds.data || []);
+      setEditMealSections((resSections.data || []).filter((section: any) => assignedSectionIds.has(section.id)));
     } catch (err) {
       console.error(err);
     }
@@ -775,6 +781,32 @@ export const DailyOrderStatus: React.FC = () => {
     } catch (err: any) {
       message.error(err.response?.data?.detail || labels.saveFailed);
     }
+  };
+
+  const getEditPackagesForMealSection = (mealSectionId: number) => {
+    const section = editMealSectionsById.get(mealSectionId);
+    const allowedCategories = getEffectiveMealSectionCategories(section?.name, section?.allowed_categories);
+    return customerPackages.filter(pkg =>
+      pkg.is_shown_to_customer !== false && allowedCategories.includes(pkg.category)
+    );
+  };
+
+  const handleAddEditMealItem = () => {
+    const section = editMealSections.find(value => getEditPackagesForMealSection(value.id).length > 0);
+    if (!section) {
+      message.warning(labels.emptyPackages);
+      return;
+    }
+    const pkg = getEditPackagesForMealSection(section.id)[0];
+    setEditDetails(current => [...current, {
+      meal_section_id: section.id,
+      meal_section: section.name,
+      customer_package_id: pkg.id,
+      package_name: pkg.template_name,
+      quantity: 1,
+      remark: '',
+      is_temporary_addition: true,
+    }]);
   };
 
   const getCreatePackagesForSection = (section: any) => {
@@ -1392,14 +1424,39 @@ export const DailyOrderStatus: React.FC = () => {
                 <tbody>
                   {editDetails.map((item, idx) => (
                     <tr key={idx} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                      <td style={{ padding: '8px 0' }}>
-                        <Text strong>{translateMealSection(item.meal_section)}</Text>
+                      <td style={{ padding: '8px 8px 8px 0' }}>
+                        {item.is_temporary_addition ? (
+                          <Select
+                            value={item.meal_section_id}
+                            placeholder={labels.selectMealSection}
+                            onChange={(mealSectionId) => {
+                              const packages = getEditPackagesForMealSection(mealSectionId);
+                              const updated = [...editDetails];
+                              updated[idx] = {
+                                ...updated[idx],
+                                meal_section_id: mealSectionId,
+                                meal_section: editMealSectionsById.get(mealSectionId)?.name,
+                                customer_package_id: packages[0]?.id,
+                                package_name: packages[0]?.template_name,
+                              };
+                              setEditDetails(updated);
+                            }}
+                            style={{ width: '100%' }}
+                          >
+                            {editMealSections
+                              .filter(section => getEditPackagesForMealSection(section.id).length > 0)
+                              .map(section => (
+                                <Option key={section.id} value={section.id}>{translateMealSection(section.name)}</Option>
+                              ))}
+                          </Select>
+                        ) : <Text strong>{translateMealSection(item.meal_section)}</Text>}
                       </td>
                       <td>
                         {item.customer_addon_id ? (
                           <Tag color="orange">{item.addon_name || (isEn ? 'Add-on' : '附加项')}</Tag>
                         ) : <Select
                           value={item.customer_package_id}
+                          placeholder={labels.selectPackage}
                           onChange={(val) => {
                             const updated = [...editDetails];
                             updated[idx].customer_package_id = val;
@@ -1411,7 +1468,9 @@ export const DailyOrderStatus: React.FC = () => {
                           }}
                           style={{ width: '90%' }}
                         >
-                          {getEditPackagesForSection(item)
+                          {(item.is_temporary_addition
+                            ? getEditPackagesForMealSection(item.meal_section_id)
+                            : getEditPackagesForSection(item))
                             .map(p => (
                               <Option key={p.id} value={p.id}>{translatePackageTemplateName(p.template_name)}</Option>
                             ))}
@@ -1426,16 +1485,35 @@ export const DailyOrderStatus: React.FC = () => {
                         />
                       </td>
                       <td>
-                        <Input
-                          value={item.remark}
-                          onChange={(e) => handleDetailRemarkChange(idx, e.target.value)}
-                          placeholder="Remarks"
-                        />
+                        <Space.Compact style={{ width: '100%' }}>
+                          <Input
+                            value={item.remark}
+                            onChange={(e) => handleDetailRemarkChange(idx, e.target.value)}
+                            placeholder="Remarks"
+                          />
+                          {item.is_temporary_addition && (
+                            <Tooltip title={labels.btnRemoveMealItem}>
+                              <Button
+                                danger
+                                icon={<MinusOutlined />}
+                                onClick={() => setEditDetails(current => current.filter((_, detailIndex) => detailIndex !== idx))}
+                              />
+                            </Tooltip>
+                          )}
+                        </Space.Compact>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+              <Button
+                type="dashed"
+                icon={<PlusOutlined />}
+                onClick={handleAddEditMealItem}
+                style={{ marginTop: 12 }}
+              >
+                {labels.btnAddMealItem}
+              </Button>
               <Form.Item label={labels.reason} required style={{ marginTop: 18, marginBottom: 0 }}>
                 <Input.TextArea
                   rows={3}
