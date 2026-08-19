@@ -398,7 +398,7 @@ export const DailyOrderStatus: React.FC = () => {
   const handleTablePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse' || event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest('button, a, input, textarea, select, [role="button"], [role="combobox"], .ant-select, .ant-picker, .ant-pagination')) return;
+    if (target.closest('button, a, input, textarea, select, [role="button"], [role="combobox"], [role="option"], .ant-select, .ant-select-dropdown, .ant-picker, .ant-pagination')) return;
     const scroller = tablePanRef.current?.querySelector<HTMLDivElement>('.ant-table-content');
     if (!scroller || scroller.scrollWidth <= scroller.clientWidth) return;
     tablePanStateRef.current = {
