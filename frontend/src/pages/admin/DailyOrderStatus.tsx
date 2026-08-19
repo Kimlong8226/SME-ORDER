@@ -671,7 +671,14 @@ export const DailyOrderStatus: React.FC = () => {
           meal_section_id: d.meal_section_id,
           customer_package_id: d.customer_package_id,
           customer_addon_id: d.customer_addon_id,
-          parent_package_id: d.parent_package_id || Number((d.remark || '').match(/\[addon_for_customer_package:(\d+)\]/)?.[1]) || undefined,
+          parent_package_id: d.parent_package_id
+            || Number((d.remark || '').match(/\[addon_for_(?:customer_)?package:(\d+)\]/)?.[1])
+            || (d.customer_addon_id
+              ? getEditAddonParentPackageId(
+                editCustomerAddons.find(addon => addon.id === d.customer_addon_id),
+                d.meal_section_id,
+              )
+              : undefined),
           quantity: d.quantity,
           remark: d.remark || ""
         }))
