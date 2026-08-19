@@ -349,9 +349,11 @@ export const DailyOrderStatus: React.FC = () => {
     colModalQty: isEn ? 'Order Quantity' : '预订份数',
     colModalRemark: isEn ? 'Detail Remark' : '明细备注',
     btnAddMealItem: isEn ? 'Add temporary meal item' : '临时增加餐次',
+    btnAddAddon: isEn ? 'Add temporary add-on' : '临时增加附加项',
     btnRemoveMealItem: isEn ? 'Remove' : '移除',
     selectMealSection: isEn ? 'Select shift' : '选择餐次',
     selectPackage: isEn ? 'Select package' : '选择套餐',
+    selectAddon: isEn ? 'Select add-on' : '选择附加项',
     btnRefresh: isEn ? 'Refresh' : '刷新数据',
     reason: isEn ? 'Operation Reason' : '操作原因',
     reasonPlaceholder: isEn ? 'Required. This will be stored in the audit log.' : '必填，内容将写入 Audit Log',
@@ -441,6 +443,7 @@ export const DailyOrderStatus: React.FC = () => {
 
   const [customerSites, setCustomerSites] = useState<any[]>([]);
   const [customerPackages, setCustomerPackages] = useState<any[]>([]);
+  const [editCustomerAddons, setEditCustomerAddons] = useState<any[]>([]);
   const [editMealSections, setEditMealSections] = useState<any[]>([]);
   const editMealSectionsById = useMemo(
     () => new Map(editMealSections.map(section => [section.id, section])),
@@ -609,11 +612,12 @@ export const DailyOrderStatus: React.FC = () => {
     setEditReason('');
 
     try {
-      const [resCusts, resPkgs, resSections, resAssignedSectionIds] = await Promise.all([
+      const [resCusts, resPkgs, resSections, resAssignedSectionIds, resAddons] = await Promise.all([
         axiosInstance.get('/admin/customers'),
         axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/packages`),
         axiosInstance.get('/admin/meal-sections'),
         axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/meal-sections`),
+        axiosInstance.get(`/admin/customers/${orderRecord.customer_id}/addons`),
       ]);
       const cur = resCusts.data.find((c: any) => c.id === orderRecord.customer_id);
       if (cur && cur.sites) {
@@ -621,6 +625,7 @@ export const DailyOrderStatus: React.FC = () => {
       }
 
       setCustomerPackages(resPkgs.data || []);
+      setEditCustomerAddons(resAddons.data || []);
       const assignedSectionIds = new Set<number>(resAssignedSectionIds.data || []);
       setEditMealSections((resSections.data || []).filter((section: any) => assignedSectionIds.has(section.id)));
     } catch (err) {
@@ -808,6 +813,40 @@ export const DailyOrderStatus: React.FC = () => {
       is_temporary_addition: true,
     }]);
   };
+
+  const handleAddEditAddon = () => {
+    const section = editMealSections[0];
+    const addon = editCustomerAddons.find(value =>
+      value.is_customer_visible === false || getEditAddonParentPackageId(value, section?.id)
+    );
+    if (!section || !addon) {
+      message.warning(isEn ? 'No admin add-ons are available for this customer.' : '该顾客暂无可由后台添加的附加项。');
+      return;
+    }
+    setEditDetails(current => [...current, {
+      meal_section_id: section.id,
+      meal_section: section.name,
+      customer_addon_id: addon.id,
+      addon_name: addon.addon_name,
+      parent_package_id: getEditAddonParentPackageId(addon, section.id),
+      quantity: 1,
+      remark: '后台另外加单',
+      is_temporary_addition: true,
+    }]);
+  };
+
+  function getEditAddonParentPackageId(addon: any, mealSectionId: number) {
+    if (!addon || addon.is_customer_visible === false) return undefined;
+    const allowedPackageIds = new Set<number>(addon.customer_package_ids || []);
+    const sectionPackages = getEditPackagesForMealSection(mealSectionId)
+      .filter(pkg => allowedPackageIds.has(pkg.id));
+    const existingPackageId = editDetails.find(detail =>
+      detail.meal_section_id === mealSectionId
+      && detail.customer_package_id
+      && allowedPackageIds.has(detail.customer_package_id)
+    )?.customer_package_id;
+    return existingPackageId || sectionPackages[0]?.id;
+  }
 
   const getCreatePackagesForSection = (section: any) => {
     const allowedCategories = getEffectiveMealSectionCategories(section?.name, section?.allowed_categories);
@@ -1432,13 +1471,23 @@ export const DailyOrderStatus: React.FC = () => {
                             onChange={(mealSectionId) => {
                               const packages = getEditPackagesForMealSection(mealSectionId);
                               const updated = [...editDetails];
-                              updated[idx] = {
-                                ...updated[idx],
-                                meal_section_id: mealSectionId,
-                                meal_section: editMealSectionsById.get(mealSectionId)?.name,
-                                customer_package_id: packages[0]?.id,
-                                package_name: packages[0]?.template_name,
-                              };
+                              if (updated[idx].customer_addon_id) {
+                                const addon = editCustomerAddons.find(value => value.id === updated[idx].customer_addon_id);
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  meal_section_id: mealSectionId,
+                                  meal_section: editMealSectionsById.get(mealSectionId)?.name,
+                                  parent_package_id: getEditAddonParentPackageId(addon, mealSectionId),
+                                };
+                              } else {
+                                updated[idx] = {
+                                  ...updated[idx],
+                                  meal_section_id: mealSectionId,
+                                  meal_section: editMealSectionsById.get(mealSectionId)?.name,
+                                  customer_package_id: packages[0]?.id,
+                                  package_name: packages[0]?.template_name,
+                                };
+                              }
                               setEditDetails(updated);
                             }}
                             style={{ width: '100%' }}
@@ -1452,8 +1501,36 @@ export const DailyOrderStatus: React.FC = () => {
                         ) : <Text strong>{translateMealSection(item.meal_section)}</Text>}
                       </td>
                       <td>
-                        {item.customer_addon_id ? (
+                        {item.customer_addon_id ? (item.is_temporary_addition ? (
+                          <Select
+                            value={item.customer_addon_id}
+                            placeholder={labels.selectAddon}
+                            onChange={(addonId) => {
+                              const updated = [...editDetails];
+                              const addon = editCustomerAddons.find(value => value.id === addonId);
+                              updated[idx] = {
+                                ...updated[idx],
+                                customer_addon_id: addonId,
+                                addon_name: addon?.addon_name,
+                                parent_package_id: getEditAddonParentPackageId(addon, updated[idx].meal_section_id),
+                              };
+                              setEditDetails(updated);
+                            }}
+                            style={{ width: '90%' }}
+                          >
+                            {editCustomerAddons.map(addon => (
+                              <Option
+                                key={addon.id}
+                                value={addon.id}
+                                disabled={addon.is_customer_visible !== false && !getEditAddonParentPackageId(addon, item.meal_section_id)}
+                              >
+                                {addon.addon_name}
+                              </Option>
+                            ))}
+                          </Select>
+                        ) : (
                           <Tag color="orange">{item.addon_name || (isEn ? 'Add-on' : '附加项')}</Tag>
+                        )
                         ) : <Select
                           value={item.customer_package_id}
                           placeholder={labels.selectPackage}
@@ -1506,14 +1583,22 @@ export const DailyOrderStatus: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-              <Button
-                type="dashed"
-                icon={<PlusOutlined />}
-                onClick={handleAddEditMealItem}
-                style={{ marginTop: 12 }}
-              >
-                {labels.btnAddMealItem}
-              </Button>
+              <Space style={{ marginTop: 12 }}>
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={handleAddEditMealItem}
+                >
+                  {labels.btnAddMealItem}
+                </Button>
+                <Button
+                  type="dashed"
+                  icon={<PlusOutlined />}
+                  onClick={handleAddEditAddon}
+                >
+                  {labels.btnAddAddon}
+                </Button>
+              </Space>
               <Form.Item label={labels.reason} required style={{ marginTop: 18, marginBottom: 0 }}>
                 <Input.TextArea
                   rows={3}
