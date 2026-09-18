@@ -21,7 +21,7 @@ export const MatrixOrder: React.FC = () => {
     fastMode: isEn ? 'Fast Ordering Mode' : '快速订餐模式',
     quickFillYilian: isEn ? 'Quick Fill Yilian' : '一键易联标准',
     blockedTitle: isEn ? 'Ordering Restricted' : '订餐服务受限',
-    blockedDesc: isEn ? 'Your account has overdue payment and new orders or quantity increases are paused. Existing orders may still be reduced or cancelled before the cutoff.' : '您的账号存在已到期欠款，新增订单及增加数量已暂停；在截止时间前仍可减少或取消现有订单。',
+    blockedDesc: isEn ? 'New orders and quantity increases are currently paused. Please contact customer service. Existing orders may still be reduced or cancelled before the cutoff.' : '目前已暂停新增订单及增加数量，请联系客服；在截止时间前仍可减少或取消现有订单。',
     rulesTitle: isEn ? 'Ordering & Amendment Rules' : '下单与修改规则',
     rulesDesc: isEn ? 'Next-day orders close at 6:00 PM on the previous day. If you started before 6:00 PM, complete that one submission by 6:10 PM. Same-day changes or cancellations require customer service.' : '次日配送订单须在前一天下午 6:00 前提交；若已在 6:00 前开始操作，可在 6:10 前完成本次提交。配送当天如需修改或取消，请联系客服。',
     tempAccessTitle: isEn ? 'Temporary Ordering Access' : '临时下单权限',
@@ -485,7 +485,7 @@ export const MatrixOrder: React.FC = () => {
       {isBlocked && (
         <Alert
           title={labels.blockedTitle}
-          description={`${labels.blockedDesc}${accessStatus?.overdue_amount ? ` ${isEn ? 'Overdue' : '到期欠款'}: RM ${Number(accessStatus.overdue_amount).toFixed(2)}` : ''}`}
+          description={labels.blockedDesc}
           type="error"
           showIcon
           style={{ marginBottom: 24, borderRadius: 12 }}

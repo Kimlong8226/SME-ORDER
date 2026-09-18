@@ -53,22 +53,13 @@ def _access_payload(customer: Customer, access: dict) -> dict:
         "order_cutoff_time": customer.order_cutoff_time,
         "is_blocked": access["is_blocked"],
         "effective_is_blocked": access["effective_is_blocked"],
-        "block_source": access["block_source"],
-        "block_reason": access["block_reason"],
         "blocked_at": access["blocked_at"],
         "temporary_access_active": access["temporary_access_active"],
         "temporary_access_started_at": access["temporary_access_started_at"],
         "temporary_access_until": access["temporary_access_until"],
-        "temporary_access_reason": customer.temporary_access_reason,
         "max_order_delivery_date": (
             access["max_order_delivery_date"].isoformat()
             if access["max_order_delivery_date"] else None
-        ),
-        "overdue_amount": access["overdue_amount"],
-        "outstanding_balance": access["outstanding_balance"],
-        "oldest_overdue_due_date": (
-            access["oldest_overdue_due_date"].isoformat()
-            if access["oldest_overdue_due_date"] else None
         ),
     }
 
@@ -327,7 +318,7 @@ def submit_matrix_orders(
 
             if access["effective_is_blocked"]:
                 if not existing_order:
-                    raise HTTPException(status_code=403, detail="账户因到期欠款被冻结，不能新增订单；请清还欠款或联系客服临时开通")
+                    raise HTTPException(status_code=403, detail="目前订餐服务受限，不能新增订单；请联系客服处理")
                 if any(qty > old_snapshot.get(key, 0) for key, qty in new_snapshot.items()):
                     raise HTTPException(status_code=403, detail="冻结期间只能减少现有订单数量，不能新增餐品或增加数量")
 

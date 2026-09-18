@@ -365,10 +365,10 @@ export const DeliveryOrders: React.FC = () => {
         <Alert
           type="error"
           showIcon
-          title={isEn ? 'Ordering is frozen due to overdue payment' : '账户因到期欠款暂停下单'}
+          title={isEn ? 'Ordering Restricted' : '订餐服务受限'}
           description={isEn
-            ? `Overdue: RM ${Number(customerProfile.access_status.overdue_amount || 0).toFixed(2)}. Please settle the overdue balance or contact customer service for temporary access.`
-            : `到期欠款：RM ${Number(customerProfile.access_status.overdue_amount || 0).toFixed(2)}。请清还到期欠款，或联系客服申请临时开放。`}
+            ? 'Ordering is currently restricted. Please contact customer service.'
+            : '目前订餐服务受限，请联系客服。'}
           style={{ marginBottom: 16, borderRadius: 8 }}
         />
       )}
